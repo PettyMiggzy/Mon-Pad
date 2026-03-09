@@ -1,0 +1,42 @@
+export const config = { api: { bodyParser: false, responseLimit: false } }
+
+const SERVER = 'http://138.68.248.211:3001'
+
+export default async function handler(req, res) {
+  const path = req.url.replace('/api/proxy', '')
+
+  try {
+    const headers = {}
+    if (req.headers['content-type']) headers['content-type'] = req.headers['content-type']
+
+    // read raw body for uploads
+    const body = ['GET', 'HEAD'].includes(req.method) ? undefined : await getRawBody(req)
+
+    const upstream = await fetch(`${SERVER}${path}`, {
+      method: req.method,
+      headers,
+      body,
+    })
+
+    // forward content-type
+    const ct = upstream.headers.get('content-type')
+    if (ct) res.setHeader('Content-Type', ct)
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.status(upstream.status)
+
+    const buf = await upstream.arrayBuffer()
+    res.send(Buffer.from(buf))
+  } catch (e) {
+    console.error('proxy error', e)
+    res.status(502).json({ error: 'proxy error' })
+  }
+}
+
+function getRawBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = []
+    req.on('data', c => chunks.push(c))
+    req.on('end', () => resolve(Buffer.concat(chunks)))
+    req.on('error', reject)
+  })
+}
