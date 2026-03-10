@@ -367,6 +367,7 @@ export default function TokenDetail() {
               </a>
             </div>
           </div>
+        </div>
 
         {/* ── CHART TOOLBAR ── */}
         <div style={{ display:'flex', alignItems:'center', padding:'0 14px 6px', overflowX:'auto', fontSize:12, color:'var(--t3)' }}>
