@@ -10,6 +10,7 @@ const SERVER = process.env.NEXT_PUBLIC_SERVER_URL || ''
 function fixUrl(url) {
   if (!url) return url
   if (url.startsWith('http://138.68.248.211:3001')) return url.replace('http://138.68.248.211:3001', SERVER)
+  if (url.startsWith('http://api.monpad.net')) return url.replace('http://api.monpad.net', 'https://api.monpad.net')
   return url
 }
 

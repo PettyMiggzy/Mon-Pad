@@ -12,9 +12,8 @@ const SERVER = process.env.NEXT_PUBLIC_SERVER_URL || ''
 // rewrite old http droplet URLs to go through the proxy
 function fixUrl(url) {
   if (!url) return url
-  if (url.startsWith('http://138.68.248.211:3001')) {
-    return url.replace('http://138.68.248.211:3001', SERVER)
-  }
+  if (url.startsWith('http://138.68.248.211:3001')) return url.replace('http://138.68.248.211:3001', SERVER)
+  if (url.startsWith('http://api.monpad.net')) return url.replace('http://api.monpad.net', 'https://api.monpad.net')
   return url
 }
 const DETAIL_TABS = ['Comments', 'Trades', 'Holders']
@@ -340,14 +339,14 @@ export default function TokenDetail() {
           <div style={{ fontSize:12, color:'var(--t2)', marginBottom:2 }}>Market Cap</div>
           <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between' }}>
             <div>
-              <div style={{ fontSize:28, fontWeight:800, letterSpacing:'-.5px' }}>{fmtMON((BigInt(info.priceWei||0n) * 1_000_000_000n) / (10n**9n))} MON</div>
+              <div style={{ fontSize:28, fontWeight:800, letterSpacing:'-.5px' }}>{fmtMON(BigInt(info.priceWei||'0') * 1_000_000_000n)} MON</div>
               <div style={{ fontSize:12, color:'var(--g)', marginTop:2 }}>+0 MON (+0.00%) 24hr</div>
             </div>
             <div style={{ textAlign:'right' }}>
               <div style={{ width:100, height:5, background:'var(--bg3)', borderRadius:999, overflow:'hidden', marginBottom:4, marginLeft:'auto' }}>
                 <div style={{ height:'100%', background:'linear-gradient(90deg,var(--g),var(--cyan))', borderRadius:999, width:`${Math.min(pct,100)}%` }} />
               </div>
-              <div style={{ fontSize:11, color:'var(--t3)' }}>ATH <span style={{ color:'var(--t2)', fontWeight:700 }}>{fmtMON((BigInt(info.priceWei||0n) * 1_000_000_000n) / (10n**9n))} MON</span></div>
+              <div style={{ fontSize:11, color:'var(--t3)' }}>ATH <span style={{ color:'var(--t2)', fontWeight:700 }}>{fmtMON(BigInt(info.priceWei||'0') * 1_000_000_000n)} MON</span></div>
             </div>
           </div>
           {/* contract addresses */}
