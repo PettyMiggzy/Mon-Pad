@@ -35,6 +35,8 @@ export default function TokenDetail() {
   const [tab, setTab]           = useState('Comments')
   const [mode, setMode]         = useState('buy')
   const [amt, setAmt]           = useState('')
+  const [customAmt, setCustomAmt] = useState(false)
+  const customInputRef            = useRef(null)
   const [tokenBalance, setTokenBalance] = useState(0n)
   const [showPanel, setShow]    = useState(false)
   const [tf, setTf]             = useState('15m')
@@ -219,13 +221,13 @@ export default function TokenDetail() {
 
   useEffect(() => {
     if (candleRef.current && volRef.current && chartRef.current && curveAddr) fetchCandles(candleRef.current, volRef.current, chartRef.current)
-  }, [tf, curveAddr, info?.creator])  // re-run when creator known so dev markers render
+  }, [tf, curveAddr, info?.creator, info?.priceWei])  // re-run when price/creator known
 
   async function fetchCandles(candle, vol, chart) {
     if (!curveAddr) return
     const now = Math.floor(Date.now()/1000)
     const int = tf==='15m'?900 : tf==='1h'?3600 : tf==='4h'?14400 : 86400
-    const currentPrice = Number(info?.priceWei || 150000n) / 1e18
+    const currentPrice = Number(info?.priceWei || 150000000000000n) / 1e18
 
     // flat candles at current price — always shown as baseline
     function flatLine(price) {
@@ -562,33 +564,48 @@ export default function TokenDetail() {
                 )}
 
                 {/* amount input */}
+                {!customAmt && (
                 <div style={{ position:'relative', marginBottom:8 }}>
                   <input type="number" placeholder={`0.0 ${mode==='buy'?'MON':dSym}`} value={amt} onChange={e => setAmt(e.target.value)}
                     style={{ width:'100%', padding:'14px 60px 14px 14px', fontSize:20, fontWeight:800, fontFamily:'var(--mono)',
                       background:'var(--bg2)', border:'1px solid var(--bd2)', borderRadius:10, color:'var(--t1)', outline:'none', boxSizing:'border-box' }} />
-                  <button onClick={() => { if (mode==='sell') setAmt((Number(tokenBalance)/1e18).toFixed(0)) }}
+                  <button onClick={() => { mode==='sell' ? setAmt((Number(tokenBalance)/1e18).toFixed(0)) : setAmt('') }}
                     style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)', background:'rgba(110,84,255,0.15)', color:'var(--p2)', fontSize:10, fontWeight:700, padding:'4px 8px', borderRadius:5, border:'none', cursor:'pointer' }}>
-                    MAX
+                    {mode==='sell'?'MAX':'CLR'}
                   </button>
                 </div>
+                )}
 
                 {/* quick buttons */}
-                <div style={{ display:'flex', gap:5, marginBottom:12 }}>
+                <div style={{ display:'flex', gap:5, marginBottom:customAmt?4:12, flexWrap:'wrap' }}>
                   {mode==='buy'
                     ? ['1','10','50','100'].map(n => (
-                        <button key={n} onClick={() => setAmt(n)}
-                          style={{ flex:1, padding:'8px 0', textAlign:'center', background:'rgba(110,84,255,0.08)', border:'1px solid rgba(110,84,255,0.15)', borderRadius:7, fontSize:12, fontWeight:700, color:'var(--p2)', cursor:'pointer' }}>
+                        <button key={n} onClick={() => { setAmt(n); setCustomAmt(false) }}
+                          style={{ flex:1, padding:'8px 0', textAlign:'center', background: amt===n?'rgba(110,84,255,0.25)':'rgba(110,84,255,0.08)', border: amt===n?'1px solid var(--p)':'1px solid rgba(110,84,255,0.15)', borderRadius:7, fontSize:12, fontWeight:700, color:'var(--p2)', cursor:'pointer' }}>
                           {n}
                         </button>
                       ))
                     : ['25%','50%','75%','100%'].map(pct => (
-                        <button key={pct} onClick={() => setAmt((Number(tokenBalance)/1e18*(parseInt(pct)/100)).toFixed(0))}
+                        <button key={pct} onClick={() => { setAmt((Number(tokenBalance)/1e18*(parseInt(pct)/100)).toFixed(0)); setCustomAmt(false) }}
                           style={{ flex:1, padding:'8px 0', textAlign:'center', background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.15)', borderRadius:7, fontSize:12, fontWeight:700, color:'var(--r)', cursor:'pointer' }}>
                           {pct}
                         </button>
                       ))
                   }
+                  <button onClick={() => { setCustomAmt(true); setAmt(''); setTimeout(()=>customInputRef.current?.focus(),50) }}
+                    style={{ flex:1, padding:'8px 0', textAlign:'center', background: customAmt?'rgba(133,230,255,0.15)':'rgba(133,230,255,0.06)', border: customAmt?'1px solid var(--cyan)':'1px solid rgba(133,230,255,0.15)', borderRadius:7, fontSize:12, fontWeight:700, color:'var(--cyan)', cursor:'pointer' }}>
+                    Custom
+                  </button>
                 </div>
+                {customAmt && (
+                  <div style={{ position:'relative', marginBottom:12 }}>
+                    <input ref={customInputRef} type="number" placeholder={`Enter amount (${mode==='buy'?'MON':dSym})`} value={amt} onChange={e => setAmt(e.target.value)}
+                      style={{ width:'100%', padding:'10px 50px 10px 12px', fontSize:15, fontWeight:700, fontFamily:'var(--mono)',
+                        background:'rgba(133,230,255,0.06)', border:'1px solid var(--cyan)', borderRadius:8, color:'var(--t1)', outline:'none', boxSizing:'border-box' }} />
+                    <button onClick={() => setCustomAmt(false)}
+                      style={{ position:'absolute', right:8, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', color:'var(--t3)', fontSize:16, cursor:'pointer', lineHeight:1 }}>✕</button>
+                  </div>
+                )}
 
                 {/* estimate */}
                 <div style={{ background:'var(--bg2)', border:'1px solid var(--bd)', borderRadius:10, padding:'10px 12px', marginBottom:12 }}>
