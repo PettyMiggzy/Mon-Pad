@@ -3,7 +3,7 @@ import { useRouter } from 'next/router'
 import { usePublicClient } from 'wagmi'
 import { parseAbiItem } from 'viem'
 import Layout from '../components/Layout'
-import { FACTORY_ADDRESS, FACTORY_ABI, CURVE_ABI, TOKEN_ABI, START_BLOCK, fmtMON, fmtAddr } from '../lib/constants'
+import { FACTORY_ADDRESS, FACTORY_ABI, CURVE_ABI, TOKEN_ABI, START_BLOCK, fmtMON, fmtUSD, fmtAddr } from '../lib/constants'
 import { monad } from '../lib/wagmi'
 
 const SERVER = process.env.NEXT_PUBLIC_SERVER_URL || ''
@@ -34,7 +34,12 @@ export default function Home() {
   const [metas, setMetas]     = useState({})
   const [liveRooms, setLive]  = useState([])
   const [loading, setLoading] = useState(true)
+  const [monPrice, setMonPrice] = useState(0)
   const carouselRef = useRef(null)
+
+  useEffect(() => {
+    fetch(`${SERVER}/api/mon-price`).then(r=>r.json()).then(d=>setMonPrice(d.price||0)).catch(()=>{})
+  }, [])
 
   useEffect(() => { if (router.query.tab) setTab(router.query.tab) }, [router.query.tab])
   useEffect(() => { loadTokens() }, [])
@@ -142,7 +147,7 @@ export default function Home() {
                   </div>
                 )}
                 <div>
-                  <div style={{ fontSize:18, fontWeight:800, color:'white', lineHeight:1.1 }}>{fmtMON(t.marketCap || t.monRaisedNet)} MON</div>
+                  <div style={{ fontSize:18, fontWeight:800, color:'white', lineHeight:1.1 }}>{fmtUSD(t.marketCap || t.monRaisedNet, monPrice)}</div>
                   <div style={{ fontSize:12, fontWeight:600, color:'rgba(255,255,255,0.7)' }}>{t.name} · ${t.symbol}</div>
                 </div>
               </div>
@@ -200,7 +205,7 @@ export default function Home() {
         {!loading && list.length > 0 && (
           <div className="token-grid">
             {list.map(t => (
-              <TokenCard key={t.token} token={t} meta={metas[t.token?.toLowerCase()]} isLive={live.has(t.token?.toLowerCase())} onClick={() => router.push(`/token/${t.token}`)} />
+              <TokenCard key={t.token} token={t} meta={metas[t.token?.toLowerCase()]} isLive={live.has(t.token?.toLowerCase())} monPrice={monPrice} onClick={() => router.push(`/token/${t.token}`)} />
             ))}
           </div>
         )}
@@ -209,7 +214,7 @@ export default function Home() {
   )
 }
 
-function TokenCard({ token: t, meta, isLive, onClick }) {
+function TokenCard({ token: t, meta, isLive, monPrice, onClick }) {
   const pct   = Number(t.bondedBps) / 100
   const color = GRAD_COLORS[t.colorIdx % GRAD_COLORS.length]
 
@@ -234,7 +239,7 @@ function TokenCard({ token: t, meta, isLive, onClick }) {
       <div className="tcard-body">
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:2 }}>
           <div style={{ fontWeight:800, fontSize:13, lineHeight:1.2 }}>{meta?.name || t.name}</div>
-          <div style={{ fontSize:11, fontWeight:700, fontFamily:'var(--mono)', color:'var(--t1)', flexShrink:0, marginLeft:4 }}>{fmtMON(t.marketCap || t.monRaisedNet)}</div>
+          <div style={{ fontSize:11, fontWeight:700, fontFamily:'var(--mono)', color:'var(--t1)', flexShrink:0, marginLeft:4 }}>{fmtUSD(t.marketCap || t.monRaisedNet, monPrice)}</div>
         </div>
         <div style={{ fontSize:11, color:'var(--t3)', marginBottom:5, fontFamily:'var(--mono)' }}>${meta?.symbol || t.symbol}</div>
 
@@ -245,7 +250,7 @@ function TokenCard({ token: t, meta, isLive, onClick }) {
 
         {/* MC label + pct */}
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <span style={{ fontSize:10, color:'var(--t3)' }}>MC {fmtMON(t.marketCap || t.monRaisedNet)} MON</span>
+          <span style={{ fontSize:10, color:'var(--t3)' }}>MC {fmtUSD(t.marketCap || t.monRaisedNet, monPrice)}</span>
           <span style={{ fontSize:10, fontWeight:700, color: pct >= 70 ? 'var(--gold)' : 'var(--t3)', fontFamily:'var(--mono)' }}>↑{pct.toFixed(1)}%</span>
         </div>
 

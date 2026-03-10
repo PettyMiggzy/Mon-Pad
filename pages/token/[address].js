@@ -4,7 +4,7 @@ import { usePublicClient, useAccount, useWriteContract, useWaitForTransactionRec
 import { parseEther, parseAbiItem } from 'viem'
 import Head from 'next/head'
 import Layout from '../../components/Layout'
-import { CURVE_ABI, TOKEN_ABI, fmtMON, fmtAddr, fmtTokens, MONADSCAN, START_BLOCK } from '../../lib/constants'
+import { CURVE_ABI, TOKEN_ABI, fmtMON, fmtUSD, fmtAddr, fmtTokens, MONADSCAN, START_BLOCK } from '../../lib/constants'
 import { monad } from '../../lib/wagmi'
 
 const SERVER = process.env.NEXT_PUBLIC_SERVER_URL || ''
@@ -28,6 +28,7 @@ export default function TokenDetail() {
   const [meta, setMeta]         = useState(null)
   const [info, setInfo]         = useState(null)
   const [curveAddr, setCurve]   = useState(null)
+  const [monPrice, setMonPrice] = useState(0)
   const [trades, setTrades]     = useState([])
   const [holders, setHolders]   = useState([])
   const [tab, setTab]           = useState('Comments')
@@ -54,6 +55,12 @@ export default function TokenDetail() {
 
   const { writeContract, data: txHash, isPending }                  = useWriteContract()
   const { isLoading: isConfirming, isSuccess }                      = useWaitForTransactionReceipt({ hash: txHash })
+
+  // fetch MON price
+  useEffect(() => {
+    if (!SERVER) return
+    fetch(`${SERVER}/api/mon-price`).then(r=>r.json()).then(d=>setMonPrice(d.price||0)).catch(()=>{})
+  }, [])
 
   // metadata from server
   useEffect(() => {
@@ -339,7 +346,7 @@ export default function TokenDetail() {
           <div style={{ fontSize:12, color:'var(--t2)', marginBottom:2 }}>Market Cap</div>
           <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between' }}>
             <div>
-              <div style={{ fontSize:28, fontWeight:800, letterSpacing:'-.5px' }}>{fmtMON(BigInt(info.priceWei||'0') * 1_000_000_000n)} MON</div>
+              <div style={{ fontSize:28, fontWeight:800, letterSpacing:'-.5px' }}>{fmtUSD(BigInt(info.priceWei||'0') * 1_000_000_000n, monPrice)}</div>
               <div style={{ fontSize:12, color:'var(--g)', marginTop:2 }}>+0 MON (+0.00%) 24hr</div>
             </div>
             <div style={{ textAlign:'right' }}>
@@ -367,6 +374,39 @@ export default function TokenDetail() {
             </div>
           </div>
         </div>
+
+        {/* ── CREATOR: UPDATE IMAGES ── */}
+        {isCreator && (
+          <div style={{ margin:'0 14px 10px', padding:'10px 12px', background:'rgba(110,84,255,0.08)', border:'1px solid rgba(110,84,255,0.2)', borderRadius:10 }}>
+            <div style={{ fontSize:11, fontWeight:700, color:'var(--p2)', marginBottom:8 }}>👑 Update Token Images</div>
+            <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+              <label style={{ cursor:'pointer', fontSize:11, padding:'5px 10px', background:'var(--bg3)', border:'1px solid var(--bd2)', borderRadius:6, color:'var(--t2)' }}>
+                📷 New PFP
+                <input type="file" accept="image/*" style={{ display:'none' }} onChange={async e => {
+                  const file = e.target.files[0]; if (!file) return
+                  const fd = new FormData(); fd.append('pfp', file)
+                  const r = await fetch(`${SERVER}/api/upload/pfp`, { method:'POST', body:fd })
+                  const d = await r.json()
+                  await fetch(`${SERVER}/api/token/meta`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ tokenAddress: tokenAddr, pfpUrl: d.url }) })
+                  setMeta(p => ({ ...p, pfpUrl: d.url }))
+                  alert('PFP updated!')
+                }} />
+              </label>
+              <label style={{ cursor:'pointer', fontSize:11, padding:'5px 10px', background:'var(--bg3)', border:'1px solid var(--bd2)', borderRadius:6, color:'var(--t2)' }}>
+                🖼️ New Banner
+                <input type="file" accept="image/*" style={{ display:'none' }} onChange={async e => {
+                  const file = e.target.files[0]; if (!file) return
+                  const fd = new FormData(); fd.append('banner', file)
+                  const r = await fetch(`${SERVER}/api/upload/banner`, { method:'POST', body:fd })
+                  const d = await r.json()
+                  await fetch(`${SERVER}/api/token/meta`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ tokenAddress: tokenAddr, bannerUrl: d.url }) })
+                  setMeta(p => ({ ...p, bannerUrl: d.url }))
+                  alert('Banner updated!')
+                }} />
+              </label>
+            </div>
+          </div>
+        )}
 
         {/* ── CHART TOOLBAR ── */}
         <div style={{ display:'flex', alignItems:'center', padding:'0 14px 6px', overflowX:'auto', fontSize:12, color:'var(--t3)' }}>
