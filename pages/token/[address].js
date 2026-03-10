@@ -177,15 +177,15 @@ export default function TokenDetail() {
     let destroyed = false
 
     async function init() {
-      // wait one frame for container to have real dimensions
-      await new Promise(r => setTimeout(r, 50))
+      // wait for layout to settle
+      await new Promise(r => setTimeout(r, 150))
       const LW = await import('lightweight-charts')
       if (destroyed || !chartContainerRef.current) return
 
       if (chartRef.current) { chartRef.current.remove(); chartRef.current = null }
 
       const chart = LW.createChart(chartContainerRef.current, {
-        width:  chartContainerRef.current.clientWidth || 600,
+        width:  chartContainerRef.current.clientWidth || chartContainerRef.current.parentElement?.clientWidth || window.innerWidth - 340,
         height: 340,
         layout: { background: { color: '#111118' }, textColor: '#9ca3af' },
         grid:   { vertLines: { color: 'rgba(110,84,255,0.06)' }, horzLines: { color: 'rgba(110,84,255,0.06)' } },
@@ -231,14 +231,14 @@ export default function TokenDetail() {
 
     // flat candles at current price — always shown as baseline
     function flatLine(price) {
+      if (!price || price <= 0) price = 0.00015
       const out = []
-      for (let i = 47; i >= 0; i--) {
-        const t = Math.floor((now - i*int)/int)*int
-        out.push({ time:t, open:price, high:price*1.0005, low:price*0.9995, close:price, volume:0 })
+      // start from a clean aligned boundary, step forward
+      const startT = Math.floor((now - 48*int) / int) * int
+      for (let i = 0; i < 48; i++) {
+        out.push({ time: startT + i*int, open:price, high:price*1.001, low:price*0.999, close:price, volume:0 })
       }
-      // deduplicate times
-      const seen = new Set()
-      return out.filter(c => { if (seen.has(c.time)) return false; seen.add(c.time); return true })
+      return out
     }
 
     try {
@@ -248,8 +248,10 @@ export default function TokenDetail() {
 
       const data = (candles?.length) ? candles : flatLine(currentPrice)
 
-      candle.setData(data)
-      vol.setData(data.map(c => ({ time:c.time, value:c.volume||0, color: c.close>=c.open?'rgba(34,197,94,0.3)':'rgba(239,68,68,0.3)' })))
+      try {
+        candle.setData(data)
+        vol.setData(data.map(c => ({ time:c.time, value:c.volume||0, color: c.close>=c.open?'rgba(34,197,94,0.3)':'rgba(239,68,68,0.3)' })))
+      } catch(e) { console.error('chart setData error:', e, 'data sample:', data[0]) }
 
       const last = data[data.length-1]
       if (last) {
@@ -282,9 +284,11 @@ export default function TokenDetail() {
       })
     } catch {
       const data = flatLine(currentPrice)
-      candle.setData(data)
-      vol.setData(data.map(c => ({ time:c.time, value:0, color:'rgba(110,84,255,0.15)' })))
-      chart.timeScale().fitContent()
+      try {
+        candle.setData(data)
+        vol.setData(data.map(c => ({ time:c.time, value:0, color:'rgba(110,84,255,0.15)' })))
+        chart.timeScale().fitContent()
+      } catch(e) { console.error('chart fallback error:', e, data[0]) }
     }
   }
 
@@ -579,7 +583,7 @@ export default function TokenDetail() {
                 {/* quick buttons */}
                 <div style={{ display:'flex', gap:5, marginBottom:customAmt?4:12, flexWrap:'wrap' }}>
                   {mode==='buy'
-                    ? ['1','10','50','100'].map(n => (
+                    ? ['100','500','1000','2000'].map(n => (
                         <button key={n} onClick={() => { setAmt(n); setCustomAmt(false) }}
                           style={{ flex:1, padding:'8px 0', textAlign:'center', background: amt===n?'rgba(110,84,255,0.25)':'rgba(110,84,255,0.08)', border: amt===n?'1px solid var(--p)':'1px solid rgba(110,84,255,0.15)', borderRadius:7, fontSize:12, fontWeight:700, color:'var(--p2)', cursor:'pointer' }}>
                           {n}
