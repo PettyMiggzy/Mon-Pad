@@ -372,14 +372,14 @@ export default function TokenDetail() {
           <div style={{ fontSize:12, color:'var(--t2)', marginBottom:2 }}>Market Cap</div>
           <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between' }}>
             <div>
-              <div style={{ fontSize:28, fontWeight:800, letterSpacing:'-.5px' }}>{fmtUSD(BigInt(info.priceWei||'0') * 1_000_000_000n, monPrice)}</div>
+              <div style={{ fontSize:28, fontWeight:800, letterSpacing:'-.5px' }}>{fmtUSD((info.priceWei||0n) * 1_000_000_000n, monPrice)}</div>
               <div style={{ fontSize:12, color:'var(--g)', marginTop:2 }}>+0 MON (+0.00%) 24hr</div>
             </div>
             <div style={{ textAlign:'right' }}>
               <div style={{ width:100, height:5, background:'var(--bg3)', borderRadius:999, overflow:'hidden', marginBottom:4, marginLeft:'auto' }}>
                 <div style={{ height:'100%', background:'linear-gradient(90deg,var(--g),var(--cyan))', borderRadius:999, width:`${Math.min(pct,100)}%` }} />
               </div>
-              <div style={{ fontSize:11, color:'var(--t3)' }}>ATH <span style={{ color:'var(--t2)', fontWeight:700 }}>{fmtMON(BigInt(info.priceWei||'0') * 1_000_000_000n)} MON</span></div>
+              <div style={{ fontSize:11, color:'var(--t3)' }}>ATH <span style={{ color:'var(--t2)', fontWeight:700 }}>{fmtMON((info.priceWei||0n) * 1_000_000_000n)} MON</span></div>
             </div>
           </div>
           {/* contract addresses */}
