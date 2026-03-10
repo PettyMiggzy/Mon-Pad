@@ -35,6 +35,7 @@ export default function TokenDetail() {
   const [tab, setTab]           = useState('Comments')
   const [mode, setMode]         = useState('buy')
   const [amt, setAmt]           = useState('')
+  const [tokenBalance, setTokenBalance] = useState(0n)
   const [showPanel, setShow]    = useState(false)
   const [tf, setTf]             = useState('15m')
   const [chartStats, setStats]  = useState({ vol24h: 0, totalVol: 0, devFees: 0, price: 0, pct5m: 0, pct1h: 0 })
@@ -124,6 +125,10 @@ export default function TokenDetail() {
         client.readContract({ address: curve,     abi: CURVE_ABI, functionName: 'delisted' }),
       ])
       setInfo({ name, symbol, graduated, monRaisedNet, capMon, bondedBps, priceWei, creator, pauseBuys, pauseSells, delisted })
+      if (userAddr) {
+        const bal = await client.readContract({ address: tokenAddr, abi: TOKEN_ABI, functionName: 'balanceOf', args: [userAddr] })
+        setTokenBalance(bal)
+      }
       loadEvents(curve, tokenAddr)
     } catch (e) { console.error(e) }
   }
@@ -662,19 +667,30 @@ export default function TokenDetail() {
               <div style={{ position:'relative', marginBottom:10 }}>
                 <input type="number" placeholder={`0.0 ${mode==='buy'?'MON':dSym}`} value={amt} onChange={e => setAmt(e.target.value)}
                   className="input-field" style={{ fontSize:22, fontWeight:800, padding:'14px 60px 14px 16px', fontFamily:'var(--mono)' }} />
-                <div style={{ position:'absolute', right:12, top:'50%', transform:'translateY(-50%)', background:'rgba(110,84,255,0.15)', color:'var(--p2)', fontSize:11, fontWeight:700, padding:'4px 8px', borderRadius:6, cursor:'pointer' }}>MAX</div>
+                <div style={{ position:'absolute', right:12, top:'50%', transform:'translateY(-50%)', background:'rgba(110,84,255,0.15)', color:'var(--p2)', fontSize:11, fontWeight:700, padding:'4px 8px', borderRadius:6, cursor:'pointer' }}
+                  onClick={() => {
+                    if (mode==='sell') setAmt((Number(tokenBalance)/1e18).toFixed(0))
+                  }}>MAX</div>
               </div>
+              {mode==='sell' && tokenBalance > 0n && (
+                <div style={{ fontSize:12, color:'var(--t3)', marginBottom:8, textAlign:'right' }}>
+                  Balance: <span style={{ color:'var(--t2)', fontWeight:600 }}>{(Number(tokenBalance)/1e18).toLocaleString(undefined,{maximumFractionDigits:0})} {dSym}</span>
+                </div>
+              )}
               <div style={{ display:'flex', gap:6, marginBottom:14 }}>
-                {['1','10','50','100'].map(n => (
+                {mode==='buy' ? ['1','10','50','100'].map(n => (
                   <div key={n} onClick={() => setAmt(n)}
                     style={{ flex:1, padding:'9px 0', textAlign:'center', background:'rgba(110,84,255,0.08)', border:'1px solid rgba(110,84,255,0.2)', borderRadius:8, fontSize:13, fontWeight:700, color:'var(--p2)', cursor:'pointer' }}>{n}</div>
+                )) : ['25%','50%','75%','100%'].map(pct => (
+                  <div key={pct} onClick={() => setAmt((Number(tokenBalance)/1e18*(parseInt(pct)/100)).toFixed(0))}
+                    style={{ flex:1, padding:'9px 0', textAlign:'center', background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.2)', borderRadius:8, fontSize:13, fontWeight:700, color:'var(--r)', cursor:'pointer' }}>{pct}</div>
                 ))}
               </div>
               <div style={{ background:'var(--bg3)', border:'1px solid var(--bd2)', borderRadius:12, padding:'12px 14px', marginBottom:14 }}>
                 {[
-                  ['You receive',      mode==='buy'?`${tokensEst} ${dSym}`:`${((parseFloat(amt)||0)*priceNum*0.98).toFixed(4)} MON`],
-                  ['Platform fee (1%)',`${((parseFloat(amt)||0)*0.01).toFixed(4)} ${mode==='buy'?'MON':''}`],
-                  ['Dev fee (0.5%)',   `${((parseFloat(amt)||0)*0.005).toFixed(4)} ${mode==='buy'?'MON':''}`],
+                  ['You receive',      mode==='buy'?`${tokensEst} ${dSym}`:`${((parseFloat(amt)||0)*priceNum*0.97).toFixed(6)} MON`],
+                  ['Platform fee (1%)',`${((parseFloat(amt)||0)*(mode==='buy'?0.01:priceNum*0.01)).toFixed(mode==='buy'?4:6)} MON`],
+                  ['Dev fee (0.5%)',   `${((parseFloat(amt)||0)*(mode==='buy'?0.005:priceNum*0.005)).toFixed(mode==='buy'?4:6)} MON`],
                 ].map(([l,v]) => (
                   <div key={l} style={{ display:'flex', justifyContent:'space-between', fontSize:12, padding:'3px 0' }}>
                     <span style={{ color:'var(--t3)' }}>{l}</span><span style={{ fontFamily:'var(--mono)', fontWeight:600 }}>{v}</span>
