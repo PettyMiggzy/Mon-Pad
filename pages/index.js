@@ -7,6 +7,11 @@ import { FACTORY_ADDRESS, FACTORY_ABI, CURVE_ABI, TOKEN_ABI, START_BLOCK, fmtMON
 import { monad } from '../lib/wagmi'
 
 const SERVER = process.env.NEXT_PUBLIC_SERVER_URL || ''
+function fixUrl(url) {
+  if (!url) return url
+  if (url.startsWith('http://138.68.248.211:3001')) return url.replace('http://138.68.248.211:3001', SERVER)
+  return url
+}
 
 const TABS = [
   { id: 'movers',    label: '⭐ Movers' },
@@ -31,7 +36,7 @@ export default function Home() {
   const carouselRef = useRef(null)
 
   useEffect(() => { if (router.query.tab) setTab(router.query.tab) }, [router.query.tab])
-  useEffect(() => { if (client) loadTokens() }, [client])
+  useEffect(() => { loadTokens() }, [])
 
   // poll live rooms every 15s
   useEffect(() => {
@@ -43,43 +48,29 @@ export default function Home() {
   }, [])
 
   async function loadTokens() {
-    if (!client) return
+    if (!SERVER) return
     try {
-      const logs = await client.getLogs({
-        address: FACTORY_ADDRESS,
-        event: parseAbiItem('event Launched(address indexed token, address indexed curve, address indexed graduator, address creator)'),
-        fromBlock: START_BLOCK,
-        toBlock: 'latest',
+      const data = await fetch(`${SERVER}/api/tokens`).then(r => r.json())
+      const map  = {}
+      const list = data.map((t, i) => {
+        map[t.tokenAddress?.toLowerCase()] = t
+        return {
+          token:        t.tokenAddress,
+          curve:        t.curveAddress,
+          creator:      t.creator,
+          name:         t.name,
+          symbol:       t.symbol,
+          graduated:    t.graduated,
+          monRaisedNet: BigInt(t.monRaisedNet || '0'),
+          capMon:       BigInt(t.capMon || '0'),
+          bondedBps:    BigInt(t.bondedBps || '0'),
+          marketCap:    BigInt(t.marketCap || '0'),
+          blockNumber:  BigInt(t.blockNumber || '0'),
+          colorIdx:     i,
+        }
       })
-
-      const list = await Promise.all(logs.map(async (log, i) => {
-        const { token, curve, creator } = log.args
-        try {
-          const [name, symbol, graduated, monRaisedNet, capMon, bondedBps] = await Promise.all([
-            client.readContract({ address: token, abi: TOKEN_ABI, functionName: 'name' }),
-            client.readContract({ address: token, abi: TOKEN_ABI, functionName: 'symbol' }),
-            client.readContract({ address: curve, abi: CURVE_ABI, functionName: 'graduated' }),
-            client.readContract({ address: curve, abi: CURVE_ABI, functionName: 'monRaisedNet' }),
-            client.readContract({ address: curve, abi: CURVE_ABI, functionName: 'capMon' }),
-            client.readContract({ address: curve, abi: CURVE_ABI, functionName: 'bondedBps' }),
-          ])
-          return { token, curve, creator, name, symbol, graduated, monRaisedNet, capMon, bondedBps, blockNumber: log.blockNumber, colorIdx: i }
-        } catch { return null }
-      }))
-
-      const valid = list.filter(Boolean).reverse()
-      setTokens(valid)
-
-      if (SERVER && valid.length > 0) {
-        fetch(`${SERVER}/api/tokens`)
-          .then(r => r.json())
-          .then(data => {
-            const map = {}
-            for (const m of data) map[m.tokenAddress?.toLowerCase()] = m
-            setMetas(map)
-          })
-          .catch(() => {})
-      }
+      setTokens(list)
+      setMetas(map)
     } catch (e) {
       console.error('loadTokens:', e)
     } finally {
@@ -93,10 +84,10 @@ export default function Home() {
     if (tab === 'live')      return tokens.filter(t => live.has(t.token?.toLowerCase()))
     if (tab === 'new')       return [...tokens]
     if (tab === 'oldest')    return [...tokens].reverse()
-    if (tab === 'marketcap') return [...tokens].sort((a,b) => Number(b.monRaisedNet) - Number(a.monRaisedNet))
+    if (tab === 'marketcap') return [...tokens].sort((a,b) => Number(b.marketCap||b.monRaisedNet) - Number(a.marketCap||a.monRaisedNet))
     if (tab === 'trenches')  return tokens.filter(t => !t.graduated && Number(t.bondedBps) >= 5000)
     // movers default
-    return [...tokens].sort((a,b) => Number(b.monRaisedNet) - Number(a.monRaisedNet))
+    return [...tokens].sort((a,b) => Number(b.marketCap||b.monRaisedNet) - Number(a.marketCap||a.monRaisedNet))
   }
 
   const list     = filtered()
@@ -134,7 +125,7 @@ export default function Home() {
             <div key={t.token} onClick={() => router.push(`/token/${t.token}`)}
               style={{ flexShrink:0, width:230, borderRadius:12, overflow:'hidden', position:'relative', cursor:'pointer', scrollSnapAlign:'start', background: meta?.bannerUrl ? '#000' : `linear-gradient(135deg,${color}22,${color}08)`, border:`1px solid ${color}22` }}>
               {meta?.bannerUrl
-                ? <img src={meta.bannerUrl} alt="" style={{ width:'100%', height:145, objectFit:'cover', display:'block' }} />
+                ? <img src={fixUrl(meta.bannerUrl)} alt="" style={{ width:'100%', height:145, objectFit:'cover', display:'block' }} />
                 : <div style={{ height:145, display:'flex', alignItems:'center', justifyContent:'center', fontSize:54, fontWeight:900, color:`${color}20` }}>{(t.symbol||'?').slice(0,2)}</div>
               }
               {isLive && (
@@ -146,11 +137,11 @@ export default function Home() {
               <div style={{ position:'absolute', bottom:0, left:0, right:0, padding:'10px 12px', zIndex:2, display:'flex', alignItems:'flex-end', gap:8 }}>
                 {meta?.pfpUrl && (
                   <div style={{ width:26, height:26, borderRadius:7, overflow:'hidden', border:'1.5px solid rgba(255,255,255,0.2)', flexShrink:0 }}>
-                    <img src={meta.pfpUrl} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+                    <img src={fixUrl(meta.pfpUrl)} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
                   </div>
                 )}
                 <div>
-                  <div style={{ fontSize:18, fontWeight:800, color:'white', lineHeight:1.1 }}>{fmtMON(t.monRaisedNet)} MON</div>
+                  <div style={{ fontSize:18, fontWeight:800, color:'white', lineHeight:1.1 }}>{fmtMON(t.marketCap || t.monRaisedNet)} MON</div>
                   <div style={{ fontSize:12, fontWeight:600, color:'rgba(255,255,255,0.7)' }}>{t.name} · ${t.symbol}</div>
                 </div>
               </div>
@@ -226,7 +217,7 @@ function TokenCard({ token: t, meta, isLive, onClick }) {
       {/* Image */}
       <div className="tcard-img" style={{ background: meta?.pfpUrl ? '#000' : `linear-gradient(135deg,${color}30,${color}10)`, position:'relative', overflow:'hidden' }}>
         {meta?.pfpUrl
-          ? <img src={meta.pfpUrl} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+          ? <img src={fixUrl(meta.pfpUrl)} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
           : <span style={{ fontSize:24, fontWeight:900, color:`${color}50` }}>{(t.symbol||'?').slice(0,2)}</span>
         }
         {t.graduated && <div className="tcard-badge" style={{ background:'var(--gold)', color:'#000' }}>🎓 GRAD</div>}
@@ -242,7 +233,7 @@ function TokenCard({ token: t, meta, isLive, onClick }) {
       <div className="tcard-body">
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:2 }}>
           <div style={{ fontWeight:800, fontSize:13, lineHeight:1.2 }}>{meta?.name || t.name}</div>
-          <div style={{ fontSize:11, fontWeight:700, fontFamily:'var(--mono)', color:'var(--t1)', flexShrink:0, marginLeft:4 }}>{fmtMON(t.monRaisedNet)}</div>
+          <div style={{ fontSize:11, fontWeight:700, fontFamily:'var(--mono)', color:'var(--t1)', flexShrink:0, marginLeft:4 }}>{fmtMON(t.marketCap || t.monRaisedNet)}</div>
         </div>
         <div style={{ fontSize:11, color:'var(--t3)', marginBottom:5, fontFamily:'var(--mono)' }}>${meta?.symbol || t.symbol}</div>
 
@@ -253,7 +244,7 @@ function TokenCard({ token: t, meta, isLive, onClick }) {
 
         {/* MC label + pct */}
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <span style={{ fontSize:10, color:'var(--t3)' }}>MC {fmtMON(t.monRaisedNet)} MON</span>
+          <span style={{ fontSize:10, color:'var(--t3)' }}>MC {fmtMON(t.marketCap || t.monRaisedNet)} MON</span>
           <span style={{ fontSize:10, fontWeight:700, color: pct >= 70 ? 'var(--gold)' : 'var(--t3)', fontFamily:'var(--mono)' }}>↑{pct.toFixed(1)}%</span>
         </div>
 

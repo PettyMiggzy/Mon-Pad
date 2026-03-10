@@ -8,6 +8,15 @@ import { CURVE_ABI, TOKEN_ABI, fmtMON, fmtAddr, fmtTokens, MONADSCAN, START_BLOC
 import { monad } from '../../lib/wagmi'
 
 const SERVER = process.env.NEXT_PUBLIC_SERVER_URL || ''
+
+// rewrite old http droplet URLs to go through the proxy
+function fixUrl(url) {
+  if (!url) return url
+  if (url.startsWith('http://138.68.248.211:3001')) {
+    return url.replace('http://138.68.248.211:3001', SERVER)
+  }
+  return url
+}
 const DETAIL_TABS = ['Comments', 'Trades', 'Holders']
 const TF_OPTIONS  = ['15m', '1h', '4h', '1d']
 
@@ -27,7 +36,7 @@ export default function TokenDetail() {
   const [amt, setAmt]           = useState('')
   const [showPanel, setShow]    = useState(false)
   const [tf, setTf]             = useState('15m')
-  const [chartStats, setStats]  = useState({ vol24h: 0, price: 0, pct5m: 0, pct1h: 0 })
+  const [chartStats, setStats]  = useState({ vol24h: 0, totalVol: 0, devFees: 0, price: 0, pct5m: 0, pct1h: 0 })
   const [newComment, setNewComment] = useState('')
   const [sellStep, setSellStep] = useState('idle')
   const [comments, setComments] = useState([
@@ -50,8 +59,16 @@ export default function TokenDetail() {
   // metadata from server
   useEffect(() => {
     if (!tokenAddr || !SERVER) return
-    fetch(`${SERVER}/api/token/meta/${tokenAddr}`)
-      .then(r => r.ok ? r.json() : null).then(d => d && setMeta(d)).catch(() => {})
+    const fetchMeta = (attempt = 0) => {
+      fetch(`${SERVER}/api/token/meta/${tokenAddr}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(d => {
+          if (d) setMeta(d)
+          else if (attempt < 3) setTimeout(() => fetchMeta(attempt + 1), 2000)
+        })
+        .catch(() => { if (attempt < 3) setTimeout(() => fetchMeta(attempt + 1), 2000) })
+    }
+    fetchMeta()
   }, [tokenAddr])
 
   // on-chain
@@ -79,10 +96,23 @@ export default function TokenDetail() {
 
   async function loadEvents(curve, token) {
     try {
+      const latestBlock = await client.getBlockNumber()
+      const CHUNK = 900n
+      const getLogsChunked = async (params) => {
+        let all = []
+        for (let from = START_BLOCK; from <= latestBlock; from += CHUNK) {
+          const to = from + CHUNK - 1n > latestBlock ? latestBlock : from + CHUNK - 1n
+          try {
+            const chunk = await client.getLogs({ ...params, fromBlock: from, toBlock: to })
+            all = [...all, ...chunk]
+          } catch {}
+        }
+        return all
+      }
       const [buyLogs, sellLogs, txLogs] = await Promise.all([
-        client.getLogs({ address: curve, event: parseAbiItem('event Buy(address indexed buyer, uint256 monIn, uint256 tokensOut)'), fromBlock: START_BLOCK, toBlock: 'latest' }),
-        client.getLogs({ address: curve, event: parseAbiItem('event Sell(address indexed seller, uint256 tokensIn, uint256 monOut)'), fromBlock: START_BLOCK, toBlock: 'latest' }),
-        client.getLogs({ address: token, event: parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 value)'), fromBlock: START_BLOCK, toBlock: 'latest' }),
+        getLogsChunked({ address: curve, event: parseAbiItem('event Buy(address indexed buyer, uint256 monIn, uint256 tokensOut)') }),
+        getLogsChunked({ address: curve, event: parseAbiItem('event Sell(address indexed seller, uint256 tokensIn, uint256 monOut)') }),
+        getLogsChunked({ address: token, event: parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 value)') }),
       ])
       const all = [
         ...buyLogs.map(l  => ({ type:'buy',  addr: l.args.buyer,  mon: l.args.monIn,  tokens: l.args.tokensOut, block: l.blockNumber })),
@@ -190,10 +220,13 @@ export default function TokenDetail() {
       // stats
       const now = Date.now() / 1000
       const vol24 = (tm || []).filter(t => t.ts > now - 86400).reduce((s,t) => s + t.volume, 0)
+      const totalVol = (tm || []).reduce((s,t) => s + t.volume, 0)
       const c5m = candles.filter(c => c.time > now - 300)
       const c1h = candles.filter(c => c.time > now - 3600)
       setStats({
         vol24h: vol24,
+        totalVol,
+        devFees: totalVol * 0.015,
         price: last?.close || 0,
         pct5m: c5m.length >= 2 ? (c5m[c5m.length-1].close - c5m[0].open) / c5m[0].open * 100 : 0,
         pct1h: c1h.length >= 2 ? (c1h[c1h.length-1].close - c1h[0].open) / c1h[0].open * 100 : 0,
@@ -271,7 +304,7 @@ export default function TokenDetail() {
         {/* ── BANNER ── */}
         <div style={{ width:'100%', aspectRatio:'3/1', position:'relative', overflow:'hidden', background:'#120830' }}>
           {meta?.bannerUrl
-            ? <img src={meta.bannerUrl} alt="banner" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+            ? <img src={fixUrl(meta.bannerUrl)} alt="banner" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
             : <div style={{ width:'100%', height:'100%', background:'radial-gradient(circle at 30% 40%,rgba(110,84,255,0.5),transparent 60%),#120830', display:'flex', alignItems:'center', justifyContent:'center' }}>
                 <span style={{ fontSize:64, fontWeight:900, color:'rgba(255,255,255,0.06)' }}>{dSym.slice(0,2)}</span>
               </div>
@@ -282,7 +315,7 @@ export default function TokenDetail() {
         {/* ── TOKEN HEADER ── */}
         <div style={{ padding:'14px 14px 10px', display:'flex', gap:12 }}>
           <div style={{ width:56, height:56, borderRadius:12, border:'2px solid rgba(110,84,255,0.25)', flexShrink:0, overflow:'hidden', background:'radial-gradient(circle at 35% 35%,#3b1d9e,#120830)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, fontWeight:800, color:'rgba(255,255,255,0.12)' }}>
-            {meta?.pfpUrl ? <img src={meta.pfpUrl} alt="pfp" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : dSym.slice(0,2)}
+            {meta?.pfpUrl ? <img src={fixUrl(meta.pfpUrl)} alt="pfp" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : dSym.slice(0,2)}
           </div>
           <div style={{ flex:1, minWidth:0 }}>
             <div style={{ fontSize:17, fontWeight:800 }}>{dName}</div>
@@ -360,18 +393,28 @@ export default function TokenDetail() {
         </div>
 
         {/* ── STATS ROW ── */}
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:1, margin:'0 14px 14px', background:'var(--bd)', borderRadius:10, overflow:'hidden' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:1, margin:'0 14px 6px', background:'var(--bd)', borderRadius:10, overflow:'hidden' }}>
           {[
             ['Vol 24h', chartStats.vol24h > 0 ? `${chartStats.vol24h.toFixed(1)} MON` : '—', null],
             ['Price',   `${priceNum.toFixed(6)}`.slice(0,10), null],
             ['5m',      `${chartStats.pct5m >= 0?'+':''}${chartStats.pct5m.toFixed(2)}%`, chartStats.pct5m],
-            ['1h',      `${chartStats.pct1h >= 0?'+':''}${chartStats.pct1h.toFixed(2)}%`, chartStats.pct1h],
           ].map(([l,v,chg]) => (
             <div key={l} style={{ background:'var(--bg2)', padding:'10px 8px', textAlign:'center' }}>
               <div style={{ fontSize:9, color:'var(--t3)', textTransform:'uppercase', letterSpacing:'.3px', marginBottom:3 }}>{l}</div>
               <div style={{ fontSize:12, fontWeight:800, fontFamily:'var(--mono)', color: chg!=null?(chg>=0?'var(--g)':'var(--r)'):'var(--t1)' }}>{v}</div>
             </div>
           ))}
+        </div>
+        {/* ── DEV FEES ROW ── */}
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:1, margin:'0 14px 14px', background:'var(--bd)', borderRadius:10, overflow:'hidden' }}>
+          <div style={{ background:'var(--bg2)', padding:'10px 8px', textAlign:'center' }}>
+            <div style={{ fontSize:9, color:'var(--t3)', textTransform:'uppercase', letterSpacing:'.3px', marginBottom:3 }}>Total Volume</div>
+            <div style={{ fontSize:12, fontWeight:800, fontFamily:'var(--mono)', color:'var(--t1)' }}>{chartStats.totalVol > 0 ? `${chartStats.totalVol.toFixed(1)} MON` : '—'}</div>
+          </div>
+          <div style={{ background:'linear-gradient(135deg,rgba(110,84,255,0.12),rgba(110,84,255,0.06))', padding:'10px 8px', textAlign:'center' }}>
+            <div style={{ fontSize:9, color:'var(--p2)', textTransform:'uppercase', letterSpacing:'.3px', marginBottom:3 }}>💰 Dev Fees Earned</div>
+            <div style={{ fontSize:12, fontWeight:800, fontFamily:'var(--mono)', color:'var(--p2)' }}>{chartStats.devFees > 0 ? `${chartStats.devFees.toFixed(3)} MON` : '—'}</div>
+          </div>
         </div>
 
         {/* ── BONDING CURVE ── */}
@@ -412,7 +455,7 @@ export default function TokenDetail() {
         {/* ── COMMUNITY ── */}
         <div style={{ margin:'0 14px 14px', display:'flex', alignItems:'center', gap:12, background:'var(--bg2)', border:'1px solid var(--bd2)', borderRadius:12, padding:'12px 14px' }}>
           <div style={{ width:44, height:44, borderRadius:'50%', overflow:'hidden', background:'var(--p)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, fontWeight:800, flexShrink:0 }}>
-            {meta?.pfpUrl ? <img src={meta.pfpUrl} style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : dSym.slice(0,1)}
+            {meta?.pfpUrl ? <img src={fixUrl(meta.pfpUrl)} style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : dSym.slice(0,1)}
           </div>
           <div style={{ flex:1 }}>
             <div style={{ fontSize:14, fontWeight:700 }}>{dName} chat</div>
