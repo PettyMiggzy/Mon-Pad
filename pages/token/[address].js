@@ -184,7 +184,7 @@ export default function TokenDetail() {
 
       const chart = LW.createChart(chartContainerRef.current, {
         width:  chartContainerRef.current.clientWidth || 600,
-        height: 240,
+        height: 340,
         layout: { background: { color: '#111118' }, textColor: '#9ca3af' },
         grid:   { vertLines: { color: 'rgba(110,84,255,0.06)' }, horzLines: { color: 'rgba(110,84,255,0.06)' } },
         crosshair: { mode: LW.CrosshairMode.Normal },
@@ -223,68 +223,65 @@ export default function TokenDetail() {
 
   async function fetchCandles(candle, vol, chart) {
     if (!curveAddr) return
+    const now = Math.floor(Date.now()/1000)
+    const int = tf==='15m'?900 : tf==='1h'?3600 : tf==='4h'?14400 : 86400
+    const currentPrice = Number(info?.priceWei || 150000n) / 1e18
+
+    // flat candles at current price — always shown as baseline
+    function flatLine(price) {
+      const out = []
+      for (let i = 47; i >= 0; i--) {
+        const t = Math.floor((now - i*int)/int)*int
+        out.push({ time:t, open:price, high:price*1.0005, low:price*0.9995, close:price, volume:0 })
+      }
+      // deduplicate times
+      const seen = new Set()
+      return out.filter(c => { if (seen.has(c.time)) return false; seen.add(c.time); return true })
+    }
+
     try {
       const res = await fetch(`${SERVER}/api/candles/${curveAddr}?interval=${tf}`)
       if (!res.ok) throw new Error('no data')
       const { candles, trades: tm } = await res.json()
-      if (!candles?.length) throw new Error('empty')
 
-      candle.setData(candles)
-      vol.setData(candles.map(c => ({ time: c.time, value: c.volume, color: c.close >= c.open ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)' })))
+      const data = (candles?.length) ? candles : flatLine(currentPrice)
 
-      // current price line
-      const last = candles[candles.length - 1]
+      candle.setData(data)
+      vol.setData(data.map(c => ({ time:c.time, value:c.volume||0, color: c.close>=c.open?'rgba(34,197,94,0.3)':'rgba(239,68,68,0.3)' })))
+
+      const last = data[data.length-1]
       if (last) {
-        candle.createPriceLine({ price: last.close, color: '#ef4444', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, axisLabelColor: '#ef4444', axisLabelTextColor: '#fff' })
+        try { candle.createPriceLine({ price:last.close, color:'#6E54FF', lineWidth:1, lineStyle:2, axisLabelVisible:true, axisLabelColor:'#6E54FF', axisLabelTextColor:'#fff' }) } catch {}
       }
 
-      // trade markers — green ▲D for dev buys, red ▼D for dev sells
-      const creatorAddr = info?.creator?.toLowerCase()
-      const devTrades = (tm || []).filter(t => creatorAddr && t.addr?.toLowerCase() === creatorAddr)
-      if (devTrades.length) {
-        candle.setMarkers(
-          devTrades
-            .sort((a, b) => a.ts - b.ts)  // lightweight-charts requires ascending time
-            .map(t => ({
-              time:     t.ts,
-              position: t.type === 'buy' ? 'belowBar' : 'aboveBar',
-              color:    t.type === 'buy' ? '#22c55e'  : '#ef4444',
-              shape:    t.type === 'buy' ? 'arrowUp'  : 'arrowDown',
-              text: 'D',
-              size: 1,
-            }))
-        )
+      if (candles?.length) {
+        const creatorAddr = info?.creator?.toLowerCase()
+        const devTrades = (tm||[]).filter(t => creatorAddr && t.addr?.toLowerCase()===creatorAddr)
+        if (devTrades.length) {
+          candle.setMarkers(devTrades.sort((a,b)=>a.ts-b.ts).map(t => ({
+            time:t.ts, position:t.type==='buy'?'belowBar':'aboveBar',
+            color:t.type==='buy'?'#22c55e':'#ef4444',
+            shape:t.type==='buy'?'arrowUp':'arrowDown', text:'D', size:1,
+          })))
+        }
       }
 
       chart.timeScale().fitContent()
 
-      // stats
-      const now = Date.now() / 1000
-      const vol24 = (tm || []).filter(t => t.ts > now - 86400).reduce((s,t) => s + t.volume, 0)
-      const totalVol = (tm || []).reduce((s,t) => s + t.volume, 0)
-      const c5m = candles.filter(c => c.time > now - 300)
-      const c1h = candles.filter(c => c.time > now - 3600)
+      const vol24 = (tm||[]).filter(t=>t.ts>now-86400).reduce((s,t)=>s+t.volume,0)
+      const totalVol = (tm||[]).reduce((s,t)=>s+t.volume,0)
+      const c5m = data.filter(c=>c.time>now-300)
+      const c1h = data.filter(c=>c.time>now-3600)
       setStats({
-        vol24h: vol24,
-        totalVol,
-        devFees: totalVol * 0.015,
-        price: last?.close || 0,
-        pct5m: c5m.length >= 2 ? (c5m[c5m.length-1].close - c5m[0].open) / c5m[0].open * 100 : 0,
-        pct1h: c1h.length >= 2 ? (c1h[c1h.length-1].close - c1h[0].open) / c1h[0].open * 100 : 0,
+        vol24h:vol24, totalVol, devFees:totalVol*0.015,
+        price: last?.close||currentPrice,
+        pct5m: c5m.length>=2?(c5m[c5m.length-1].close-c5m[0].open)/c5m[0].open*100:0,
+        pct1h: c1h.length>=2?(c1h[c1h.length-1].close-c1h[0].open)/c1h[0].open*100:0,
       })
     } catch {
-      // fallback placeholder candles
-      const now = Math.floor(Date.now()/1000), int = tf === '15m' ? 900 : tf === '1h' ? 3600 : tf === '4h' ? 14400 : 86400
-      let p = 150000
-      const fake = []
-      for (let i = 48; i >= 0; i--) {
-        const t = now - i*int, o = p
-        p = Math.max(10000, p + (Math.random()-.48)*15000)
-        const c = p, h = Math.max(o,c)+Math.random()*8000, l = Math.max(Math.min(o,c)-Math.random()*5000,1)
-        fake.push({ time:t, open:o, high:h, low:l, close:c, volume: Math.random()*15 })
-      }
-      candle.setData(fake)
-      vol.setData(fake.map(c => ({ time:c.time, value:c.volume, color: c.close>=c.open?'rgba(34,197,94,0.3)':'rgba(239,68,68,0.3)' })))
+      const data = flatLine(currentPrice)
+      candle.setData(data)
+      vol.setData(data.map(c => ({ time:c.time, value:0, color:'rgba(110,84,255,0.15)' })))
       chart.timeScale().fitContent()
     }
   }
