@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { useAccount, useBalance, usePublicClient } from 'wagmi'
-import { parseAbiItem } from 'viem'
 import { useRouter } from 'next/router'
 import Layout from '../components/Layout'
 import { FACTORY_ADDRESS, CURVE_ABI, TOKEN_ABI, START_BLOCK, fmtMON, fmtAddr, fmtTokens } from '../lib/constants'
@@ -24,7 +23,6 @@ export default function Portfolio() {
     setLoading(true)
     const SERVER = process.env.NEXT_PUBLIC_SERVER_URL || ''
     try {
-      // get all tokens from server (avoids QuickNode getLogs limit)
       const allTokens = await fetch(`${SERVER}/api/tokens`).then(r => r.json())
 
       const myHoldings = []
@@ -33,37 +31,22 @@ export default function Portfolio() {
       await Promise.all(allTokens.map(async t => {
         const token = t.tokenAddress
         const curve = t.curveAddress
-        if (!token || !curve) return
+        if (!token) return
         try {
-          const [bal, priceWei] = await Promise.all([
-            client.readContract({ address: token, abi: TOKEN_ABI, functionName: 'balanceOf', args: [address] }),
-            client.readContract({ address: curve, abi: CURVE_ABI, functionName: 'priceWeiPerToken' }),
-          ])
+          const bal = await client.readContract({ address: token, abi: TOKEN_ABI, functionName: 'balanceOf', args: [address] })
           if (bal > 0n) {
-            const value = (bal * priceWei) / (10n ** 18n)
+            let value = 0n
+            if (curve) {
+              try {
+                const priceWei = await client.readContract({ address: curve, abi: CURVE_ABI, functionName: 'priceWeiPerToken' })
+                value = (bal * priceWei) / (10n ** 18n)
+              } catch {}
+            }
             myHoldings.push({ token, curve, name: t.name, symbol: t.symbol, bal, value, graduated: t.graduated })
           }
-
-          // chunk getLogs per curve to stay within 1000 block limit
-          const latest = await client.getBlockNumber()
-          const CHUNK = 900n
-          const buyLogs = [], sellLogs = []
-          for (let from = START_BLOCK; from <= latest; from += CHUNK) {
-            const to = from + CHUNK - 1n > latest ? latest : from + CHUNK - 1n
-            try {
-              const [b, s] = await Promise.all([
-                client.getLogs({ address: curve, event: parseAbiItem('event Buy(address indexed buyer, uint256 monIn, uint256 tokensOut)'), args: { buyer: address }, fromBlock: from, toBlock: to }),
-                client.getLogs({ address: curve, event: parseAbiItem('event Sell(address indexed seller, uint256 tokensIn, uint256 monOut)'), args: { seller: address }, fromBlock: from, toBlock: to }),
-              ])
-              buyLogs.push(...b); sellLogs.push(...s)
-            } catch {}
-          }
-          for (const l of buyLogs)  myTrades.push({ type:'buy',  token, name:t.name, symbol:t.symbol, mon:l.args.monIn,  tokens:l.args.tokensOut, block:l.blockNumber })
-          for (const l of sellLogs) myTrades.push({ type:'sell', token, name:t.name, symbol:t.symbol, mon:l.args.monOut, tokens:l.args.tokensIn,  block:l.blockNumber })
         } catch {}
       }))
 
-      myTrades.sort((a, b) => Number(b.block) - Number(a.block))
       setHoldings(myHoldings)
       setTrades(myTrades)
     } catch (e) { console.error(e) }
