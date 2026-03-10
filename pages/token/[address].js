@@ -340,17 +340,33 @@ export default function TokenDetail() {
           <div style={{ fontSize:12, color:'var(--t2)', marginBottom:2 }}>Market Cap</div>
           <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between' }}>
             <div>
-              <div style={{ fontSize:28, fontWeight:800, letterSpacing:'-.5px' }}>{fmtMON(info.monRaisedNet)} MON</div>
+              <div style={{ fontSize:28, fontWeight:800, letterSpacing:'-.5px' }}>{fmtMON((BigInt(info.priceWei||0n) * 1_000_000_000n) / (10n**9n))} MON</div>
               <div style={{ fontSize:12, color:'var(--g)', marginTop:2 }}>+0 MON (+0.00%) 24hr</div>
             </div>
             <div style={{ textAlign:'right' }}>
               <div style={{ width:100, height:5, background:'var(--bg3)', borderRadius:999, overflow:'hidden', marginBottom:4, marginLeft:'auto' }}>
                 <div style={{ height:'100%', background:'linear-gradient(90deg,var(--g),var(--cyan))', borderRadius:999, width:`${Math.min(pct,100)}%` }} />
               </div>
-              <div style={{ fontSize:11, color:'var(--t3)' }}>ATH <span style={{ color:'var(--t2)', fontWeight:700 }}>{fmtMON(info.monRaisedNet)} MON</span></div>
+              <div style={{ fontSize:11, color:'var(--t3)' }}>ATH <span style={{ color:'var(--t2)', fontWeight:700 }}>{fmtMON((BigInt(info.priceWei||0n) * 1_000_000_000n) / (10n**9n))} MON</span></div>
             </div>
           </div>
-        </div>
+          {/* contract addresses */}
+          <div style={{ marginTop:10, display:'flex', flexDirection:'column', gap:4 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:11 }}>
+              <span style={{ color:'var(--t3)', minWidth:60 }}>Token:</span>
+              <a href={`https://monadexplorer.com/address/${tokenAddr}`} target="_blank" rel="noreferrer"
+                style={{ color:'var(--p2)', fontFamily:'var(--mono)', textDecoration:'none', wordBreak:'break-all' }}>
+                {tokenAddr}
+              </a>
+            </div>
+            <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:11 }}>
+              <span style={{ color:'var(--t3)', minWidth:60 }}>Curve:</span>
+              <a href={`https://monadexplorer.com/address/${curveAddr}`} target="_blank" rel="noreferrer"
+                style={{ color:'var(--cyan)', fontFamily:'var(--mono)', textDecoration:'none', wordBreak:'break-all' }}>
+                {curveAddr}
+              </a>
+            </div>
+          </div>
 
         {/* ── CHART TOOLBAR ── */}
         <div style={{ display:'flex', alignItems:'center', padding:'0 14px 6px', overflowX:'auto', fontSize:12, color:'var(--t3)' }}>

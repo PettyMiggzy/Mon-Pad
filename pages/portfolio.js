@@ -20,41 +20,46 @@ export default function Portfolio() {
   useEffect(() => { if (address && client) load() }, [address, client])
 
   async function load() {
+    if (!address) return
     setLoading(true)
+    const SERVER = process.env.NEXT_PUBLIC_SERVER_URL || ''
     try {
-      const launchLogs = await client.getLogs({
-        address: FACTORY_ADDRESS,
-        event: parseAbiItem('event Launched(address indexed token, address indexed curve, address indexed graduator, address creator)'),
-        fromBlock: START_BLOCK, toBlock: 'latest',
-      })
+      // get all tokens from server (avoids QuickNode getLogs limit)
+      const allTokens = await fetch(`${SERVER}/api/tokens`).then(r => r.json())
 
       const myHoldings = []
       const myTrades = []
 
-      await Promise.all(launchLogs.map(async log => {
-        const { token, curve } = log.args
+      await Promise.all(allTokens.map(async t => {
+        const token = t.tokenAddress
+        const curve = t.curveAddress
+        if (!token || !curve) return
         try {
-          const [bal, name, symbol, graduated, priceWei] = await Promise.all([
+          const [bal, priceWei] = await Promise.all([
             client.readContract({ address: token, abi: TOKEN_ABI, functionName: 'balanceOf', args: [address] }),
-            client.readContract({ address: token, abi: TOKEN_ABI, functionName: 'name' }),
-            client.readContract({ address: token, abi: TOKEN_ABI, functionName: 'symbol' }),
-            client.readContract({ address: curve, abi: CURVE_ABI, functionName: 'graduated' }),
             client.readContract({ address: curve, abi: CURVE_ABI, functionName: 'priceWeiPerToken' }),
           ])
-
           if (bal > 0n) {
             const value = (bal * priceWei) / (10n ** 18n)
-            myHoldings.push({ token, curve, name, symbol, bal, value, graduated })
+            myHoldings.push({ token, curve, name: t.name, symbol: t.symbol, bal, value, graduated: t.graduated })
           }
 
-          // get my trades on this curve
-          const [buyLogs, sellLogs] = await Promise.all([
-            client.getLogs({ address: curve, event: parseAbiItem('event Buy(address indexed buyer, uint256 monIn, uint256 tokensOut)'), args: { buyer: address }, fromBlock: START_BLOCK, toBlock: 'latest' }),
-            client.getLogs({ address: curve, event: parseAbiItem('event Sell(address indexed seller, uint256 tokensIn, uint256 monOut)'), args: { seller: address }, fromBlock: START_BLOCK, toBlock: 'latest' }),
-          ])
-
-          for (const l of buyLogs)  myTrades.push({ type: 'buy',  token, name, symbol, mon: l.args.monIn,  tokens: l.args.tokensOut, block: l.blockNumber })
-          for (const l of sellLogs) myTrades.push({ type: 'sell', token, name, symbol, mon: l.args.monOut, tokens: l.args.tokensIn,  block: l.blockNumber })
+          // chunk getLogs per curve to stay within 1000 block limit
+          const latest = await client.getBlockNumber()
+          const CHUNK = 900n
+          const buyLogs = [], sellLogs = []
+          for (let from = START_BLOCK; from <= latest; from += CHUNK) {
+            const to = from + CHUNK - 1n > latest ? latest : from + CHUNK - 1n
+            try {
+              const [b, s] = await Promise.all([
+                client.getLogs({ address: curve, event: parseAbiItem('event Buy(address indexed buyer, uint256 monIn, uint256 tokensOut)'), args: { buyer: address }, fromBlock: from, toBlock: to }),
+                client.getLogs({ address: curve, event: parseAbiItem('event Sell(address indexed seller, uint256 tokensIn, uint256 monOut)'), args: { seller: address }, fromBlock: from, toBlock: to }),
+              ])
+              buyLogs.push(...b); sellLogs.push(...s)
+            } catch {}
+          }
+          for (const l of buyLogs)  myTrades.push({ type:'buy',  token, name:t.name, symbol:t.symbol, mon:l.args.monIn,  tokens:l.args.tokensOut, block:l.blockNumber })
+          for (const l of sellLogs) myTrades.push({ type:'sell', token, name:t.name, symbol:t.symbol, mon:l.args.monOut, tokens:l.args.tokensIn,  block:l.blockNumber })
         } catch {}
       }))
 
