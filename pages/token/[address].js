@@ -110,7 +110,7 @@ export default function TokenDetail() {
     try {
       const curve = await client.readContract({ address: tokenAddr, abi: TOKEN_ABI, functionName: 'curve' })
       setCurve(curve)
-      const [name, symbol, graduated, monRaisedNet, capMon, bondedBps, priceWei, creator] = await Promise.all([
+      const [name, symbol, graduated, monRaisedNet, capMon, bondedBps, priceWei, creator, pauseBuys, pauseSells, delisted] = await Promise.all([
         client.readContract({ address: tokenAddr, abi: TOKEN_ABI, functionName: 'name' }),
         client.readContract({ address: tokenAddr, abi: TOKEN_ABI, functionName: 'symbol' }),
         client.readContract({ address: curve,     abi: CURVE_ABI, functionName: 'graduated' }),
@@ -119,8 +119,11 @@ export default function TokenDetail() {
         client.readContract({ address: curve,     abi: CURVE_ABI, functionName: 'bondedBps' }),
         client.readContract({ address: curve,     abi: CURVE_ABI, functionName: 'priceWeiPerToken' }),
         client.readContract({ address: curve,     abi: CURVE_ABI, functionName: 'creator' }),
+        client.readContract({ address: curve,     abi: CURVE_ABI, functionName: 'pauseBuys' }),
+        client.readContract({ address: curve,     abi: CURVE_ABI, functionName: 'pauseSells' }),
+        client.readContract({ address: curve,     abi: CURVE_ABI, functionName: 'delisted' }),
       ])
-      setInfo({ name, symbol, graduated, monRaisedNet, capMon, bondedBps, priceWei, creator })
+      setInfo({ name, symbol, graduated, monRaisedNet, capMon, bondedBps, priceWei, creator, pauseBuys, pauseSells, delisted })
       loadEvents(curve, tokenAddr)
     } catch (e) { console.error(e) }
   }
@@ -683,9 +686,24 @@ export default function TokenDetail() {
                   <span style={{ fontWeight:800, fontFamily:'var(--mono)' }}>{amt||'0'} {mode==='buy'?'MON':dSym}</span>
                 </div>
               </div>
+              {info.delisted && (
+                <div style={{ background:'rgba(239,68,68,0.12)', border:'1px solid rgba(239,68,68,0.3)', borderRadius:10, padding:'10px 14px', marginBottom:10, fontSize:13, color:'var(--r)', fontWeight:600 }}>
+                  ⚠️ This token has been delisted — trading disabled
+                </div>
+              )}
+              {!info.delisted && info.pauseSells && mode==='sell' && (
+                <div style={{ background:'rgba(255,174,69,0.12)', border:'1px solid rgba(255,174,69,0.3)', borderRadius:10, padding:'10px 14px', marginBottom:10, fontSize:13, color:'#FFAE45', fontWeight:600 }}>
+                  ⚠️ Sells are currently paused for this token
+                </div>
+              )}
+              {!info.delisted && info.pauseBuys && mode==='buy' && (
+                <div style={{ background:'rgba(255,174,69,0.12)', border:'1px solid rgba(255,174,69,0.3)', borderRadius:10, padding:'10px 14px', marginBottom:10, fontSize:13, color:'#FFAE45', fontWeight:600 }}>
+                  ⚠️ Buys are currently paused for this token
+                </div>
+              )}
               <button className="btn-primary"
-                style={{ width:'100%', padding:16, fontSize:16, fontWeight:800, borderRadius:14, marginBottom:10, background:mode==='sell'?'var(--r)':'var(--p)' }}
-                onClick={mode==='buy'?handleBuy:handleSell} disabled={isPending||isConfirming||sellStep!=='idle'}>
+                style={{ width:'100%', padding:16, fontSize:16, fontWeight:800, borderRadius:14, marginBottom:10, background:mode==='sell'?'var(--r)':'var(--p)', opacity:(info.delisted||(info.pauseSells&&mode==='sell')||(info.pauseBuys&&mode==='buy'))?0.4:1 }}
+                onClick={mode==='buy'?handleBuy:handleSell} disabled={isPending||isConfirming||sellStep!=='idle'||!!info.delisted||(!!info.pauseSells&&mode==='sell')||(!!info.pauseBuys&&mode==='buy')}>
                 {sellStep==='approving'?'Approving tokens…':sellStep==='selling'?'Confirm sell…':isPending?'Confirm in wallet…':isConfirming?'Confirming…':userAddr?`${mode==='buy'?'Buy':'Sell'} ${dSym}`:'Connect Wallet'}
               </button>
               <button className="btn-ghost" style={{ width:'100%' }} onClick={() => setShow(false)}>Cancel</button>
