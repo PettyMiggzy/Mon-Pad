@@ -175,19 +175,21 @@ export default function TokenDetail() {
     let destroyed = false
 
     async function init() {
+      // wait one frame for container to have real dimensions
+      await new Promise(r => setTimeout(r, 50))
       const LW = await import('lightweight-charts')
       if (destroyed || !chartContainerRef.current) return
 
       if (chartRef.current) { chartRef.current.remove(); chartRef.current = null }
 
       const chart = LW.createChart(chartContainerRef.current, {
-        width:  chartContainerRef.current.clientWidth,
+        width:  chartContainerRef.current.clientWidth || 600,
         height: 240,
-        layout: { background: { color: '#111118' }, textColor: '#3a3458' },
-        grid:   { vertLines: { color: 'rgba(110,84,255,0.04)' }, horzLines: { color: 'rgba(110,84,255,0.04)' } },
+        layout: { background: { color: '#111118' }, textColor: '#9ca3af' },
+        grid:   { vertLines: { color: 'rgba(110,84,255,0.06)' }, horzLines: { color: 'rgba(110,84,255,0.06)' } },
         crosshair: { mode: LW.CrosshairMode.Normal },
-        rightPriceScale: { borderColor: '#1e1e2a', textColor: '#3a3458' },
-        timeScale: { borderColor: '#1e1e2a', textColor: '#3a3458', timeVisible: true },
+        rightPriceScale: { borderColor: '#1e1e2a', textColor: '#9ca3af' },
+        timeScale: { borderColor: '#1e1e2a', textColor: '#9ca3af', timeVisible: true },
       })
 
       const candle = chart.addCandlestickSeries({
@@ -333,404 +335,402 @@ export default function TokenDetail() {
   const dName       = meta?.name    || info.name
   const dSym        = meta?.symbol  || info.symbol
 
+
   return (
     <>
       <Head><title>{dName} (${dSym}) — MonPad</title></Head>
-      <Layout showBack title={`${dName} · $${dSym}`}>
+      <Layout showBack title={`${dName}`}>
+        <div style={{ maxWidth:1400, margin:'0 auto', padding:'0 0 80px' }}>
 
-        {/* ── BANNER ── */}
-        <div style={{ width:'100%', aspectRatio:'3/1', position:'relative', overflow:'hidden', background:'#120830' }}>
-          {meta?.bannerUrl
-            ? <img src={fixUrl(meta.bannerUrl)} alt="banner" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
-            : <div style={{ width:'100%', height:'100%', background:'radial-gradient(circle at 30% 40%,rgba(110,84,255,0.5),transparent 60%),#120830', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                <span style={{ fontSize:64, fontWeight:900, color:'rgba(255,255,255,0.06)' }}>{dSym.slice(0,2)}</span>
+          {/* ── TOP HEADER BAR ── */}
+          <div style={{ padding:'12px 16px 10px', display:'flex', alignItems:'center', gap:12, borderBottom:'1px solid var(--bd)' }}>
+            <div style={{ width:42, height:42, borderRadius:10, flexShrink:0, overflow:'hidden', background:'var(--bg3)', border:'1px solid var(--bd2)' }}>
+              {meta?.pfpUrl
+                ? <img src={fixUrl(meta.pfpUrl)} alt="pfp" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+                : <div style={{ width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, fontWeight:800, color:'var(--p2)' }}>{dSym.slice(0,2)}</div>
+              }
+            </div>
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                <span style={{ fontSize:18, fontWeight:800 }}>{dName}</span>
+                <span style={{ fontSize:13, color:'var(--t3)', fontFamily:'var(--mono)' }}>${dSym}</span>
+                {info.graduated && <span style={{ fontSize:10, background:'rgba(34,197,94,0.15)', color:'var(--g)', padding:'2px 7px', borderRadius:4, fontWeight:700 }}>🎓 Graduated</span>}
+                {info.delisted  && <span style={{ fontSize:10, background:'rgba(239,68,68,0.15)', color:'var(--r)', padding:'2px 7px', borderRadius:4, fontWeight:700 }}>Delisted</span>}
               </div>
-          }
-          <div style={{ position:'absolute', bottom:0, left:0, right:0, height:'60%', background:'linear-gradient(to top,var(--bg),transparent)' }} />
-        </div>
-
-        {/* ── TOKEN HEADER ── */}
-        <div style={{ padding:'14px 14px 10px', display:'flex', gap:12 }}>
-          <div style={{ width:56, height:56, borderRadius:12, border:'2px solid rgba(110,84,255,0.25)', flexShrink:0, overflow:'hidden', background:'radial-gradient(circle at 35% 35%,#3b1d9e,#120830)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, fontWeight:800, color:'rgba(255,255,255,0.12)' }}>
-            {meta?.pfpUrl ? <img src={fixUrl(meta.pfpUrl)} alt="pfp" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : dSym.slice(0,2)}
-          </div>
-          <div style={{ flex:1, minWidth:0 }}>
-            <div style={{ fontSize:17, fontWeight:800 }}>{dName}</div>
-            <div style={{ fontSize:12, color:'var(--t3)', fontFamily:'var(--mono)', marginBottom:4 }}>${dSym} · {fmtAddr(tokenAddr)}</div>
-            <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-              <div style={{ width:18, height:18, borderRadius:'50%', background:'var(--p)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:9, fontWeight:800, color:'white' }}>{(info.creator||'?').slice(2,4).toUpperCase()}</div>
-              <span style={{ fontSize:11, color:'var(--t3)', fontFamily:'var(--mono)' }}>{fmtAddr(info.creator)}</span>
-              {isCreator && <span style={{ fontSize:10, background:'rgba(255,174,69,0.15)', color:'var(--gold)', padding:'1px 6px', borderRadius:4, fontWeight:700 }}>You 👑</span>}
-            </div>
-          </div>
-        </div>
-
-        {/* ── CTA ── */}
-        <div style={{ padding:'0 14px 14px', display:'flex', gap:8 }}>
-          <button className="btn-primary" style={{ flex:1 }} onClick={() => setShow(true)}>{userAddr ? 'Trade' : 'Connect to trade'}</button>
-          <button onClick={() => navigator.clipboard.writeText(tokenAddr||'')}
-            style={{ width:46, height:46, background:'var(--bg2)', border:'1px solid var(--bd2)', borderRadius:12, display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, cursor:'pointer', flexShrink:0 }}>⎘</button>
-        </div>
-
-        {/* ── LIVE STREAM ── */}
-        <LiveStream tokenAddress={tokenAddr} isCreator={isCreator} server={SERVER} />
-
-        {/* ── MC STATS ── */}
-        <div style={{ padding:'0 14px 10px' }}>
-          <div style={{ fontSize:12, color:'var(--t2)', marginBottom:2 }}>Market Cap</div>
-          <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between' }}>
-            <div>
-              <div style={{ fontSize:28, fontWeight:800, letterSpacing:'-.5px' }}>{fmtUSD((info.priceWei||0n) * 1_000_000_000n, monPrice)}</div>
-              <div style={{ fontSize:12, color:'var(--g)', marginTop:2 }}>+0 MON (+0.00%) 24hr</div>
-            </div>
-            <div style={{ textAlign:'right' }}>
-              <div style={{ width:100, height:5, background:'var(--bg3)', borderRadius:999, overflow:'hidden', marginBottom:4, marginLeft:'auto' }}>
-                <div style={{ height:'100%', background:'linear-gradient(90deg,var(--g),var(--cyan))', borderRadius:999, width:`${Math.min(pct,100)}%` }} />
+              <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:2 }}>
+                <div style={{ width:16, height:16, borderRadius:'50%', background:'var(--p)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:8, fontWeight:800, color:'white', flexShrink:0 }}>{(info.creator||'?').slice(2,4).toUpperCase()}</div>
+                <span style={{ fontSize:11, color:'var(--t3)', fontFamily:'var(--mono)' }}>by {fmtAddr(info.creator)}</span>
+                {isCreator && <span style={{ fontSize:10, background:'rgba(255,174,69,0.15)', color:'#FFAE45', padding:'1px 6px', borderRadius:4, fontWeight:700 }}>You 👑</span>}
               </div>
-              <div style={{ fontSize:11, color:'var(--t3)' }}>ATH <span style={{ color:'var(--t2)', fontWeight:700 }}>{fmtMON((info.priceWei||0n) * 1_000_000_000n)} MON</span></div>
             </div>
-          </div>
-          {/* contract addresses */}
-          <div style={{ marginTop:10, display:'flex', flexDirection:'column', gap:4 }}>
-            <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:11 }}>
-              <span style={{ color:'var(--t3)', minWidth:60 }}>Token:</span>
-              <a href={`https://monadexplorer.com/address/${tokenAddr}`} target="_blank" rel="noreferrer"
-                style={{ color:'var(--p2)', fontFamily:'var(--mono)', textDecoration:'none', wordBreak:'break-all' }}>
-                {tokenAddr}
-              </a>
-            </div>
-            <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:11 }}>
-              <span style={{ color:'var(--t3)', minWidth:60 }}>Curve:</span>
-              <a href={`https://monadexplorer.com/address/${curveAddr}`} target="_blank" rel="noreferrer"
-                style={{ color:'var(--cyan)', fontFamily:'var(--mono)', textDecoration:'none', wordBreak:'break-all' }}>
-                {curveAddr}
-              </a>
-            </div>
-          </div>
-        </div>
-
-        {/* ── CREATOR: UPDATE IMAGES ── */}
-        {isCreator && (
-          <div style={{ margin:'0 14px 10px', padding:'10px 12px', background:'rgba(110,84,255,0.08)', border:'1px solid rgba(110,84,255,0.2)', borderRadius:10 }}>
-            <div style={{ fontSize:11, fontWeight:700, color:'var(--p2)', marginBottom:8 }}>👑 Update Token Images</div>
-            <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-              <label style={{ cursor:'pointer', fontSize:11, padding:'5px 10px', background:'var(--bg3)', border:'1px solid var(--bd2)', borderRadius:6, color:'var(--t2)' }}>
-                📷 New PFP
-                <input type="file" accept="image/*" style={{ display:'none' }} onChange={async e => {
-                  const file = e.target.files[0]; if (!file) return
-                  const fd = new FormData(); fd.append('pfp', file)
-                  const r = await fetch(`${SERVER}/api/upload/pfp`, { method:'POST', body:fd })
-                  const d = await r.json()
-                  await fetch(`${SERVER}/api/token/meta`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ tokenAddress: tokenAddr, pfpUrl: d.url }) })
-                  setMeta(p => ({ ...p, pfpUrl: d.url }))
-                  alert('PFP updated!')
-                }} />
-              </label>
-              <label style={{ cursor:'pointer', fontSize:11, padding:'5px 10px', background:'var(--bg3)', border:'1px solid var(--bd2)', borderRadius:6, color:'var(--t2)' }}>
-                🖼️ New Banner
-                <input type="file" accept="image/*" style={{ display:'none' }} onChange={async e => {
-                  const file = e.target.files[0]; if (!file) return
-                  const fd = new FormData(); fd.append('banner', file)
-                  const r = await fetch(`${SERVER}/api/upload/banner`, { method:'POST', body:fd })
-                  const d = await r.json()
-                  await fetch(`${SERVER}/api/token/meta`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ tokenAddress: tokenAddr, bannerUrl: d.url }) })
-                  setMeta(p => ({ ...p, bannerUrl: d.url }))
-                  alert('Banner updated!')
-                }} />
-              </label>
-            </div>
-          </div>
-        )}
-
-        {/* ── CHART TOOLBAR ── */}
-        <div style={{ display:'flex', alignItems:'center', padding:'0 14px 6px', overflowX:'auto', fontSize:12, color:'var(--t3)' }}>
-          {TF_OPTIONS.map((t,i) => (
-            <button key={t} onClick={() => setTf(t)}
-              style={{ padding:'6px 10px', background:'none', border:'none', cursor:'pointer', fontFamily:'var(--sans)', fontSize:12, fontWeight:tf===t?700:400, color:tf===t?'var(--t1)':'var(--t3)', borderRight:i<TF_OPTIONS.length-1?'1px solid var(--bd)':'none' }}>
-              {t}
-            </button>
-          ))}
-          <div style={{ width:1, height:16, background:'var(--bd)', margin:'0 4px' }} />
-          <span style={{ padding:'6px 8px', whiteSpace:'nowrap', cursor:'pointer' }}>Trade Display</span>
-          <span style={{ padding:'6px 8px', whiteSpace:'nowrap', cursor:'pointer' }}>Hide Bubbles</span>
-          <span style={{ padding:'6px 8px', whiteSpace:'nowrap', cursor:'pointer' }}>Price/MC</span>
-        </div>
-
-        {/* ── CHART ── */}
-        <div style={{ margin:'0 14px 6px', borderRadius:12, overflow:'hidden', background:'var(--bg2)', border:'1px solid var(--bd)', padding:'10px 6px 6px' }}>
-          <div style={{ display:'flex', justifyContent:'space-between', padding:'0 6px 6px' }}>
-            <div>
-              <div style={{ fontSize:11, color:'var(--t2)', fontFamily:'var(--mono)' }}>{dSym}/MON Market Cap · MonPad</div>
-              <div style={{ display:'flex', gap:8, marginTop:2 }}>
-                <span style={{ fontSize:12, fontWeight:700, fontFamily:'var(--mono)', color:'var(--p2)' }}>{fmtMON(info.monRaisedNet)}</span>
-                <span style={{ fontSize:11, color:'var(--r)', fontFamily:'var(--mono)' }}>0 (0.00%)</span>
-              </div>
-              <div style={{ fontSize:10, color:'var(--t3)', marginTop:2 }}>Volume</div>
-            </div>
-            <div style={{ width:28, height:28, borderRadius:6, background:'var(--bg3)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:800, color:'var(--t3)' }}>TV</div>
-          </div>
-
-          <div ref={chartContainerRef} style={{ width:'100%', height:240 }} />
-
-          <div style={{ display:'flex', justifyContent:'space-between', padding:'8px 6px 0' }}>
-            <div style={{ display:'flex', gap:2 }}>
-              {['1D','5D','1M'].map(t => (
-                <button key={t} style={{ padding:'4px 8px', borderRadius:5, fontSize:11, fontWeight:600, cursor:'pointer', color:'var(--t3)', background:'transparent', border:'none', fontFamily:'var(--sans)' }}>{t}</button>
-              ))}
-            </div>
-            <div style={{ fontSize:10, color:'var(--t3)', fontFamily:'var(--mono)' }}>{new Date().toISOString().slice(11,19)} UTC · % log auto</div>
-          </div>
-        </div>
-
-        {/* ── STATS ROW ── */}
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:1, margin:'0 14px 6px', background:'var(--bd)', borderRadius:10, overflow:'hidden' }}>
-          {[
-            ['Vol 24h', chartStats.vol24h > 0 ? `${chartStats.vol24h.toFixed(1)} MON` : '—', null],
-            ['Price',   `${priceNum.toFixed(6)}`.slice(0,10), null],
-            ['5m',      `${chartStats.pct5m >= 0?'+':''}${chartStats.pct5m.toFixed(2)}%`, chartStats.pct5m],
-          ].map(([l,v,chg]) => (
-            <div key={l} style={{ background:'var(--bg2)', padding:'10px 8px', textAlign:'center' }}>
-              <div style={{ fontSize:9, color:'var(--t3)', textTransform:'uppercase', letterSpacing:'.3px', marginBottom:3 }}>{l}</div>
-              <div style={{ fontSize:12, fontWeight:800, fontFamily:'var(--mono)', color: chg!=null?(chg>=0?'var(--g)':'var(--r)'):'var(--t1)' }}>{v}</div>
-            </div>
-          ))}
-        </div>
-        {/* ── DEV FEES ROW ── */}
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:1, margin:'0 14px 14px', background:'var(--bd)', borderRadius:10, overflow:'hidden' }}>
-          <div style={{ background:'var(--bg2)', padding:'10px 8px', textAlign:'center' }}>
-            <div style={{ fontSize:9, color:'var(--t3)', textTransform:'uppercase', letterSpacing:'.3px', marginBottom:3 }}>Total Volume</div>
-            <div style={{ fontSize:12, fontWeight:800, fontFamily:'var(--mono)', color:'var(--t1)' }}>{chartStats.totalVol > 0 ? `${chartStats.totalVol.toFixed(1)} MON` : '—'}</div>
-          </div>
-          <div style={{ background:'linear-gradient(135deg,rgba(110,84,255,0.12),rgba(110,84,255,0.06))', padding:'10px 8px', textAlign:'center' }}>
-            <div style={{ fontSize:9, color:'var(--p2)', textTransform:'uppercase', letterSpacing:'.3px', marginBottom:3 }}>💰 Dev Fees Earned</div>
-            <div style={{ fontSize:12, fontWeight:800, fontFamily:'var(--mono)', color:'var(--p2)' }}>{chartStats.devFees > 0 ? `${chartStats.devFees.toFixed(3)} MON` : '—'}</div>
-          </div>
-        </div>
-
-        {/* ── BONDING CURVE ── */}
-        <div style={{ margin:'0 14px 14px' }}>
-          <div style={{ display:'flex', justifyContent:'space-between', marginBottom:8 }}>
-            <span style={{ fontSize:15, fontWeight:800 }}>Bonding Curve Progress</span>
-            <span style={{ fontSize:15, fontWeight:800, fontFamily:'var(--mono)', color:info.graduated?'var(--gold)':'var(--p2)' }}>{pct.toFixed(1)}%</span>
-          </div>
-          <div style={{ height:12, background:'var(--bg3)', borderRadius:999, overflow:'hidden', marginBottom:6 }}>
-            <div style={{ height:'100%', borderRadius:999, width:`${Math.min(pct,100)}%`, background:info.graduated?'linear-gradient(90deg,#d97706,#FFAE45)':'linear-gradient(90deg,#6E54FF,#a78bfa)', boxShadow:info.graduated?'0 0 12px rgba(255,174,69,0.4)':'0 0 12px rgba(110,84,255,0.4)', transition:'width .5s ease' }} />
-          </div>
-          <div style={{ fontSize:12, color:info.graduated?'var(--gold)':'var(--t3)' }}>
-            {info.graduated ? '🎓 Coin has graduated! LP permanently burned on Uniswap V3' : `Graduates at ${fmtMON(info.capMon)} MON → Uniswap V3, LP burned 🔥`}
-          </div>
-          {meta?.desc && <div style={{ fontSize:13, color:'var(--t3)', lineHeight:1.6, marginTop:10 }}>{meta.desc}</div>}
-        </div>
-
-        {/* ── SOCIALS ── */}
-        <div style={{ margin:'0 14px 14px', display:'flex', flexDirection:'column', gap:8 }}>
-          {meta?.twitter && (
-            <a href={meta.twitter} target="_blank" rel="noreferrer"
-              style={{ display:'flex', alignItems:'center', gap:10, background:'var(--bg2)', border:'1px solid var(--bd2)', borderRadius:10, padding:'12px 14px', fontSize:14, fontWeight:600, color:'var(--t1)' }}>
-              <span>𝕏</span><span>{dName} community</span><span style={{ marginLeft:'auto', color:'var(--t3)' }}>↗</span>
-            </a>
-          )}
-          {meta?.website && (
-            <a href={meta.website} target="_blank" rel="noreferrer"
-              style={{ display:'flex', alignItems:'center', gap:10, background:'var(--bg2)', border:'1px solid var(--bd2)', borderRadius:10, padding:'12px 14px', fontSize:14, fontWeight:600, color:'var(--t1)' }}>
-              <span>🌐</span><span>{meta.website.replace('https://','')}</span><span style={{ marginLeft:'auto', color:'var(--t3)' }}>↗</span>
-            </a>
-          )}
-          <a href={`${MONADSCAN}/token/${tokenAddr}`} target="_blank" rel="noreferrer"
-            style={{ display:'flex', alignItems:'center', gap:10, background:'var(--bg2)', border:'1px solid var(--bd2)', borderRadius:10, padding:'12px 14px', fontSize:14, fontWeight:600, color:'var(--t1)' }}>
-            <span>🔍</span><span>View on Monadscan</span><span style={{ marginLeft:'auto', color:'var(--t3)' }}>↗</span>
-          </a>
-        </div>
-
-        {/* ── COMMUNITY ── */}
-        <div style={{ margin:'0 14px 14px', display:'flex', alignItems:'center', gap:12, background:'var(--bg2)', border:'1px solid var(--bd2)', borderRadius:12, padding:'12px 14px' }}>
-          <div style={{ width:44, height:44, borderRadius:'50%', overflow:'hidden', background:'var(--p)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, fontWeight:800, flexShrink:0 }}>
-            {meta?.pfpUrl ? <img src={fixUrl(meta.pfpUrl)} style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : dSym.slice(0,1)}
-          </div>
-          <div style={{ flex:1 }}>
-            <div style={{ fontSize:14, fontWeight:700 }}>{dName} chat</div>
-            <div style={{ fontSize:11, color:'var(--t3)' }}>{holders.length} holders</div>
-          </div>
-          <button style={{ background:'var(--bg3)', border:'1px solid var(--bd2)', borderRadius:8, padding:'8px 14px', fontSize:12, fontWeight:700, color:'var(--t1)', cursor:'pointer', fontFamily:'var(--sans)' }}>💬 Join chat</button>
-        </div>
-
-        {/* ── TABS ── */}
-        <div style={{ display:'flex', borderBottom:'1px solid var(--bd)', margin:'0 14px', position:'sticky', top:53, background:'var(--bg)', zIndex:10 }}>
-          {DETAIL_TABS.map(t => (
-            <div key={t} onClick={() => setTab(t)}
-              style={{ flex:1, padding:'12px 0', textAlign:'center', fontSize:13, fontWeight:700, color:tab===t?'var(--t1)':'var(--t3)', cursor:'pointer', borderBottom:tab===t?'2px solid var(--p)':'2px solid transparent', marginBottom:-1 }}>
-              {t}{t==='Trades'&&trades.length>0?` (${trades.length})`:''}{t==='Holders'&&holders.length>0?` (${holders.length})`:''}
-            </div>
-          ))}
-        </div>
-
-        {/* COMMENTS */}
-        {tab === 'Comments' && (
-          <div>
-            <div style={{ display:'flex', gap:8, padding:'12px 14px', borderBottom:'1px solid var(--bd)', alignItems:'center' }}>
-              <div style={{ width:32, height:32, borderRadius:'50%', background:'var(--p)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:800, color:'white', flexShrink:0 }}>
-                {userAddr ? userAddr.slice(2,4).toUpperCase() : '?'}
-              </div>
-              <input className="input-field" style={{ flex:1, padding:'9px 12px', fontSize:13 }} placeholder="Add a comment…" value={newComment} onChange={e => setNewComment(e.target.value)}
-                onKeyDown={e => { if (e.key==='Enter'&&newComment.trim()) { setComments(p => [{ id:Date.now(), user:fmtAddr(userAddr)||'anon', text:newComment, time:'now', likes:0 }, ...p]); setNewComment('') }}} />
-              <button className="btn-ghost" style={{ padding:'8px 10px', fontSize:11, whiteSpace:'nowrap' }}>↓≡ Newest</button>
-            </div>
-            {comments.map(c => (
-              <div key={c.id} style={{ display:'flex', gap:10, padding:'14px', borderBottom:'1px solid var(--bd)' }}>
-                <div style={{ width:34, height:34, borderRadius:'50%', background:c.dev?'var(--gold)':'var(--p)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, fontWeight:800, color:c.dev?'#000':'white', flexShrink:0 }}>
-                  {c.user.slice(0,1).toUpperCase()}
-                </div>
-                <div style={{ flex:1 }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4 }}>
-                    <span style={{ fontSize:13, fontWeight:700 }}>{c.user}</span>
-                    {c.dev && <span style={{ fontSize:10, background:'rgba(255,174,69,0.15)', color:'var(--gold)', padding:'1px 6px', borderRadius:4, fontWeight:700 }}>Dev 👑</span>}
-                    <span style={{ fontSize:11, color:'var(--t3)' }}>{c.time}</span>
-                  </div>
-                  <div style={{ fontSize:13, color:'var(--t2)', lineHeight:1.5 }}>{c.text}</div>
-                  <div style={{ fontSize:11, color:'var(--t3)', marginTop:4, cursor:'pointer' }}>Reply</div>
-                </div>
-                <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2 }}>
-                  <span style={{ fontSize:16, cursor:'pointer', color:'var(--t3)' }}>♡</span>
-                  <span style={{ fontSize:10, color:'var(--t3)' }}>{c.likes}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* TRADES */}
-        {tab === 'Trades' && (
-          <div style={{ padding:'0 14px' }}>
-            {trades.length === 0 && <div style={{ padding:'30px 0', textAlign:'center', color:'var(--t3)', fontSize:13 }}>No trades yet</div>}
-            {trades.map((t,i) => (
-              <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 0', borderBottom:'1px solid var(--bd)' }}>
-                <div style={{ fontSize:11, fontWeight:800, padding:'3px 8px', borderRadius:5, background:t.type==='buy'?'rgba(34,197,94,0.12)':'rgba(239,68,68,0.12)', color:t.type==='buy'?'var(--g)':'var(--r)', flexShrink:0 }}>{t.type.toUpperCase()}</div>
-                <div style={{ flex:1 }}>
-                  <div style={{ fontSize:12, fontFamily:'var(--mono)', color:'var(--t2)' }}>{fmtAddr(t.addr)}</div>
-                  <div style={{ fontSize:11, color:'var(--t3)', marginTop:2 }}>{fmtTokens(t.tokens)} {dSym}</div>
-                </div>
-                <div style={{ fontSize:13, fontWeight:800, fontFamily:'var(--mono)', color:t.type==='buy'?'var(--g)':'var(--r)' }}>{t.type==='buy'?'+':'-'}{fmtMON(t.mon)} MON</div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* HOLDERS */}
-        {tab === 'Holders' && (
-          <div style={{ padding:'0 14px' }}>
-            {holders.length === 0 && <div style={{ padding:'30px 0', textAlign:'center', color:'var(--t3)', fontSize:13 }}>No holders yet</div>}
-            {holders.slice(0,20).map(([addr,bal],i) => {
-              const total = holders.reduce((s,[,v]) => s+Number(v), 0)
-              const p = total > 0 ? (Number(bal)/total*100).toFixed(1) : '0'
-              return (
-                <div key={addr} style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 0', borderBottom:'1px solid var(--bd)' }}>
-                  <div style={{ fontSize:i<3?16:13, fontWeight:800, color:['var(--gold)','#aaa','#cd7f32'][i]||'var(--t3)', width:24, textAlign:'center', flexShrink:0 }}>{i<3?['🥇','🥈','🥉'][i]:i+1}</div>
-                  <div style={{ width:34, height:34, borderRadius:'50%', background:'var(--p)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, fontWeight:800, color:'white', flexShrink:0 }}>{addr.slice(2,4).toUpperCase()}</div>
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontSize:13, fontFamily:'var(--mono)', color:'var(--t2)' }}>{fmtAddr(addr)}</div>
-                    {addr.toLowerCase()===info.creator?.toLowerCase()&&<div style={{ fontSize:10, color:'var(--gold)' }}>Creator 👑</div>}
-                  </div>
-                  <div style={{ textAlign:'right' }}>
-                    <div style={{ fontSize:13, fontWeight:800, fontFamily:'var(--mono)' }}>{p}%</div>
-                    <div style={{ width:60, height:4, background:'var(--bg3)', borderRadius:999, overflow:'hidden', marginTop:3, marginLeft:'auto' }}>
-                      <div style={{ height:'100%', background:'var(--p)', borderRadius:999, width:`${p}%` }} />
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-
-        {/* ── STICKY TRADE BUTTON ── */}
-        <div style={{ position:'sticky', bottom:62, background:'var(--bg)', borderTop:'1px solid var(--bd)', padding:'12px 14px', zIndex:50 }}>
-          <button className="btn-primary" style={{ width:'100%', padding:16, fontSize:16, fontWeight:800, borderRadius:14 }} onClick={() => setShow(true)}>
-            {userAddr ? 'Trade' : 'Connect to trade'}
-          </button>
-        </div>
-
-        {/* ── TRADE PANEL ── */}
-        {showPanel && (
-          <div className="sheet-overlay" onClick={() => setShow(false)}>
-            <div className="sheet" onClick={e => e.stopPropagation()}>
-              <div className="sheet-handle" />
-              <div style={{ display:'flex', gap:2, background:'var(--bg3)', borderRadius:12, padding:3, marginBottom:16 }}>
-                {['buy','sell'].map(m => (
-                  <button key={m} onClick={() => setMode(m)}
-                    style={{ flex:1, padding:11, borderRadius:9, fontSize:14, fontWeight:800, border:'none', fontFamily:'var(--sans)', cursor:'pointer',
-                      background: mode===m?(m==='buy'?'var(--p)':'var(--r)'):'transparent',
-                      color: mode===m?'white':'var(--t3)' }}>
-                    {m.charAt(0).toUpperCase()+m.slice(1)}
-                  </button>
-                ))}
-              </div>
-              <div style={{ position:'relative', marginBottom:10 }}>
-                <input type="number" placeholder={`0.0 ${mode==='buy'?'MON':dSym}`} value={amt} onChange={e => setAmt(e.target.value)}
-                  className="input-field" style={{ fontSize:22, fontWeight:800, padding:'14px 60px 14px 16px', fontFamily:'var(--mono)' }} />
-                <div style={{ position:'absolute', right:12, top:'50%', transform:'translateY(-50%)', background:'rgba(110,84,255,0.15)', color:'var(--p2)', fontSize:11, fontWeight:700, padding:'4px 8px', borderRadius:6, cursor:'pointer' }}
-                  onClick={() => {
-                    if (mode==='sell') setAmt((Number(tokenBalance)/1e18).toFixed(0))
-                  }}>MAX</div>
-              </div>
-              {mode==='sell' && tokenBalance > 0n && (
-                <div style={{ fontSize:12, color:'var(--t3)', marginBottom:8, textAlign:'right' }}>
-                  Balance: <span style={{ color:'var(--t2)', fontWeight:600 }}>{(Number(tokenBalance)/1e18).toLocaleString(undefined,{maximumFractionDigits:0})} {dSym}</span>
-                </div>
-              )}
-              <div style={{ display:'flex', gap:6, marginBottom:14 }}>
-                {mode==='buy' ? ['1','10','50','100'].map(n => (
-                  <div key={n} onClick={() => setAmt(n)}
-                    style={{ flex:1, padding:'9px 0', textAlign:'center', background:'rgba(110,84,255,0.08)', border:'1px solid rgba(110,84,255,0.2)', borderRadius:8, fontSize:13, fontWeight:700, color:'var(--p2)', cursor:'pointer' }}>{n}</div>
-                )) : ['25%','50%','75%','100%'].map(pct => (
-                  <div key={pct} onClick={() => setAmt((Number(tokenBalance)/1e18*(parseInt(pct)/100)).toFixed(0))}
-                    style={{ flex:1, padding:'9px 0', textAlign:'center', background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.2)', borderRadius:8, fontSize:13, fontWeight:700, color:'var(--r)', cursor:'pointer' }}>{pct}</div>
-                ))}
-              </div>
-              <div style={{ background:'var(--bg3)', border:'1px solid var(--bd2)', borderRadius:12, padding:'12px 14px', marginBottom:14 }}>
-                {[
-                  ['You receive',      mode==='buy'?`${tokensEst} ${dSym}`:`${((parseFloat(amt)||0)*priceNum*0.97).toFixed(6)} MON`],
-                  ['Platform fee (1%)',`${((parseFloat(amt)||0)*(mode==='buy'?0.01:priceNum*0.01)).toFixed(mode==='buy'?4:6)} MON`],
-                  ['Dev fee (0.5%)',   `${((parseFloat(amt)||0)*(mode==='buy'?0.005:priceNum*0.005)).toFixed(mode==='buy'?4:6)} MON`],
-                ].map(([l,v]) => (
-                  <div key={l} style={{ display:'flex', justifyContent:'space-between', fontSize:12, padding:'3px 0' }}>
-                    <span style={{ color:'var(--t3)' }}>{l}</span><span style={{ fontFamily:'var(--mono)', fontWeight:600 }}>{v}</span>
-                  </div>
-                ))}
-                <div style={{ height:1, background:'var(--bd)', margin:'6px 0' }} />
-                <div style={{ display:'flex', justifyContent:'space-between', fontSize:13 }}>
-                  <span style={{ color:'var(--t3)' }}>Total</span>
-                  <span style={{ fontWeight:800, fontFamily:'var(--mono)' }}>{amt||'0'} {mode==='buy'?'MON':dSym}</span>
-                </div>
-              </div>
-              {info.delisted && (
-                <div style={{ background:'rgba(239,68,68,0.12)', border:'1px solid rgba(239,68,68,0.3)', borderRadius:10, padding:'10px 14px', marginBottom:10, fontSize:13, color:'var(--r)', fontWeight:600 }}>
-                  ⚠️ This token has been delisted — trading disabled
-                </div>
-              )}
-              {!info.delisted && info.pauseSells && mode==='sell' && (
-                <div style={{ background:'rgba(255,174,69,0.12)', border:'1px solid rgba(255,174,69,0.3)', borderRadius:10, padding:'10px 14px', marginBottom:10, fontSize:13, color:'#FFAE45', fontWeight:600 }}>
-                  ⚠️ Sells are currently paused for this token
-                </div>
-              )}
-              {!info.delisted && info.pauseBuys && mode==='buy' && (
-                <div style={{ background:'rgba(255,174,69,0.12)', border:'1px solid rgba(255,174,69,0.3)', borderRadius:10, padding:'10px 14px', marginBottom:10, fontSize:13, color:'#FFAE45', fontWeight:600 }}>
-                  ⚠️ Buys are currently paused for this token
-                </div>
-              )}
-              <button className="btn-primary"
-                style={{ width:'100%', padding:16, fontSize:16, fontWeight:800, borderRadius:14, marginBottom:10, background:mode==='sell'?'var(--r)':'var(--p)', opacity:(info.delisted||(info.pauseSells&&mode==='sell')||(info.pauseBuys&&mode==='buy'))?0.4:1 }}
-                onClick={mode==='buy'?handleBuy:handleSell} disabled={isPending||isConfirming||sellStep!=='idle'||!!info.delisted||(!!info.pauseSells&&mode==='sell')||(!!info.pauseBuys&&mode==='buy')}>
-                {sellStep==='approving'?'Approving tokens…':sellStep==='selling'?'Confirm sell…':isPending?'Confirm in wallet…':isConfirming?'Confirming…':userAddr?`${mode==='buy'?'Buy':'Sell'} ${dSym}`:'Connect Wallet'}
+            {/* action buttons */}
+            <div style={{ display:'flex', gap:6, flexShrink:0 }}>
+              <button onClick={() => navigator.clipboard.writeText(tokenAddr||'')}
+                style={{ padding:'7px 12px', background:'var(--bg2)', border:'1px solid var(--bd2)', borderRadius:8, fontSize:12, color:'var(--t2)', cursor:'pointer', fontFamily:'var(--mono)', whiteSpace:'nowrap' }}>
+                {fmtAddr(tokenAddr)} ⎘
               </button>
-              <button className="btn-ghost" style={{ width:'100%' }} onClick={() => setShow(false)}>Cancel</button>
-              <div style={{ display:'flex', justifyContent:'center', gap:16, marginTop:12 }}>
-                <a href={`${MONADSCAN}/token/${tokenAddr}`} target="_blank" rel="noreferrer" style={{ fontSize:11, color:'var(--t3)' }}>Monadscan ↗</a>
-                <a href={`${MONADSCAN}/address/${curveAddr}`} target="_blank" rel="noreferrer" style={{ fontSize:11, color:'var(--t3)' }}>Curve Contract ↗</a>
-              </div>
+              <button onClick={() => navigator.share?.({ url: window.location.href }) || navigator.clipboard.writeText(window.location.href)}
+                style={{ padding:'7px 12px', background:'var(--bg2)', border:'1px solid var(--bd2)', borderRadius:8, fontSize:12, color:'var(--t2)', cursor:'pointer' }}>
+                Share ↗
+              </button>
             </div>
           </div>
-        )}
 
+          {/* ── MAIN 2-COL LAYOUT ── */}
+          <div style={{ display:'flex', gap:0, alignItems:'flex-start' }}>
+
+            {/* ════ LEFT COLUMN — chart + info ════ */}
+            <div style={{ flex:1, minWidth:0, borderRight:'1px solid var(--bd)' }}>
+
+              {/* CHART */}
+              <div style={{ padding:'0' }}>
+                {/* chart header */}
+                <div style={{ padding:'10px 14px 6px', display:'flex', alignItems:'center', gap:10 }}>
+                  <span style={{ fontSize:13, fontWeight:700, color:'var(--t2)' }}>{dSym}/MON Market Cap</span>
+                  <span style={{ fontSize:20, fontWeight:800, color:'var(--p2)', fontFamily:'var(--mono)' }}>{fmtUSD((info.priceWei||0n)*1_000_000_000n, monPrice)}</span>
+                  <span style={{ fontSize:12, color: chartStats.pct5m >= 0 ? 'var(--g)' : 'var(--r)', fontWeight:600 }}>
+                    {chartStats.pct5m >= 0 ? '+' : ''}{chartStats.pct5m.toFixed(2)}%
+                  </span>
+                </div>
+
+                {/* timeframe selector */}
+                <div style={{ padding:'0 14px 8px', display:'flex', gap:6, alignItems:'center' }}>
+                  {TF_OPTIONS.map(t => (
+                    <button key={t} onClick={() => setTf(t)}
+                      style={{ padding:'4px 10px', borderRadius:6, border:'none', fontSize:12, fontWeight:700, cursor:'pointer',
+                        background: tf===t ? 'rgba(110,84,255,0.2)' : 'transparent',
+                        color: tf===t ? 'var(--p2)' : 'var(--t3)' }}>
+                      {t}
+                    </button>
+                  ))}
+                </div>
+
+                {/* chart canvas */}
+                <div ref={chartContainerRef} style={{ height:340, width:'100%', background:'var(--bg)' }} />
+
+                {/* stats bar */}
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', borderTop:'1px solid var(--bd)', borderBottom:'1px solid var(--bd)' }}>
+                  {[
+                    ['VOL 24H', chartStats.vol24h > 0 ? fmtMON(BigInt(Math.floor(chartStats.vol24h*1e18))) + ' MON' : '—'],
+                    ['PRICE',   `${(Number(info.priceWei)/1e18).toFixed(8)} MON`],
+                    ['5M',      { val: chartStats.pct5m, pct: true }],
+                    ['1H',      { val: chartStats.pct1h, pct: true }],
+                  ].map(([label, v]) => (
+                    <div key={label} style={{ padding:'10px 14px', borderRight:'1px solid var(--bd)', textAlign:'center' }}>
+                      <div style={{ fontSize:10, color:'var(--t3)', fontWeight:600, marginBottom:4, letterSpacing:'.5px' }}>{label}</div>
+                      {typeof v === 'object' && v.pct
+                        ? <div style={{ fontSize:14, fontWeight:800, color: v.val >= 0 ? 'var(--g)' : 'var(--r)' }}>{v.val >= 0 ? '+' : ''}{v.val.toFixed(2)}%</div>
+                        : <div style={{ fontSize:14, fontWeight:800, fontFamily:'var(--mono)', color:'var(--t1)' }}>{v}</div>
+                      }
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* LIVE STREAM */}
+              <div style={{ borderBottom:'1px solid var(--bd)' }}>
+                <LiveStream tokenAddress={tokenAddr} isCreator={isCreator} userAddr={userAddr} tokenName={dName} tokenSymbol={dSym} server={SERVER} />
+              </div>
+
+              {/* TOKEN DESCRIPTION / SOCIAL */}
+              <div style={{ padding:'12px 14px', borderBottom:'1px solid var(--bd)', display:'flex', gap:10, alignItems:'center', flexWrap:'wrap' }}>
+                {meta?.twitter && <a href={meta.twitter} target="_blank" rel="noreferrer" style={{ fontSize:12, color:'var(--t3)', display:'flex', alignItems:'center', gap:4, textDecoration:'none' }}>𝕏 {meta.twitter.replace('https://twitter.com/','').replace('https://x.com/','')}</a>}
+                {meta?.telegram && <a href={meta.telegram} target="_blank" rel="noreferrer" style={{ fontSize:12, color:'var(--t3)', display:'flex', alignItems:'center', gap:4, textDecoration:'none' }}>✈️ Telegram</a>}
+                {meta?.website && <a href={meta.website} target="_blank" rel="noreferrer" style={{ fontSize:12, color:'var(--t3)', display:'flex', alignItems:'center', gap:4, textDecoration:'none' }}>🌐 Website</a>}
+                <a href={`https://monadexplorer.com/address/${tokenAddr}`} target="_blank" rel="noreferrer" style={{ fontSize:12, color:'var(--t3)', textDecoration:'none' }}>Contract ↗</a>
+                <a href={`https://monadexplorer.com/address/${curveAddr}`} target="_blank" rel="noreferrer" style={{ fontSize:12, color:'var(--t3)', textDecoration:'none' }}>Curve ↗</a>
+                {meta?.description && <span style={{ fontSize:12, color:'var(--t2)', width:'100%' }}>{meta.description}</span>}
+                {!meta?.description && <span style={{ fontSize:12, color:'var(--t3)', fontStyle:'italic' }}>No description</span>}
+              </div>
+
+              {/* COMMENTS / TRADES / HOLDERS TABS */}
+              <div>
+                <div style={{ display:'flex', borderBottom:'1px solid var(--bd)' }}>
+                  {DETAIL_TABS.map(t => (
+                    <button key={t} onClick={() => setTab(t)}
+                      style={{ flex:1, padding:'12px 0', border:'none', borderBottom: tab===t ? '2px solid var(--p)' : '2px solid transparent',
+                        background:'transparent', color: tab===t ? 'var(--t1)' : 'var(--t3)', fontSize:13, fontWeight:700, cursor:'pointer', marginBottom:-1 }}>
+                      {t}
+                    </button>
+                  ))}
+                </div>
+
+                {/* COMMENTS */}
+                {tab==='Comments' && (
+                  <div style={{ padding:'12px 14px' }}>
+                    {userAddr && (
+                      <div style={{ display:'flex', gap:8, marginBottom:14 }}>
+                        <div style={{ width:32, height:32, borderRadius:'50%', background:'var(--p)', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:800, color:'white' }}>
+                          {userAddr.slice(2,4).toUpperCase()}
+                        </div>
+                        <div style={{ flex:1, display:'flex', gap:6 }}>
+                          <input className="input-field" style={{ flex:1, padding:'9px 12px', fontSize:13 }} placeholder="Add a comment…" value={newComment} onChange={e => setNewComment(e.target.value)}
+                            onKeyDown={e => { if (e.key==='Enter' && newComment.trim()) { setComments(p => [{ id:Date.now(), user:fmtAddr(userAddr), text:newComment.trim(), time:'now', likes:0 }, ...p]); setNewComment('') }}} />
+                          <button onClick={() => { if (newComment.trim()) { setComments(p => [{ id:Date.now(), user:fmtAddr(userAddr), text:newComment.trim(), time:'now', likes:0 }, ...p]); setNewComment('') }}}
+                            className="btn-primary" style={{ padding:'9px 14px', fontSize:13 }}>Post</button>
+                        </div>
+                      </div>
+                    )}
+                    <div style={{ display:'flex', gap:6, marginBottom:10 }}>
+                      {['Newest','Likes'].map(s => (
+                        <button key={s} style={{ padding:'4px 10px', borderRadius:6, border:'1px solid var(--bd)', background:'transparent', fontSize:11, color:'var(--t3)', cursor:'pointer' }}>{s}</button>
+                      ))}
+                    </div>
+                    {comments.map(c => (
+                      <div key={c.id} style={{ display:'flex', gap:10, padding:'10px 0', borderBottom:'1px solid var(--bd)' }}>
+                        <div style={{ width:32, height:32, borderRadius:'50%', background: c.dev ? 'linear-gradient(135deg,var(--p),var(--cyan))' : 'var(--bg3)', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:800, color:'white', border: c.dev ? 'none' : '1px solid var(--bd2)' }}>
+                          {c.user.slice(-4,-2).toUpperCase()||'??'}
+                        </div>
+                        <div style={{ flex:1 }}>
+                          <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:3 }}>
+                            <span style={{ fontSize:12, fontWeight:700, color: c.dev ? 'var(--p2)' : 'var(--t2)' }}>{c.user}</span>
+                            {c.dev && <span style={{ fontSize:9, background:'rgba(110,84,255,0.2)', color:'var(--p2)', padding:'1px 5px', borderRadius:3, fontWeight:700 }}>DEV</span>}
+                            <span style={{ fontSize:10, color:'var(--t3)' }}>{c.time}</span>
+                          </div>
+                          <div style={{ fontSize:13, color:'var(--t1)', lineHeight:1.5 }}>{c.text}</div>
+                          <button style={{ fontSize:11, color:'var(--t3)', background:'none', border:'none', cursor:'pointer', marginTop:4, padding:0 }}>
+                            ♡ {c.likes} · Reply
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* TRADES */}
+                {tab==='Trades' && (
+                  <div style={{ padding:'12px 14px' }}>
+                    {trades.length === 0
+                      ? <div style={{ textAlign:'center', color:'var(--t3)', padding:'40px 0', fontSize:13 }}>No trades yet</div>
+                      : trades.slice(0,50).map((t,i) => (
+                          <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 0', borderBottom:'1px solid var(--bd)', fontSize:12 }}>
+                            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                              <span style={{ color: t.type==='buy' ? 'var(--g)' : 'var(--r)', fontWeight:700 }}>{t.type.toUpperCase()}</span>
+                              <span style={{ color:'var(--t3)', fontFamily:'var(--mono)' }}>{fmtAddr(t.addr)}</span>
+                            </div>
+                            <div style={{ textAlign:'right' }}>
+                              <div style={{ color:'var(--t1)', fontFamily:'var(--mono)', fontWeight:600 }}>{t.volume?.toFixed(4)} MON</div>
+                              <div style={{ color:'var(--t3)', fontSize:11 }}>{new Date(t.ts*1000).toLocaleTimeString()}</div>
+                            </div>
+                          </div>
+                        ))
+                    }
+                  </div>
+                )}
+
+                {/* HOLDERS */}
+                {tab==='Holders' && (
+                  <div style={{ padding:'12px 14px' }}>
+                    {holders.length === 0
+                      ? <div style={{ textAlign:'center', color:'var(--t3)', padding:'40px 0', fontSize:13 }}>Holder data loading…</div>
+                      : holders.map((h,i) => (
+                          <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 0', borderBottom:'1px solid var(--bd)', fontSize:12 }}>
+                            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                              <span style={{ color:'var(--t3)', minWidth:20, fontFamily:'var(--mono)' }}>#{i+1}</span>
+                              <span style={{ color: h.addr?.toLowerCase()===curveAddr?.toLowerCase() ? 'var(--cyan)' : 'var(--t2)', fontFamily:'var(--mono)' }}>
+                                {h.addr?.toLowerCase()===curveAddr?.toLowerCase() ? '🔒 Curve' : fmtAddr(h.addr)}
+                              </span>
+                            </div>
+                            <span style={{ color:'var(--t1)', fontFamily:'var(--mono)', fontWeight:600 }}>{(Number(h.balance)/1e18).toLocaleString(undefined,{maximumFractionDigits:0})}</span>
+                          </div>
+                        ))
+                    }
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ════ RIGHT COLUMN — trade panel + info ════ */}
+            <div style={{ width:320, flexShrink:0, position:'sticky', top:56, maxHeight:'calc(100vh - 56px)', overflowY:'auto' }}>
+
+              {/* BUY / SELL TOGGLE */}
+              <div style={{ padding:'12px 14px 0' }}>
+                <div style={{ display:'flex', background:'var(--bg3)', borderRadius:10, padding:3, marginBottom:12 }}>
+                  {['buy','sell'].map(m => (
+                    <button key={m} onClick={() => setMode(m)}
+                      style={{ flex:1, padding:'9px 0', borderRadius:8, border:'none', fontWeight:800, fontSize:14, cursor:'pointer', transition:'all .15s',
+                        background: mode===m ? (m==='buy'?'var(--p)':'var(--r)') : 'transparent',
+                        color: mode===m ? 'white' : 'var(--t3)' }}>
+                      {m.charAt(0).toUpperCase()+m.slice(1)}
+                    </button>
+                  ))}
+                </div>
+
+                {/* balance */}
+                {mode==='sell' && tokenBalance > 0n && (
+                  <div style={{ fontSize:12, color:'var(--t3)', marginBottom:8, display:'flex', justifyContent:'space-between' }}>
+                    <span>Balance</span>
+                    <span style={{ color:'var(--t2)', fontWeight:600 }}>{(Number(tokenBalance)/1e18).toLocaleString(undefined,{maximumFractionDigits:0})} {dSym}</span>
+                  </div>
+                )}
+
+                {/* amount input */}
+                <div style={{ position:'relative', marginBottom:8 }}>
+                  <input type="number" placeholder={`0.0 ${mode==='buy'?'MON':dSym}`} value={amt} onChange={e => setAmt(e.target.value)}
+                    style={{ width:'100%', padding:'14px 60px 14px 14px', fontSize:20, fontWeight:800, fontFamily:'var(--mono)',
+                      background:'var(--bg2)', border:'1px solid var(--bd2)', borderRadius:10, color:'var(--t1)', outline:'none', boxSizing:'border-box' }} />
+                  <button onClick={() => { if (mode==='sell') setAmt((Number(tokenBalance)/1e18).toFixed(0)) }}
+                    style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)', background:'rgba(110,84,255,0.15)', color:'var(--p2)', fontSize:10, fontWeight:700, padding:'4px 8px', borderRadius:5, border:'none', cursor:'pointer' }}>
+                    MAX
+                  </button>
+                </div>
+
+                {/* quick buttons */}
+                <div style={{ display:'flex', gap:5, marginBottom:12 }}>
+                  {mode==='buy'
+                    ? ['1','10','50','100'].map(n => (
+                        <button key={n} onClick={() => setAmt(n)}
+                          style={{ flex:1, padding:'8px 0', textAlign:'center', background:'rgba(110,84,255,0.08)', border:'1px solid rgba(110,84,255,0.15)', borderRadius:7, fontSize:12, fontWeight:700, color:'var(--p2)', cursor:'pointer' }}>
+                          {n}
+                        </button>
+                      ))
+                    : ['25%','50%','75%','100%'].map(pct => (
+                        <button key={pct} onClick={() => setAmt((Number(tokenBalance)/1e18*(parseInt(pct)/100)).toFixed(0))}
+                          style={{ flex:1, padding:'8px 0', textAlign:'center', background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.15)', borderRadius:7, fontSize:12, fontWeight:700, color:'var(--r)', cursor:'pointer' }}>
+                          {pct}
+                        </button>
+                      ))
+                  }
+                </div>
+
+                {/* estimate */}
+                <div style={{ background:'var(--bg2)', border:'1px solid var(--bd)', borderRadius:10, padding:'10px 12px', marginBottom:12 }}>
+                  {[
+                    ['You receive', mode==='buy' ? `${tokensEst} ${dSym}` : `${((parseFloat(amt)||0)*priceNum*0.97).toFixed(6)} MON`],
+                    ['Platform fee (1%)', `${((parseFloat(amt)||0)*(mode==='buy'?0.01:priceNum*0.01)).toFixed(mode==='buy'?4:6)} MON`],
+                    ['Dev fee (0.5%)',    `${((parseFloat(amt)||0)*(mode==='buy'?0.005:priceNum*0.005)).toFixed(mode==='buy'?4:6)} MON`],
+                  ].map(([l,v]) => (
+                    <div key={l} style={{ display:'flex', justifyContent:'space-between', fontSize:12, marginBottom:4 }}>
+                      <span style={{ color:'var(--t3)' }}>{l}</span>
+                      <span style={{ fontFamily:'var(--mono)', fontWeight:600, color:'var(--t2)' }}>{v}</span>
+                    </div>
+                  ))}
+                  <div style={{ height:1, background:'var(--bd)', margin:'6px 0' }} />
+                  <div style={{ display:'flex', justifyContent:'space-between', fontSize:13 }}>
+                    <span style={{ color:'var(--t3)' }}>Total</span>
+                    <span style={{ fontWeight:800, fontFamily:'var(--mono)' }}>{amt||'0'} {mode==='buy'?'MON':dSym}</span>
+                  </div>
+                </div>
+
+                {/* warnings */}
+                {info.delisted && (
+                  <div style={{ background:'rgba(239,68,68,0.1)', border:'1px solid rgba(239,68,68,0.25)', borderRadius:8, padding:'9px 12px', marginBottom:8, fontSize:12, color:'var(--r)', fontWeight:600 }}>
+                    ⚠️ Token delisted — trading disabled
+                  </div>
+                )}
+                {!info.delisted && info.pauseSells && mode==='sell' && (
+                  <div style={{ background:'rgba(255,174,69,0.1)', border:'1px solid rgba(255,174,69,0.25)', borderRadius:8, padding:'9px 12px', marginBottom:8, fontSize:12, color:'#FFAE45', fontWeight:600 }}>
+                    ⚠️ Sells currently paused
+                  </div>
+                )}
+                {!info.delisted && info.pauseBuys && mode==='buy' && (
+                  <div style={{ background:'rgba(255,174,69,0.1)', border:'1px solid rgba(255,174,69,0.25)', borderRadius:8, padding:'9px 12px', marginBottom:8, fontSize:12, color:'#FFAE45', fontWeight:600 }}>
+                    ⚠️ Buys currently paused
+                  </div>
+                )}
+
+                {/* action button */}
+                <button
+                  style={{ width:'100%', padding:15, borderRadius:10, border:'none', fontWeight:800, fontSize:16, cursor:'pointer', marginBottom:6,
+                    background: mode==='buy' ? 'var(--p)' : 'var(--r)',
+                    color: 'white',
+                    opacity: (info.delisted||(info.pauseSells&&mode==='sell')||(info.pauseBuys&&mode==='buy')) ? 0.4 : 1 }}
+                  onClick={mode==='buy' ? handleBuy : handleSell}
+                  disabled={isPending||isConfirming||sellStep!=='idle'||!!info.delisted||(!!info.pauseSells&&mode==='sell')||(!!info.pauseBuys&&mode==='buy')}>
+                  {sellStep==='approving' ? 'Approving tokens…'
+                    : sellStep==='selling' ? 'Confirm sell…'
+                    : isPending ? 'Confirm in wallet…'
+                    : isConfirming ? 'Confirming…'
+                    : userAddr ? `${mode==='buy'?'Buy':'Sell'} ${dSym}` : 'Connect Wallet'}
+                </button>
+              </div>
+
+              {/* DIVIDER */}
+              <div style={{ height:1, background:'var(--bd)', margin:'14px 0 0' }} />
+
+              {/* CREATOR REWARDS */}
+              <div style={{ padding:'14px' }}>
+                <div style={{ fontSize:12, fontWeight:800, color:'var(--t3)', letterSpacing:'.5px', marginBottom:10, textTransform:'uppercase' }}>Creator Rewards</div>
+                <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                  <div style={{ width:36, height:36, borderRadius:'50%', background:'var(--p)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:800, color:'white', flexShrink:0 }}>
+                    {(info.creator||'?').slice(2,4).toUpperCase()}
+                  </div>
+                  <div>
+                    <div style={{ fontSize:13, fontWeight:700, fontFamily:'var(--mono)' }}>{fmtAddr(info.creator)}</div>
+                    <div style={{ fontSize:11, color:'var(--g)' }}>● {fmtMON(BigInt(Math.floor(chartStats.devFees*1e18)))} MON earned</div>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ height:1, background:'var(--bd)' }} />
+
+              {/* BONDING CURVE PROGRESS */}
+              <div style={{ padding:'14px' }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
+                  <div style={{ fontSize:12, fontWeight:800, color:'var(--t3)', letterSpacing:'.5px', textTransform:'uppercase' }}>Bonding Curve</div>
+                  <div style={{ fontSize:13, fontWeight:800, color:'var(--p2)' }}>{Math.min(pct,100).toFixed(1)}%</div>
+                </div>
+                <div style={{ height:8, background:'var(--bg3)', borderRadius:999, overflow:'hidden', marginBottom:6 }}>
+                  <div style={{ height:'100%', background:'linear-gradient(90deg,var(--p),var(--cyan))', borderRadius:999, width:`${Math.min(pct,100)}%`, transition:'width .5s' }} />
+                </div>
+                <div style={{ fontSize:11, color:'var(--t3)' }}>
+                  {info.graduated
+                    ? '🎓 Coin has graduated! LP burned on Uniswap V3'
+                    : `${fmtMON(info.monRaisedNet)} / ${fmtMON(info.capMon)} MON → Uniswap V3`}
+                </div>
+              </div>
+
+              <div style={{ height:1, background:'var(--bd)' }} />
+
+              {/* MC + VOLUME STATS */}
+              <div style={{ padding:'14px' }}>
+                <div style={{ fontSize:12, fontWeight:800, color:'var(--t3)', letterSpacing:'.5px', marginBottom:10, textTransform:'uppercase' }}>Stats</div>
+                {[
+                  ['Market Cap', fmtUSD((info.priceWei||0n)*1_000_000_000n, monPrice)],
+                  ['Total Volume', fmtMON(BigInt(Math.floor(chartStats.totalVol*1e18))) + ' MON'],
+                  ['Dev Fees', fmtMON(BigInt(Math.floor(chartStats.devFees*1e18))) + ' MON'],
+                  ['MON Raised', fmtMON(info.monRaisedNet) + ' MON'],
+                ].map(([l,v]) => (
+                  <div key={l} style={{ display:'flex', justifyContent:'space-between', fontSize:13, marginBottom:8 }}>
+                    <span style={{ color:'var(--t3)' }}>{l}</span>
+                    <span style={{ fontWeight:700, color:'var(--t1)', fontFamily:'var(--mono)' }}>{v}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ height:1, background:'var(--bd)' }} />
+
+              {/* CREATOR IMAGE UPDATE (only visible to creator) */}
+              {isCreator && (
+                <div style={{ padding:'14px' }}>
+                  <div style={{ fontSize:12, fontWeight:800, color:'var(--t3)', letterSpacing:'.5px', marginBottom:10, textTransform:'uppercase' }}>👑 Update Images</div>
+                  <div style={{ display:'flex', gap:8 }}>
+                    <label style={{ flex:1, cursor:'pointer', fontSize:12, padding:'8px 0', background:'var(--bg3)', border:'1px solid var(--bd2)', borderRadius:8, color:'var(--t2)', textAlign:'center' }}>
+                      📷 PFP
+                      <input type="file" accept="image/*" style={{ display:'none' }} onChange={async e => {
+                        const f = e.target.files?.[0]; if (!f) return
+                        const fd = new FormData(); fd.append('file',f); fd.append('address',tokenAddr)
+                        await fetch(`${SERVER}/api/upload/pfp`, { method:'POST', body:fd })
+                        const r = await fetch(`${SERVER}/api/token/meta/${tokenAddr}`); const d = await r.json(); setMeta(d)
+                      }} />
+                    </label>
+                    <label style={{ flex:1, cursor:'pointer', fontSize:12, padding:'8px 0', background:'var(--bg3)', border:'1px solid var(--bd2)', borderRadius:8, color:'var(--t2)', textAlign:'center' }}>
+                      🖼 Banner
+                      <input type="file" accept="image/*" style={{ display:'none' }} onChange={async e => {
+                        const f = e.target.files?.[0]; if (!f) return
+                        const fd = new FormData(); fd.append('file',f); fd.append('address',tokenAddr)
+                        await fetch(`${SERVER}/api/upload/banner`, { method:'POST', body:fd })
+                        const r = await fetch(`${SERVER}/api/token/meta/${tokenAddr}`); const d = await r.json(); setMeta(d)
+                      }} />
+                    </label>
+                  </div>
+                </div>
+              )}
+
+            </div>
+          </div>
+
+        </div>
       </Layout>
     </>
   )

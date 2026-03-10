@@ -454,8 +454,18 @@ input, textarea { font-family: var(--sans); }
 }
 
 /* ═══════════════════════════════════════
-   TOKEN CARD GRID (pump.fun style 3-col)
+   TOKEN DETAIL PAGE
 ═══════════════════════════════════════ */
+.token-2col-right {
+  width: 320px;
+  flex-shrink: 0;
+}
+@media (max-width: 767px) {
+  .token-2col { flex-direction: column !important; }
+  .token-2col-right { width: 100% !important; position: static !important; border-right: none !important; border-top: 1px solid var(--bd); }
+}
+
+
 .token-grid {
   display: grid;
   grid-template-columns: repeat(1, 1fr);
