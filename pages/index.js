@@ -44,6 +44,31 @@ export default function Home() {
   useEffect(() => { if (router.query.tab) setTab(router.query.tab) }, [router.query.tab])
   useEffect(() => { loadTokens() }, [])
 
+  // websocket for real-time price updates
+  useEffect(() => {
+    if (!SERVER) return
+    const wsUrl = SERVER.replace('https://', 'wss://').replace('http://', 'ws://')
+    let ws, retryTimeout
+    function connect() {
+      ws = new WebSocket(wsUrl)
+      ws.onmessage = e => {
+        try {
+          const msg = JSON.parse(e.data)
+          if (msg.type === 'price_update') {
+            setTokens(prev => prev.map(t =>
+              t.token?.toLowerCase() === msg.tokenAddress?.toLowerCase()
+                ? { ...t, marketCap: BigInt(msg.marketCap||'0'), monRaisedNet: BigInt(msg.monRaisedNet||'0'), bondedBps: BigInt(msg.bondedBps||'0') }
+                : t
+            ))
+          }
+        } catch {}
+      }
+      ws.onclose = () => { retryTimeout = setTimeout(connect, 3000) }
+    }
+    connect()
+    return () => { if (ws) ws.close(); clearTimeout(retryTimeout) }
+  }, [])
+
   // poll live rooms every 15s
   useEffect(() => {
     if (!SERVER) return

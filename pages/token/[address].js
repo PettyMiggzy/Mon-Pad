@@ -4,6 +4,7 @@ import { usePublicClient, useAccount, useWriteContract, useWaitForTransactionRec
 import { parseEther, parseAbiItem } from 'viem'
 import Head from 'next/head'
 import Layout from '../../components/Layout'
+import LiveStream from '../../components/LiveStream'
 import { CURVE_ABI, TOKEN_ABI, fmtMON, fmtUSD, fmtAddr, fmtTokens, MONADSCAN, START_BLOCK } from '../../lib/constants'
 import { monad } from '../../lib/wagmi'
 
@@ -53,8 +54,14 @@ export default function TokenDetail() {
   const amtRef       = useRef('')
   const curveAddrRef = useRef(null)
 
-  const { writeContract, data: txHash, isPending }                  = useWriteContract()
-  const { isLoading: isConfirming, isSuccess }                      = useWaitForTransactionReceipt({ hash: txHash })
+  const { writeContract: writeApprove, data: approveTxHash, isPending: approvePending } = useWriteContract()
+  const { writeContract: writeSell,    data: sellTxHash,    isPending: sellPending }    = useWriteContract()
+  const { writeContract: writeBuy,     data: buyTxHash,     isPending: buyPending }     = useWriteContract()
+  const { isLoading: approveConfirming, isSuccess: approveSuccess } = useWaitForTransactionReceipt({ hash: approveTxHash })
+  const { isLoading: sellConfirming,    isSuccess: sellSuccess }    = useWaitForTransactionReceipt({ hash: sellTxHash })
+  const { isLoading: buyConfirming,     isSuccess: buySuccess }     = useWaitForTransactionReceipt({ hash: buyTxHash })
+  const isPending    = approvePending || sellPending || buyPending
+  const isConfirming = approveConfirming || sellConfirming || buyConfirming
 
   // fetch MON price
   useEffect(() => {
@@ -79,6 +86,24 @@ export default function TokenDetail() {
 
   // on-chain
   useEffect(() => { if (tokenAddr && client) loadChain() }, [tokenAddr, client])
+
+  // poll price every 10s
+  useEffect(() => {
+    if (!tokenAddr || !client) return
+    const iv = setInterval(async () => {
+      try {
+        const curve = curveAddr || await client.readContract({ address: tokenAddr, abi: TOKEN_ABI, functionName: 'curve' })
+        const [priceWei, monRaisedNet, bondedBps, graduated] = await Promise.all([
+          client.readContract({ address: curve, abi: CURVE_ABI, functionName: 'priceWeiPerToken' }),
+          client.readContract({ address: curve, abi: CURVE_ABI, functionName: 'monRaisedNet' }),
+          client.readContract({ address: curve, abi: CURVE_ABI, functionName: 'bondedBps' }),
+          client.readContract({ address: curve, abi: CURVE_ABI, functionName: 'graduated' }),
+        ])
+        setInfo(p => p ? { ...p, priceWei, monRaisedNet, bondedBps, graduated } : p)
+      } catch {}
+    }, 10000)
+    return () => clearInterval(iv)
+  }, [tokenAddr, client, curveAddr])
 
   async function loadChain() {
     if (!tokenAddr || !client) return
@@ -256,7 +281,7 @@ export default function TokenDetail() {
 
   function handleBuy() {
     if (!curveAddr || !amt) return
-    writeContract({ address: curveAddr, abi: CURVE_ABI, functionName: 'buy', args: [0n], value: parseEther(amt), chainId: monad.id })
+    writeBuy({ address: curveAddr, abi: CURVE_ABI, functionName: 'buy', args: [0n], value: parseEther(amt), chainId: monad.id })
   }
 
   function handleSell() {
@@ -266,32 +291,30 @@ export default function TokenDetail() {
     amtRef.current       = amt
     curveAddrRef.current = curveAddr
     setSellStep('approving')
-    writeContract({ address: tokenAddr, abi: TOKEN_ABI, functionName: 'approve', args: [curveAddr, parseEther(amt)], chainId: monad.id })
+    writeApprove({ address: tokenAddr, abi: TOKEN_ABI, functionName: 'approve', args: [curveAddr, parseEther(amt)], chainId: monad.id })
   }
 
-  // After approve confirms → fire sell. After sell confirms → refresh.
+  // buy confirmed → refresh
+  useEffect(() => { if (buySuccess) loadChain() }, [buySuccess])
+
+  // approve confirmed → fire sell
   useEffect(() => {
-    if (!isSuccess) return
-    if (sellStepRef.current === 'approving') {
-      const savedAmt   = amtRef.current
-      const savedCurve = curveAddrRef.current
-      if (!savedAmt || !savedCurve) return
-      sellStepRef.current = 'selling'
-      setSellStep('selling')
-      try {
-        writeContract({ address: savedCurve, abi: CURVE_ABI, functionName: 'sell', args: [parseEther(savedAmt), 0n], chainId: monad.id })
-      } catch(e) { console.error('sell error', e); sellStepRef.current = 'idle'; setSellStep('idle') }
-      return
-    }
-    if (sellStepRef.current === 'selling') {
-      sellStepRef.current = 'idle'
-      setSellStep('idle')
-      loadChain()
-      return
-    }
-    // buy confirmed — just refresh
+    if (!approveSuccess) return
+    const savedAmt   = amtRef.current
+    const savedCurve = curveAddrRef.current
+    if (!savedAmt || !savedCurve) return
+    setSellStep('selling')
+    sellStepRef.current = 'selling'
+    writeSell({ address: savedCurve, abi: CURVE_ABI, functionName: 'sell', args: [parseEther(savedAmt), 0n], chainId: monad.id })
+  }, [approveSuccess])
+
+  // sell confirmed → refresh
+  useEffect(() => {
+    if (!sellSuccess) return
+    sellStepRef.current = 'idle'
+    setSellStep('idle')
     loadChain()
-  }, [isSuccess])
+  }, [sellSuccess])
 
   if (!info) return <Layout showBack><div style={{ padding:'60px 14px', textAlign:'center', color:'var(--t3)' }}>Loading…</div></Layout>
 
@@ -340,6 +363,9 @@ export default function TokenDetail() {
           <button onClick={() => navigator.clipboard.writeText(tokenAddr||'')}
             style={{ width:46, height:46, background:'var(--bg2)', border:'1px solid var(--bd2)', borderRadius:12, display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, cursor:'pointer', flexShrink:0 }}>⎘</button>
         </div>
+
+        {/* ── LIVE STREAM ── */}
+        <LiveStream tokenAddress={tokenAddr} isCreator={isCreator} server={SERVER} />
 
         {/* ── MC STATS ── */}
         <div style={{ padding:'0 14px 10px' }}>
