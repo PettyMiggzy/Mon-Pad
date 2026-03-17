@@ -175,48 +175,56 @@ export default function TokenDetail() {
   useEffect(() => {
     if (!chartContainerRef.current) return
     let destroyed = false
+    let ro = null
 
     async function init() {
-      // wait for layout to settle
-      await new Promise(r => setTimeout(r, 150))
+      await new Promise(r => setTimeout(r, 200))
+      if (destroyed || !chartContainerRef.current) return
+
       const LW = await import('lightweight-charts')
       if (destroyed || !chartContainerRef.current) return
 
-      if (chartRef.current) { chartRef.current.remove(); chartRef.current = null }
+      if (chartRef.current) { try { chartRef.current.remove() } catch {} chartRef.current = null }
 
       const chart = LW.createChart(chartContainerRef.current, {
-        width:  chartContainerRef.current.clientWidth || chartContainerRef.current.parentElement?.clientWidth || window.innerWidth - 340,
+        autoSize: true,
         height: 340,
-        layout: { background: { color: '#111118' }, textColor: '#9ca3af' },
-        grid:   { vertLines: { color: 'rgba(110,84,255,0.06)' }, horzLines: { color: 'rgba(110,84,255,0.06)' } },
-        crosshair: { mode: LW.CrosshairMode.Normal },
-        rightPriceScale: { borderColor: '#1e1e2a', textColor: '#9ca3af' },
-        timeScale: { borderColor: '#1e1e2a', textColor: '#9ca3af', timeVisible: true },
+        layout: { background: { color: 'transparent' }, textColor: '#9ca3af' },
+        grid: { vertLines: { color: 'rgba(110,84,255,0.08)' }, horzLines: { color: 'rgba(110,84,255,0.08)' } },
+        rightPriceScale: { borderColor: '#2a2a3a', textColor: '#9ca3af', scaleMargins: { top: 0.1, bottom: 0.2 } },
+        timeScale: { borderColor: '#2a2a3a', textColor: '#9ca3af', timeVisible: true, secondsVisible: false },
+        crosshair: { mode: 1 },
       })
 
       const candle = chart.addCandlestickSeries({
         upColor: '#22c55e', downColor: '#ef4444',
         wickUpColor: '#22c55e', wickDownColor: '#ef4444',
         borderVisible: false,
+        priceFormat: { type: 'price', precision: 8, minMove: 0.00000001 },
       })
 
       const vol = chart.addHistogramSeries({
+        color: 'rgba(110,84,255,0.3)',
+        priceFormat: { type: 'volume' },
         priceScaleId: 'vol',
-        scaleMargins: { top: 0.85, bottom: 0 },
       })
+      vol.priceScale().applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } })
 
       chartRef.current = chart
       candleRef.current = candle
       volRef.current = vol
 
       fetchCandles(candle, vol, chart)
-
-      const ro = new ResizeObserver(() => { if (chartContainerRef.current) chart.applyOptions({ width: chartContainerRef.current.clientWidth }) })
-      ro.observe(chartContainerRef.current)
     }
 
     init()
-    return () => { destroyed = true; if (chartRef.current) { chartRef.current.remove(); chartRef.current = null } }
+    return () => {
+      destroyed = true
+      if (ro) ro.disconnect()
+      if (chartRef.current) { try { chartRef.current.remove() } catch {} chartRef.current = null }
+      candleRef.current = null
+      volRef.current = null
+    }
   }, [curveAddr])
 
   useEffect(() => {
@@ -236,7 +244,7 @@ export default function TokenDetail() {
       // start from a clean aligned boundary, step forward
       const startT = Math.floor((now - 48*int) / int) * int
       for (let i = 0; i < 48; i++) {
-        out.push({ time: startT + i*int, open:price, high:price*1.001, low:price*0.999, close:price, volume:0 })
+        out.push({ time: startT + i*int, open:price, high:price*1.005, low:price*0.995, close:price, volume:0 })
       }
       return out
     }
@@ -409,7 +417,7 @@ export default function TokenDetail() {
                 </div>
 
                 {/* chart canvas */}
-                <div ref={chartContainerRef} style={{ height:340, width:'100%', background:'var(--bg)' }} />
+                <div ref={chartContainerRef} style={{ height:340, width:'100%', background:'#0E091C', display:'block', position:'relative' }} />
 
                 {/* stats bar */}
                 <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', borderTop:'1px solid var(--bd)', borderBottom:'1px solid var(--bd)' }}>
