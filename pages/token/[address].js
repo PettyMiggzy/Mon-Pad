@@ -43,6 +43,7 @@ export default function TokenDetail() {
   const [chartStats, setStats]  = useState({ vol24h: 0, totalVol: 0, devFees: 0, price: 0, pct5m: 0, pct1h: 0 })
   const [newComment, setNewComment] = useState('')
   const [sellStep, setSellStep] = useState('idle')
+  const [txErrMsg, setTxErrMsg] = useState('')
   const [comments, setComments] = useState([
     { id: 1, user: 'monad_degen', text: 'MonPad gonna be the pump.fun of Monad 👀', time: '2h', likes: 1 },
     { id: 2, user: 'Dev', text: 'Welcome! Dev fees hit your wallet every trade 💜', time: '1h', likes: 2, dev: true },
@@ -57,14 +58,15 @@ export default function TokenDetail() {
   const amtRef       = useRef('')
   const curveAddrRef = useRef(null)
 
-  const { writeContract: writeApprove, data: approveTxHash, isPending: approvePending } = useWriteContract()
-  const { writeContract: writeSell,    data: sellTxHash,    isPending: sellPending }    = useWriteContract()
-  const { writeContract: writeBuy,     data: buyTxHash,     isPending: buyPending }     = useWriteContract()
-  const { isLoading: approveConfirming, isSuccess: approveSuccess } = useWaitForTransactionReceipt({ hash: approveTxHash })
-  const { isLoading: sellConfirming,    isSuccess: sellSuccess }    = useWaitForTransactionReceipt({ hash: sellTxHash })
-  const { isLoading: buyConfirming,     isSuccess: buySuccess }     = useWaitForTransactionReceipt({ hash: buyTxHash })
+  const { writeContract: writeApprove, data: approveTxHash, isPending: approvePending, error: approveWriteErr } = useWriteContract()
+  const { writeContract: writeSell,    data: sellTxHash,    isPending: sellPending,    error: sellWriteErr }    = useWriteContract()
+  const { writeContract: writeBuy,     data: buyTxHash,     isPending: buyPending,     error: buyWriteErr }     = useWriteContract()
+  const { isLoading: approveConfirming, isSuccess: approveSuccess, isError: approveErr } = useWaitForTransactionReceipt({ hash: approveTxHash })
+  const { isLoading: sellConfirming,    isSuccess: sellSuccess,    isError: sellErr }    = useWaitForTransactionReceipt({ hash: sellTxHash })
+  const { isLoading: buyConfirming,     isSuccess: buySuccess,     isError: buyErr }     = useWaitForTransactionReceipt({ hash: buyTxHash })
   const isPending    = approvePending || sellPending || buyPending
   const isConfirming = approveConfirming || sellConfirming || buyConfirming
+  const txError      = approveWriteErr || sellWriteErr || buyWriteErr
 
   // fetch MON price
   useEffect(() => {
@@ -173,57 +175,62 @@ export default function TokenDetail() {
 
   // build chart
   useEffect(() => {
-    if (!chartContainerRef.current) return
-    let destroyed = false
-    let ro = null
+    const el = chartContainerRef.current
+    if (!el) return
 
-    async function init() {
-      await new Promise(r => setTimeout(r, 200))
-      if (destroyed || !chartContainerRef.current) return
+    let chart, candle, vol
 
-      const LW = await import('lightweight-charts')
-      if (destroyed || !chartContainerRef.current) return
+    import('lightweight-charts').then(LW => {
+      if (!chartContainerRef.current) return
 
-      if (chartRef.current) { try { chartRef.current.remove() } catch {} chartRef.current = null }
+      const w = el.offsetWidth || el.parentElement?.offsetWidth || 800
 
-      const chart = LW.createChart(chartContainerRef.current, {
-        autoSize: true,
+      chart = LW.createChart(el, {
+        width: w,
         height: 340,
-        layout: { background: { color: 'transparent' }, textColor: '#9ca3af' },
+        layout: { background: { color: '#0E091C' }, textColor: '#9ca3af' },
         grid: { vertLines: { color: 'rgba(110,84,255,0.08)' }, horzLines: { color: 'rgba(110,84,255,0.08)' } },
-        rightPriceScale: { borderColor: '#2a2a3a', textColor: '#9ca3af', scaleMargins: { top: 0.1, bottom: 0.2 } },
-        timeScale: { borderColor: '#2a2a3a', textColor: '#9ca3af', timeVisible: true, secondsVisible: false },
+        rightPriceScale: { borderColor: '#2a2a3a', textColor: '#9ca3af' },
+        timeScale: { borderColor: '#2a2a3a', textColor: '#9ca3af', timeVisible: true },
         crosshair: { mode: 1 },
       })
 
-      const candle = chart.addCandlestickSeries({
+      candle = chart.addCandlestickSeries({
         upColor: '#22c55e', downColor: '#ef4444',
         wickUpColor: '#22c55e', wickDownColor: '#ef4444',
         borderVisible: false,
         priceFormat: { type: 'price', precision: 8, minMove: 0.00000001 },
       })
 
-      const vol = chart.addHistogramSeries({
-        color: 'rgba(110,84,255,0.3)',
-        priceFormat: { type: 'volume' },
-        priceScaleId: 'vol',
-      })
+      vol = chart.addHistogramSeries({ priceScaleId: 'vol', color: 'rgba(110,84,255,0.3)' })
       vol.priceScale().applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } })
 
       chartRef.current = chart
       candleRef.current = candle
       volRef.current = vol
 
-      fetchCandles(candle, vol, chart)
-    }
+      // immediate flat line at launch price — never blank
+      const price = 0.00015
+      const now = Math.floor(Date.now()/1000)
+      const flat = []
+      const base = now - 48*900
+      for (let i = 0; i < 48; i++) flat.push({ time: base + i*900, open:price, high:price*1.005, low:price*0.995, close:price, volume:0 })
+      candle.setData(flat)
+      chart.timeScale().fitContent()
 
-    init()
+      fetchCandles(candle, vol, chart)
+
+      const ro = new ResizeObserver(() => {
+        if (chartContainerRef.current && chart) {
+          chart.applyOptions({ width: chartContainerRef.current.offsetWidth })
+        }
+      })
+      ro.observe(el)
+    }).catch(e => console.error('chart load error', e))
+
     return () => {
-      destroyed = true
-      if (ro) ro.disconnect()
-      if (chartRef.current) { try { chartRef.current.remove() } catch {} chartRef.current = null }
-      candleRef.current = null
-      volRef.current = null
+      if (chart) { try { chart.remove() } catch {} }
+      chartRef.current = null; candleRef.current = null; volRef.current = null
     }
   }, [curveAddr])
 
@@ -244,7 +251,7 @@ export default function TokenDetail() {
       // start from a clean aligned boundary, step forward
       const startT = Math.floor((now - 48*int) / int) * int
       for (let i = 0; i < 48; i++) {
-        out.push({ time: startT + i*int, open:price, high:price*1.005, low:price*0.995, close:price, volume:0 })
+        out.push({ time: startT + i*int + 1, open:price, high:price*1.005, low:price*0.995, close:price, volume:0 })
       }
       return out
     }
@@ -334,8 +341,31 @@ export default function TokenDetail() {
     if (!sellSuccess) return
     sellStepRef.current = 'idle'
     setSellStep('idle')
+    setTxErrMsg('')
     loadChain()
   }, [sellSuccess])
+
+  // handle tx errors
+  useEffect(() => {
+    if (!sellErr && !approveErr && !buyErr) return
+    sellStepRef.current = 'idle'
+    setSellStep('idle')
+    const msg = sellWriteErr?.shortMessage || approveWriteErr?.shortMessage || buyWriteErr?.shortMessage || 'Transaction failed'
+    setTxErrMsg(msg)
+    setTimeout(() => setTxErrMsg(''), 6000)
+  }, [sellErr, approveErr, buyErr, sellWriteErr, approveWriteErr, buyWriteErr])
+
+  // handle wallet rejection
+  useEffect(() => {
+    if (!txError) return
+    sellStepRef.current = 'idle'
+    setSellStep('idle')
+    const msg = txError?.shortMessage || txError?.message || 'Transaction rejected'
+    if (!msg.includes('user rejected') && !msg.includes('User denied')) {
+      setTxErrMsg(msg)
+      setTimeout(() => setTxErrMsg(''), 6000)
+    }
+  }, [txError])
 
   if (!info) return <Layout showBack><div style={{ padding:'60px 14px', textAlign:'center', color:'var(--t3)' }}>Loading…</div></Layout>
 
@@ -417,7 +447,7 @@ export default function TokenDetail() {
                 </div>
 
                 {/* chart canvas */}
-                <div ref={chartContainerRef} style={{ height:340, width:'100%', background:'#0E091C', display:'block', position:'relative' }} />
+                <div ref={chartContainerRef} style={{ height:340, width:'100%', minWidth:0, background:'#0E091C' }}></div>
 
                 {/* stats bar */}
                 <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', borderTop:'1px solid var(--bd)', borderBottom:'1px solid var(--bd)' }}>
@@ -638,6 +668,13 @@ export default function TokenDetail() {
                   </div>
                 </div>
 
+                {/* tx error toast */}
+                {txErrMsg && (
+                  <div style={{ background:'rgba(239,68,68,0.12)', border:'1px solid rgba(239,68,68,0.3)', borderRadius:8, padding:'10px 12px', marginBottom:10, fontSize:13, color:'var(--r)', fontWeight:600 }}>
+                    ❌ {txErrMsg}
+                  </div>
+                )}
+
                 {/* warnings */}
                 {info.delisted && (
                   <div style={{ background:'rgba(239,68,68,0.1)', border:'1px solid rgba(239,68,68,0.25)', borderRadius:8, padding:'9px 12px', marginBottom:8, fontSize:12, color:'var(--r)', fontWeight:600 }}>
@@ -663,10 +700,10 @@ export default function TokenDetail() {
                     opacity: (info.delisted||(info.pauseSells&&mode==='sell')||(info.pauseBuys&&mode==='buy')) ? 0.4 : 1 }}
                   onClick={mode==='buy' ? handleBuy : handleSell}
                   disabled={isPending||isConfirming||sellStep!=='idle'||!!info.delisted||(!!info.pauseSells&&mode==='sell')||(!!info.pauseBuys&&mode==='buy')}>
-                  {sellStep==='approving' ? 'Approving tokens…'
-                    : sellStep==='selling' ? 'Confirm sell…'
+                  {sellStep==='approving' ? '1/2 Approve tokens…'
+                    : sellStep==='selling' ? '2/2 Confirm sell…'
                     : isPending ? 'Confirm in wallet…'
-                    : isConfirming ? 'Confirming…'
+                    : isConfirming ? 'Confirming tx…'
                     : userAddr ? `${mode==='buy'?'Buy':'Sell'} ${dSym}` : 'Connect Wallet'}
                 </button>
               </div>
