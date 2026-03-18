@@ -318,7 +318,7 @@ export default function TokenDetail() {
   }
 
   // buy confirmed → refresh
-  useEffect(() => { if (buySuccess) loadChain() }, [buySuccess])
+  useEffect(() => { if (buySuccess) { loadChain(); setTimeout(() => loadTradesAndHolders(curveAddr), 15000) } }, [buySuccess])
 
   // approve confirmed → fire sell
   useEffect(() => {
@@ -338,6 +338,7 @@ export default function TokenDetail() {
     setSellStep('idle')
     setTxErrMsg('')
     loadChain()
+    setTimeout(() => loadTradesAndHolders(curveAddr), 15000)
   }, [sellSuccess])
 
   // handle tx errors
