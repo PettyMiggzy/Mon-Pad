@@ -39,7 +39,7 @@ export default function TokenDetail() {
   const customInputRef            = useRef(null)
   const [tokenBalance, setTokenBalance] = useState(0n)
   const [showPanel, setShow]    = useState(false)
-  const [tf, setTf]             = useState('15m')
+  const [tf, setTf]             = useState('1h')
   const [chartStats, setStats]  = useState({ vol24h: 0, totalVol: 0, devFees: 0, price: 0, pct5m: 0, pct1h: 0 })
   const [newComment, setNewComment] = useState('')
   const [sellStep, setSellStep] = useState('idle')
@@ -183,7 +183,7 @@ export default function TokenDetail() {
           layout: { background: { type: 'solid', color: '#0E091C' }, textColor: '#9ca3af' },
           grid: { vertLines: { color: 'rgba(110,84,255,0.08)' }, horzLines: { color: 'rgba(110,84,255,0.08)' } },
           rightPriceScale: { borderColor: '#2a2a3a', textColor: '#9ca3af' },
-          timeScale: { borderColor: '#2a2a3a', textColor: '#9ca3af', timeVisible: true, barSpacing: 6, minBarSpacing: 2 },
+          timeScale: { borderColor: '#2a2a3a', textColor: '#9ca3af', timeVisible: true },
           crosshair: { mode: 1 },
         })
 
