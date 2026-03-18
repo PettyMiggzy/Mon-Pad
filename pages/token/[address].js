@@ -114,7 +114,6 @@ export default function TokenDetail() {
     if (!tokenAddr || !client) return
     try {
       const curve = await client.readContract({ address: tokenAddr, abi: TOKEN_ABI, functionName: 'curve' })
-      setCurve(curve)
       const [name, symbol, graduated, monRaisedNet, capMon, bondedBps, priceWei, creator, pauseBuys, pauseSells, delisted] = await Promise.all([
         client.readContract({ address: tokenAddr, abi: TOKEN_ABI, functionName: 'name' }),
         client.readContract({ address: tokenAddr, abi: TOKEN_ABI, functionName: 'symbol' }),
@@ -128,7 +127,10 @@ export default function TokenDetail() {
         client.readContract({ address: curve,     abi: CURVE_ABI, functionName: 'pauseSells' }),
         client.readContract({ address: curve,     abi: CURVE_ABI, functionName: 'delisted' }),
       ])
+      // setInfo FIRST so full JSX renders and chart div appears in DOM
       setInfo({ name, symbol, graduated, monRaisedNet, capMon, bondedBps, priceWei, creator, pauseBuys, pauseSells, delisted })
+      // setCurve AFTER — triggers chart useEffect once div is mounted
+      setCurve(curve)
       if (userAddr) {
         const bal = await client.readContract({ address: tokenAddr, abi: TOKEN_ABI, functionName: 'balanceOf', args: [userAddr] })
         setTokenBalance(bal)
@@ -151,50 +153,61 @@ export default function TokenDetail() {
   // build chart
   useEffect(() => {
     const el = chartContainerRef.current
-    if (!el) return
-    let chart, candle, vol, ro
+    if (!el || !curveAddr) return
+    let cancelled = false
+    let chart = null, candle = null, vol = null
 
-    import('lightweight-charts').then(LW => {
-      if (!el) return
-      const w = el.offsetWidth || el.parentElement?.offsetWidth || 800
-      chart = LW.createChart(el, {
-        width: w, height: 340,
-        layout: { background: { type: 'solid', color: '#0E091C' }, textColor: '#9ca3af' },
-        grid: { vertLines: { color: 'rgba(110,84,255,0.08)' }, horzLines: { color: 'rgba(110,84,255,0.08)' } },
-        rightPriceScale: { borderColor: '#2a2a3a', textColor: '#9ca3af' },
-        timeScale: { borderColor: '#2a2a3a', textColor: '#9ca3af', timeVisible: true },
-        crosshair: { mode: 1 },
+    import('lightweight-charts')
+      .then(({ createChart }) => {
+        if (cancelled || !chartContainerRef.current) return
+        const el = chartContainerRef.current
+        const w = el.getBoundingClientRect().width || 800
+        chart = createChart(el, {
+          width: w, height: 340,
+          layout: { background: { type: 'solid', color: '#0E091C' }, textColor: '#9ca3af' },
+          grid: { vertLines: { color: 'rgba(110,84,255,0.08)' }, horzLines: { color: 'rgba(110,84,255,0.08)' } },
+          rightPriceScale: { borderColor: '#2a2a3a', textColor: '#9ca3af' },
+          timeScale: { borderColor: '#2a2a3a', textColor: '#9ca3af', timeVisible: true },
+          crosshair: { mode: 1 },
+        })
+
+        candle = chart.addCandlestickSeries({
+          upColor: '#22c55e', downColor: '#ef4444',
+          wickUpColor: '#22c55e', wickDownColor: '#ef4444',
+          borderVisible: false,
+        })
+
+        vol = chart.addHistogramSeries({ priceScaleId: 'vol', color: 'rgba(110,84,255,0.3)' })
+        try { chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } }) } catch {}
+
+        chartRef.current = chart
+        candleRef.current = candle
+        volRef.current = vol
+
+        // flat line at launch price — always visible
+        const price = 0.00015
+        const now = Math.floor(Date.now() / 1000)
+        const flat = Array.from({ length: 60 }, (_, i) => ({
+          time: now - (60 - i) * 900,
+          open: price, high: price * 1.002,
+          low: price * 0.998, close: price, volume: 0
+        }))
+        candle.setData(flat)
+        chart.timeScale().fitContent()
+
+        const ro = new ResizeObserver(() => {
+          const el = chartContainerRef.current
+          if (el && chart) chart.applyOptions({ width: el.getBoundingClientRect().width })
+        })
+        ro.observe(el)
+
+        // fetch real candles from server
+        fetchCandles(candle, vol, chart)
       })
-      candle = chart.addCandlestickSeries({
-        upColor: '#22c55e', downColor: '#ef4444',
-        wickUpColor: '#22c55e', wickDownColor: '#ef4444',
-        borderVisible: false,
-      })
-      vol = chart.addHistogramSeries({ priceScaleId: 'vol', color: 'rgba(110,84,255,0.3)', priceFormat: { type: 'volume' } })
-      chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } })
-      chartRef.current = chart
-      candleRef.current = candle
-      volRef.current = vol
-      // flat line so chart is never blank
-      const price = 0.00015
-      const base = Math.floor(Date.now()/1000) - 48*900
-      const flat = []
-      for (let i = 0; i < 48; i++) {
-        const o = price * (1 + (Math.random()-0.5)*0.002)
-        const c = price * (1 + (Math.random()-0.5)*0.002)
-        const h = Math.max(o,c) * 1.001
-        const l = Math.min(o,c) * 0.999
-        flat.push({ time: base + i*900, open:o, high:h, low:l, close:c, volume:0 })
-      }
-      candle.setData(flat)
-      chart.timeScale().fitContent()
-      fetchCandles(candle, vol, chart)
-      ro = new ResizeObserver(() => { if (el && chart) chart.applyOptions({ width: el.offsetWidth }) })
-      ro.observe(el)
-    }).catch(e => console.error('LW error:', e))
+      .catch(e => console.error('❌ LW import error:', e))
 
     return () => {
-      if (ro) ro.disconnect()
+      cancelled = true
       if (chart) { try { chart.remove() } catch {} }
       chartRef.current = null; candleRef.current = null; volRef.current = null
     }
@@ -217,9 +230,7 @@ export default function TokenDetail() {
       // start from a clean aligned boundary, step forward
       const startT = Math.floor((now - 48*int) / int) * int
       for (let i = 0; i < 48; i++) {
-        const o = price * (1 + (Math.random()-0.5)*0.002)
-        const c = price * (1 + (Math.random()-0.5)*0.002)
-        out.push({ time: startT + i*int, open:o, high:Math.max(o,c)*1.001, low:Math.min(o,c)*0.999, close:c, volume:0 })
+        out.push({ time: startT + i*int, open:price, high:price*1.002, low:price*0.998, close:price, volume:0 })
       }
       return out
     }
