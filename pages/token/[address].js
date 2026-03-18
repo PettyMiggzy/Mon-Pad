@@ -131,6 +131,7 @@ export default function TokenDetail() {
       setInfo({ name, symbol, graduated, monRaisedNet, capMon, bondedBps, priceWei, creator, pauseBuys, pauseSells, delisted })
       // setCurve AFTER — triggers chart useEffect once div is mounted
       setCurve(curve)
+      loadTradesAndHolders(curve)
       if (userAddr) {
         const bal = await client.readContract({ address: tokenAddr, abi: TOKEN_ABI, functionName: 'balanceOf', args: [userAddr] })
         setTokenBalance(bal)
@@ -145,9 +146,24 @@ export default function TokenDetail() {
       if (!res.ok) return
       const { trades: tm } = await res.json()
       if (!tm?.length) return
+      // trades tab — newest first
       const sorted = [...tm].sort((a,b) => b.ts - a.ts)
-      setTrades(sorted.map(t => ({ type:t.type, addr:t.addr, mon: BigInt(Math.floor(t.volume*1e18)), tokens:0n, block:0n })))
-    } catch {}
+      setTrades(sorted)
+      // holders tab — sum volume per address
+      const holderMap = {}
+      for (const t of tm) {
+        if (!t.addr || t.addr.length < 4) continue
+        const addr = t.addr.toLowerCase()
+        if (!holderMap[addr]) holderMap[addr] = 0n
+        if (t.type === 'buy')  holderMap[addr] += BigInt(Math.floor(t.volume * 1e18))
+        if (t.type === 'sell') holderMap[addr] -= BigInt(Math.floor(t.volume * 1e18))
+      }
+      const holderList = Object.entries(holderMap)
+        .filter(([,v]) => v > 0n)
+        .sort((a,b) => Number(b[1]) - Number(a[1]))
+        .map(([addr, balance]) => ({ addr, balance }))
+      setHolders(holderList)
+    } catch(e) { console.error('loadTradesAndHolders error:', e) }
   }
 
   // build chart
@@ -542,7 +558,7 @@ export default function TokenDetail() {
                 {tab==='Holders' && (
                   <div style={{ padding:'12px 14px' }}>
                     {holders.length === 0
-                      ? <div style={{ textAlign:'center', color:'var(--t3)', padding:'40px 0', fontSize:13 }}>Holder data loading…</div>
+                      ? <div style={{ textAlign:'center', color:'var(--t3)', padding:'40px 0', fontSize:13 }}>No holder data yet</div>
                       : holders.map((h,i) => (
                           <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 0', borderBottom:'1px solid var(--bd)', fontSize:12 }}>
                             <div style={{ display:'flex', alignItems:'center', gap:8 }}>
