@@ -167,7 +167,7 @@ export default function TokenDetail() {
           layout: { background: { type: 'solid', color: '#0E091C' }, textColor: '#9ca3af' },
           grid: { vertLines: { color: 'rgba(110,84,255,0.08)' }, horzLines: { color: 'rgba(110,84,255,0.08)' } },
           rightPriceScale: { borderColor: '#2a2a3a', textColor: '#9ca3af' },
-          timeScale: { borderColor: '#2a2a3a', textColor: '#9ca3af', timeVisible: true },
+          timeScale: { borderColor: '#2a2a3a', textColor: '#9ca3af', timeVisible: true, barSpacing: 6, minBarSpacing: 2 },
           crosshair: { mode: 1 },
         })
 
