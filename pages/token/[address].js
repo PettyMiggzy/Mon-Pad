@@ -695,7 +695,7 @@ export default function TokenDetail() {
                     background: mode==='buy' ? 'var(--p)' : 'var(--r)',
                     color: 'white',
                     opacity: (info.delisted||(info.pauseSells&&mode==='sell')||(info.pauseBuys&&mode==='buy')) ? 0.4 : 1 }}
-                  onClick={mode==='buy' ? handleBuy : handleSell}
+                  onClick={() => { if (!userAddr) { document.querySelector('.wallet-btn')?.click(); return; } mode==='buy' ? handleBuy() : handleSell() }}
                   disabled={isPending||isConfirming||sellStep!=='idle'||!!info.delisted||(!!info.pauseSells&&mode==='sell')||(!!info.pauseBuys&&mode==='buy')}>
                   {sellStep==='approving' ? '1/2 Approve tokens…'
                     : sellStep==='selling' ? '2/2 Confirm sell…'
