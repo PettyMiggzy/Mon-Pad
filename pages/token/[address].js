@@ -308,13 +308,24 @@ export default function TokenDetail() {
     writeBuy({ address: curveAddr, abi: CURVE_ABI, functionName: 'buy', args: [0n], value: parseEther(amt), chainId: monad.id })
   }
 
-  function handleSell() {
-    if (!curveAddr || !amt || !tokenAddr) return
-    // snapshot values into refs so the async effect reads correct values
+  async function handleSell() {
+    if (!curveAddr || !amt || !tokenAddr || !userAddr) return
     sellStepRef.current  = 'approving'
     amtRef.current       = amt
     curveAddrRef.current = curveAddr
     setSellStep('approving')
+    try {
+      // check existing allowance — skip approve if already sufficient
+      const allowance = await client.readContract({ address: tokenAddr, abi: TOKEN_ABI, functionName: 'allowance', args: [userAddr, curveAddr] })
+      if (allowance >= parseEther(amt)) {
+        // already approved — go straight to sell
+        sellStepRef.current = 'selling'
+        setSellStep('selling')
+        writeSell({ address: curveAddr, abi: CURVE_ABI, functionName: 'sell', args: [parseEther(amt), 0n], chainId: monad.id })
+        return
+      }
+    } catch {}
+    // need approve first
     writeApprove({ address: tokenAddr, abi: TOKEN_ABI, functionName: 'approve', args: [curveAddr, parseEther(amt)], chainId: monad.id })
   }
 
@@ -697,8 +708,8 @@ export default function TokenDetail() {
                     opacity: (info.delisted||(info.pauseSells&&mode==='sell')||(info.pauseBuys&&mode==='buy')) ? 0.4 : 1 }}
                   onClick={() => { if (!userAddr) { document.querySelector('.wallet-btn')?.click(); return; } mode==='buy' ? handleBuy() : handleSell() }}
                   disabled={isPending||isConfirming||sellStep!=='idle'||!!info.delisted||(!!info.pauseSells&&mode==='sell')||(!!info.pauseBuys&&mode==='buy')}>
-                  {sellStep==='approving' ? '1/2 Approve tokens…'
-                    : sellStep==='selling' ? '2/2 Confirm sell…'
+                  {sellStep==='approving' ? 'Approving…'
+                    : sellStep==='selling' ? 'Confirm sell…'
                     : isPending ? 'Confirm in wallet…'
                     : isConfirming ? 'Confirming tx…'
                     : userAddr ? `${mode==='buy'?'Buy':'Sell'} ${dSym}` : 'Connect Wallet'}
