@@ -276,7 +276,7 @@ export default function TokenDetail() {
           candle.setMarkers(devTrades.sort((a,b)=>a.ts-b.ts).map(t => ({
             time:t.ts, position:t.type==='buy'?'belowBar':'aboveBar',
             color:t.type==='buy'?'#22c55e':'#ef4444',
-            shape:t.type==='buy'?'arrowUp':'arrowDown', text:'D', size:1,
+            shape:t.type==='buy'?'arrowUp':'arrowDown', text:'D', size:0,
           })))
         }
       }
@@ -426,7 +426,7 @@ export default function TokenDetail() {
           </div>
 
           {/* ── MAIN 2-COL LAYOUT ── */}
-          <div style={{ display:'flex', gap:0, alignItems:'flex-start' }}>
+          <div className="token-2col" style={{ display:'flex', gap:0, alignItems:'flex-start' }}>
 
             {/* ════ LEFT COLUMN — chart + info ════ */}
             <div style={{ flex:1, minWidth:0, borderRight:'1px solid var(--bd)' }}>
@@ -590,7 +590,7 @@ export default function TokenDetail() {
             </div>
 
             {/* ════ RIGHT COLUMN — trade panel + info ════ */}
-            <div style={{ width:320, flexShrink:0, position:'sticky', top:56, maxHeight:'calc(100vh - 56px)', overflowY:'auto' }}>
+            <div className="token-2col-right" style={{ width:320, flexShrink:0, position:'sticky', top:56, maxHeight:'calc(100vh - 56px)', overflowY:'auto' }}>
 
               {/* BUY / SELL TOGGLE */}
               <div style={{ padding:'12px 14px 0' }}>
