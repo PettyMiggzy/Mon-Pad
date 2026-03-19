@@ -9,6 +9,7 @@ import { CURVE_ABI, TOKEN_ABI, fmtMON, fmtUSD, fmtAddr, fmtTokens, MONADSCAN } f
 import { monad } from '../../lib/wagmi'
 
 const SERVER = process.env.NEXT_PUBLIC_SERVER_URL || ''
+// v2.1
 
 // rewrite old http droplet URLs to go through the proxy
 function fixUrl(url) {
