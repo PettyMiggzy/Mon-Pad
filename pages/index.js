@@ -78,6 +78,18 @@ export default function Home() {
     return () => clearInterval(iv)
   }, [])
 
+
+// Demo tokens shown when platform is new (< 10 real tokens)
+const DEMO_TOKENS = [
+  { token:'0xdemo1', curve:'0xdemo1c', creator:'0xdemo', name:'MonShiba', symbol:'MSHIB', graduated:false, monRaisedNet:0n, capMon:400000000000000000000000n, bondedBps:2800n, marketCap:210000000000000000000000n, blockNumber:0n, colorIdx:10, isDemo:true },
+  { token:'0xdemo2', curve:'0xdemo2c', creator:'0xdemo', name:'PurpleNad', symbol:'PNAD', graduated:false, monRaisedNet:0n, capMon:400000000000000000000000n, bondedBps:5500n, marketCap:650000000000000000000000n, blockNumber:0n, colorIdx:11, isDemo:true },
+  { token:'0xdemo3', curve:'0xdemo3c', creator:'0xdemo', name:'MonDoge', symbol:'MDOGE', graduated:false, monRaisedNet:0n, capMon:400000000000000000000000n, bondedBps:1200n, marketCap:95000000000000000000000n, blockNumber:0n, colorIdx:12, isDemo:true },
+  { token:'0xdemo4', curve:'0xdemo4c', creator:'0xdemo', name:'NadPepe', symbol:'NPEPE', graduated:true, monRaisedNet:0n, capMon:400000000000000000000000n, bondedBps:10000n, marketCap:1200000000000000000000000n, blockNumber:0n, colorIdx:13, isDemo:true },
+  { token:'0xdemo5', curve:'0xdemo5c', creator:'0xdemo', name:'MonAI', symbol:'MAI', graduated:false, monRaisedNet:0n, capMon:400000000000000000000000n, bondedBps:7800n, marketCap:890000000000000000000000n, blockNumber:0n, colorIdx:14, isDemo:true },
+  { token:'0xdemo6', curve:'0xdemo6c', creator:'0xdemo', name:'LaunchPad', symbol:'LPAD', graduated:false, monRaisedNet:0n, capMon:400000000000000000000000n, bondedBps:3300n, marketCap:280000000000000000000000n, blockNumber:0n, colorIdx:15, isDemo:true },
+  { token:'0xdemo7', curve:'0xdemo7c', creator:'0xdemo', name:'MonCat', symbol:'MCAT', graduated:false, monRaisedNet:0n, capMon:400000000000000000000000n, bondedBps:900n, marketCap:72000000000000000000000n, blockNumber:0n, colorIdx:16, isDemo:true },
+  { token:'0xdemo8', curve:'0xdemo8c', creator:'0xdemo', name:'NadRocket', symbol:'NRKT', graduated:false, monRaisedNet:0n, capMon:400000000000000000000000n, bondedBps:4400n, marketCap:420000000000000000000000n, blockNumber:0n, colorIdx:17, isDemo:true },
+]
   async function loadTokens() {
     if (!SERVER) return
     try {
@@ -100,7 +112,9 @@ export default function Home() {
           colorIdx:     i,
         }
       })
-      setTokens(list)
+      // fill with demo tokens until 10 real ones exist
+      const combined = list.length < 10 ? [...list, ...DEMO_TOKENS.slice(0, 10 - list.length)] : list
+      setTokens(combined)
       setMetas(map)
     } catch (e) {
       console.error('loadTokens:', e)
@@ -127,6 +141,17 @@ export default function Home() {
 
   return (
     <Layout>
+      {/* LAUNCH BANNER */}
+      <div style={{ margin:'12px 16px', padding:'14px 18px', background:'linear-gradient(135deg,rgba(110,84,255,0.15),rgba(133,230,255,0.08))', border:'1px solid rgba(110,84,255,0.25)', borderRadius:14, display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, flexWrap:'wrap' }}>
+        <div>
+          <div style={{ fontSize:15, fontWeight:800, marginBottom:2 }}>🚀 MonPad is live on Monad Mainnet</div>
+          <div style={{ fontSize:12, color:'var(--t3)' }}>Launch your token in seconds. Fair launch, no presale, no rug.</div>
+        </div>
+        <button onClick={() => router.push('/create')}
+          style={{ padding:'9px 20px', background:'var(--p)', border:'none', borderRadius:10, color:'white', fontWeight:800, fontSize:13, cursor:'pointer', whiteSpace:'nowrap', flexShrink:0 }}>
+          + Launch Token
+        </button>
+      </div>
       {/* TRENDING CAROUSEL */}
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'16px 16px 10px' }}>
         <div style={{ fontSize:17, fontWeight:800 }}>Trending coins</div>
@@ -231,6 +256,18 @@ export default function Home() {
           <div className="token-grid">
             {list.map(t => (
               <TokenCard key={t.token} token={t} meta={metas[t.token?.toLowerCase()]} isLive={live.has(t.token?.toLowerCase())} monPrice={monPrice} onClick={() => router.push(`/token/${t.token}`)} />
+            ))}
+            {list.length < 6 && Array.from({ length: Math.max(0, 4 - list.length) }).map((_, i) => (
+              <div key={`demo-${i}`} style={{ display:'flex', gap:10, padding:10, border:'1px dashed var(--bd2)', borderRadius:12, background:'var(--bg2)', opacity:0.4, cursor:'default' }}>
+                <div style={{ width:72, height:72, borderRadius:9, background:'linear-gradient(135deg,var(--p)20,var(--bg3))', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:24 }}>
+                  {['🚀','💎','🔥','⚡'][i]}
+                </div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:13, fontWeight:700, color:'var(--t3)', marginBottom:4 }}>Your token here</div>
+                  <div style={{ fontSize:11, color:'var(--t3)' }}>Launch on MonPad for 10 MON</div>
+                  <div style={{ fontSize:11, color:'var(--p2)', marginTop:6, fontWeight:600 }}>+ Create →</div>
+                </div>
+              </div>
             ))}
           </div>
         )}
