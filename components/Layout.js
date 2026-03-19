@@ -19,6 +19,11 @@ const NAV = [
       <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/>
     </svg>
   )},
+  { href: '/profile', label: 'Profile', icon: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="20" height="20">
+      <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/>
+    </svg>
+  )},
   { href: '/leaderboard', label: 'Leaderboard', icon: (
     <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/></svg>
   )},
@@ -162,7 +167,7 @@ export default function Layout({ children, showBack, title }) {
               Create
             </Link>
             <WalletButton />
-            <Link href="/" style={{ display:'flex', alignItems:'center', gap:4, marginLeft:4, textDecoration:'none' }}>
+            <Link href="/" className="topbar-monpad-brand" style={{ display:'flex', alignItems:'center', gap:4, marginLeft:4, textDecoration:'none' }}>
               <div style={{ background:'linear-gradient(135deg,#1a1030,#2a1a5e)', border:'1px solid rgba(110,84,255,0.3)', borderRadius:10, padding:'5px 10px', display:'flex', gap:0 }}>
                 <span style={{ fontSize:13, fontWeight:900, color:'white', letterSpacing:'-0.5px' }}>mon</span>
                 <span style={{ fontSize:13, fontWeight:900, color:'#a78bfa', letterSpacing:'-0.5px' }}>pad</span>
