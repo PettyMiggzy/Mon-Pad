@@ -29,7 +29,7 @@ export default function Profile() {
       const tokens = await res.json()
 
       // find tokens created by this address
-      const myTokens = tokens.filter(t => t.creator?.toLowerCase() === address?.toLowerCase())
+      const myTokens = tokens.filter(t => t.creator && address && t.creator.toLowerCase() === address.toLowerCase())
 
       // get volume stats from candles for created tokens
       let totalVol = 0, devFees = 0
