@@ -6,7 +6,6 @@ import Head from 'next/head'
 import Layout from '../../components/Layout'
 import LiveStream from '../../components/LiveStream'
 import { CURVE_ABI, TOKEN_ABI, fmtMON, fmtUSD, fmtAddr, fmtTokens, MONADSCAN } from '../../lib/constants'
-import Script from 'next/script'
 import { monad } from '../../lib/wagmi'
 
 const SERVER = process.env.NEXT_PUBLIC_SERVER_URL || ''
@@ -52,8 +51,7 @@ export default function TokenDetail() {
   ])
 
   const chartContainerRef = useRef(null)
-  const [apexSeries, setApexSeries] = useState([])
-  const [apexOpts, setApexOpts] = useState(null)
+  const chartRef = useRef(null)
   // refs to prevent stale closures in async sell flow
   const sellStepRef  = useRef('idle')
   const amtRef       = useRef('')
@@ -173,22 +171,14 @@ export default function TokenDetail() {
     buildChart()
   }, [curveAddr, tf])
 
-  // render chart into div using global ApexCharts from CDN
-  useEffect(() => {
-    if (!apexOpts || !apexSeries.length) return
-    const el = document.getElementById('apex-chart')
-    if (!el || typeof window === 'undefined' || !window.ApexCharts) return
-    el.innerHTML = ''
-    const chart = new window.ApexCharts(el, { ...apexOpts, series: apexSeries })
-    chart.render()
-    return () => { try { chart.destroy() } catch {} }
-  }, [apexOpts, apexSeries])
+
 
   async function buildChart() {
+    const el = chartRef.current
+    if (!el) return
     try {
       const res = await fetch(`${SERVER}/api/candles/${curveAddr}?interval=${tf}`)
       const { candles, trades: tm } = await res.json()
-
       const now = Math.floor(Date.now()/1000)
       const int = tf==='15m'?900 : tf==='1h'?3600 : tf==='4h'?14400 : 86400
       const price = info?.priceWei ? Number(info.priceWei)/1e18 : 0.00015
@@ -197,9 +187,6 @@ export default function TokenDetail() {
         const base = now - 60*int
         return Array.from({length:60},(_,i) => ({ time: base+i*int, open:price, high:price*1.002, low:price*0.998, close:price, volume:0 }))
       })()
-
-      const ohlc = data.map(c => ({ x: new Date(c.time*1000), y: [c.open, c.high, c.low, c.close] }))
-      const vol  = data.map(c => ({ x: new Date(c.time*1000), y: c.volume || 0 }))
 
       // stats
       if (tm?.length) {
@@ -216,42 +203,39 @@ export default function TokenDetail() {
         })
       }
 
-      setApexSeries([
-        { name:'Price', type:'candlestick', data: ohlc },
-        { name:'Volume', type:'bar', data: vol },
-      ])
-
-      setApexOpts({
-        chart: {
-          type:'candlestick', height:340, background:'#0E091C',
-          toolbar:{ show:false }, animations:{ enabled:false },
-          zoom:{ enabled:true }, selection:{ enabled:false },
-        },
-        theme: { mode:'dark' },
-        plotOptions: {
-          candlestick: { colors:{ upward:'#22c55e', downward:'#ef4444' }, wick:{ useFillColor:true } },
-          bar: { columnWidth:'80%' },
-        },
-        grid: { borderColor:'rgba(110,84,255,0.08)', strokeDashArray:0 },
-        xaxis: {
-          type:'datetime',
-          labels:{ style:{ colors:'#9ca3af', fontSize:'11px' }, datetimeFormatter:{ hour:'HH:mm', day:'dd MMM' } },
-          axisBorder:{ color:'#2a2a3a' }, axisTicks:{ color:'#2a2a3a' },
-        },
-        yaxis: [
-          { tooltip:{ enabled:true }, labels:{ style:{ colors:'#9ca3af', fontSize:'11px' }, formatter: v => v?.toFixed(8) }, axisBorder:{ color:'#2a2a3a' } },
-          { opposite:true, show:false, max: Math.max(...vol.map(v=>v.y||0))*6 },
-        ],
-        stroke:{ width:[1,1] },
-        tooltip:{ theme:'dark', x:{ format:'dd MMM HH:mm' } },
-        dataLabels:{ enabled:false },
-        legend:{ show:false },
-        fill:{ opacity:[1,0.4] },
-        colors:['transparent','rgba(110,84,255,0.5)'],
+      // build chart with lightweight-charts
+      const { createChart } = await import('lightweight-charts')
+      el.innerHTML = ''
+      const chart = createChart(el, {
+        width: el.clientWidth, height: 340,
+        layout: { background:{ color:'#0E091C' }, textColor:'#9ca3af' },
+        grid: { vertLines:{ color:'rgba(110,84,255,0.06)' }, horzLines:{ color:'rgba(110,84,255,0.06)' } },
+        crosshair: { mode: 1 },
+        rightPriceScale: { borderColor:'#2a2a3a' },
+        timeScale: { borderColor:'#2a2a3a', textColor:'#9ca3af', timeVisible:true },
       })
-    } catch(e) {
-      console.error('chart error:', e)
-    }
+      const candle = chart.addCandlestickSeries({
+        upColor:'#22c55e', downColor:'#ef4444', borderVisible:false,
+        wickUpColor:'#22c55e', wickDownColor:'#ef4444',
+      })
+      const flat = data.map(c => ({ time:c.time, open:c.open, high:c.high, low:c.low, close:c.close }))
+      candle.setData(flat)
+      chart.timeScale().fitContent()
+
+      // dev trade markers
+      if (tm?.length) {
+        const devAddr = info?.creator?.toLowerCase()
+        const markers = tm
+          .filter(t => t.addr?.toLowerCase() === devAddr)
+          .map(t => ({ time:t.ts, position:t.type==='buy'?'belowBar':'aboveBar', color:t.type==='buy'?'#22c55e':'#ef4444', shape:t.type==='buy'?'arrowUp':'arrowDown', text:'D', size:0 }))
+          .sort((a,b)=>a.time-b.time)
+        if (markers.length) candle.setMarkers(markers)
+      }
+
+      const ro = new ResizeObserver(() => { chart.applyOptions({ width: el.clientWidth }) })
+      ro.observe(el)
+      chartRef.current._destroy = () => { chart.remove(); ro.disconnect() }
+    } catch(e) { console.error('chart error:', e) }
   }
 
   function handleBuy() {
@@ -340,7 +324,6 @@ export default function TokenDetail() {
     <>
       <Head><title>{dName} (${dSym}) — MonPad</title></Head>
       <Layout showBack title={`${dName}`}>
-      <Script src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js" strategy="lazyOnload" />
         <div style={{ maxWidth:1400, margin:'0 auto', padding:'0 0 80px' }}>
 
           {/* ── TOP HEADER BAR ── */}
@@ -407,9 +390,12 @@ export default function TokenDetail() {
                 </div>
 
                 {/* chart canvas */}
-                <div id="apex-chart" style={{ height:340, width:'100%', minWidth:0, background:'#0E091C' }}>
-                  {(!apexOpts || apexSeries.length === 0) && <div style={{ height:340, display:'flex', alignItems:'center', justifyContent:'center', color:'var(--t3)', fontSize:13 }}>Loading chart…</div>}
-                </div>
+                <div ref={el => {
+                    if (el && el !== chartRef.current) {
+                      if (chartRef.current?._destroy) chartRef.current._destroy()
+                      chartRef.current = el
+                    }
+                  }} style={{ height:340, width:'100%', minWidth:0, background:'#0E091C' }} />
 
                 {/* stats bar */}
                 <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', borderTop:'1px solid var(--bd)', borderBottom:'1px solid var(--bd)' }}>
