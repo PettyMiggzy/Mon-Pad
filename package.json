@@ -4,13 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "npm install apexcharts@^4.0.0 react-apexcharts@^1.4.0 --legacy-peer-deps && next build",
+    "build": "next build",
     "start": "next start",
     "lint": "next lint"
   },
   "dependencies": {
-    "apexcharts": "^4.0.0",
-    "react-apexcharts": "^1.4.0",
     "@tanstack/react-query": "^5.17.0",
     "@walletconnect/modal": "^2.7.0",
     "lightweight-charts": "^4.1.3",

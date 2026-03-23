@@ -6,8 +6,7 @@ import Head from 'next/head'
 import Layout from '../../components/Layout'
 import LiveStream from '../../components/LiveStream'
 import { CURVE_ABI, TOKEN_ABI, fmtMON, fmtUSD, fmtAddr, fmtTokens, MONADSCAN } from '../../lib/constants'
-import dynamic from 'next/dynamic'
-const ApexChart = dynamic(() => import('react-apexcharts'), { ssr: false })
+import Script from 'next/script'
 import { monad } from '../../lib/wagmi'
 
 const SERVER = process.env.NEXT_PUBLIC_SERVER_URL || ''
@@ -174,6 +173,17 @@ export default function TokenDetail() {
     buildChart()
   }, [curveAddr, tf])
 
+  // render chart into div using global ApexCharts from CDN
+  useEffect(() => {
+    if (!apexOpts || !apexSeries.length) return
+    const el = document.getElementById('apex-chart')
+    if (!el || typeof window === 'undefined' || !window.ApexCharts) return
+    el.innerHTML = ''
+    const chart = new window.ApexCharts(el, { ...apexOpts, series: apexSeries })
+    chart.render()
+    return () => { try { chart.destroy() } catch {} }
+  }, [apexOpts, apexSeries])
+
   async function buildChart() {
     try {
       const res = await fetch(`${SERVER}/api/candles/${curveAddr}?interval=${tf}`)
@@ -330,6 +340,7 @@ export default function TokenDetail() {
     <>
       <Head><title>{dName} (${dSym}) — MonPad</title></Head>
       <Layout showBack title={`${dName}`}>
+      <Script src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js" strategy="lazyOnload" />
         <div style={{ maxWidth:1400, margin:'0 auto', padding:'0 0 80px' }}>
 
           {/* ── TOP HEADER BAR ── */}
@@ -396,11 +407,8 @@ export default function TokenDetail() {
                 </div>
 
                 {/* chart canvas */}
-                <div style={{ height:340, width:'100%', minWidth:0, background:'#0E091C' }}>
-                  {apexOpts && apexSeries.length > 0
-                    ? <ApexChart type="candlestick" series={apexSeries} options={apexOpts} height={340} width="100%" />
-                    : <div style={{ height:340, display:'flex', alignItems:'center', justifyContent:'center', color:'var(--t3)', fontSize:13 }}>Loading chart…</div>
-                  }
+                <div id="apex-chart" style={{ height:340, width:'100%', minWidth:0, background:'#0E091C' }}>
+                  {(!apexOpts || apexSeries.length === 0) && <div style={{ height:340, display:'flex', alignItems:'center', justifyContent:'center', color:'var(--t3)', fontSize:13 }}>Loading chart…</div>}
                 </div>
 
                 {/* stats bar */}
