@@ -6,6 +6,8 @@ import Head from 'next/head'
 import Layout from '../../components/Layout'
 import LiveStream from '../../components/LiveStream'
 import { CURVE_ABI, TOKEN_ABI, fmtMON, fmtUSD, fmtAddr, fmtTokens, MONADSCAN } from '../../lib/constants'
+import dynamic from 'next/dynamic'
+const ApexChart = dynamic(() => import('react-apexcharts'), { ssr: false })
 import { monad } from '../../lib/wagmi'
 
 const SERVER = process.env.NEXT_PUBLIC_SERVER_URL || ''
@@ -51,9 +53,8 @@ export default function TokenDetail() {
   ])
 
   const chartContainerRef = useRef(null)
-  const chartRef          = useRef(null)
-  const candleRef         = useRef(null)
-  const volRef            = useRef(null)
+  const [apexSeries, setApexSeries] = useState([])
+  const [apexOpts, setApexOpts] = useState(null)
   // refs to prevent stale closures in async sell flow
   const sellStepRef  = useRef('idle')
   const amtRef       = useRef('')
@@ -167,139 +168,79 @@ export default function TokenDetail() {
     } catch(e) { console.error('loadTradesAndHolders error:', e) }
   }
 
-  // build chart
+  // fetch candles and build apex chart data
   useEffect(() => {
-    const el = chartContainerRef.current
-    if (!el || !curveAddr) return
-    let cancelled = false
-    let chart = null, candle = null, vol = null
-
-    import('lightweight-charts')
-      .then(({ createChart }) => {
-        if (cancelled || !chartContainerRef.current) return
-        const el = chartContainerRef.current
-        const w = el.getBoundingClientRect().width || 800
-        chart = createChart(el, {
-          width: w, height: 340,
-          layout: { background: { type: 'solid', color: '#0E091C' }, textColor: '#9ca3af' },
-          grid: { vertLines: { color: 'rgba(110,84,255,0.08)' }, horzLines: { color: 'rgba(110,84,255,0.08)' } },
-          rightPriceScale: { borderColor: '#2a2a3a', textColor: '#9ca3af' },
-          timeScale: { borderColor: '#2a2a3a', textColor: '#9ca3af', timeVisible: true },
-          crosshair: { mode: 1 },
-        })
-
-        candle = chart.addCandlestickSeries({
-          upColor: '#22c55e', downColor: '#ef4444',
-          wickUpColor: '#22c55e', wickDownColor: '#ef4444',
-          borderVisible: false,
-        })
-
-        vol = chart.addHistogramSeries({ priceScaleId: 'vol', color: 'rgba(110,84,255,0.3)' })
-        try { chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } }) } catch {}
-
-        chartRef.current = chart
-        candleRef.current = candle
-        volRef.current = vol
-
-        // flat line at launch price — always visible
-        const price = 0.00015
-        const now = Math.floor(Date.now() / 1000)
-        const flat = Array.from({ length: 60 }, (_, i) => ({
-          time: now - (60 - i) * 900,
-          open: price, high: price * 1.002,
-          low: price * 0.998, close: price, volume: 0
-        }))
-        candle.setData(flat)
-        chart.timeScale().fitContent()
-
-        const ro = new ResizeObserver(() => {
-          const el = chartContainerRef.current
-          if (el && chart) chart.applyOptions({ width: el.getBoundingClientRect().width })
-        })
-        ro.observe(el)
-
-        // fetch real candles from server
-        fetchCandles(candle, vol, chart)
-      })
-      .catch(e => console.error('❌ LW import error:', e))
-
-    return () => {
-      cancelled = true
-      if (chart) { try { chart.remove() } catch {} }
-      chartRef.current = null; candleRef.current = null; volRef.current = null
-    }
-  }, [curveAddr])
-
-  useEffect(() => {
-    if (candleRef.current && volRef.current && chartRef.current && curveAddr) fetchCandles(candleRef.current, volRef.current, chartRef.current)
-  }, [tf, curveAddr, info?.creator, info?.priceWei])  // re-run when price/creator known
-
-  async function fetchCandles(candle, vol, chart) {
     if (!curveAddr) return
-    const now = Math.floor(Date.now()/1000)
-    const int = tf==='15m'?900 : tf==='1h'?3600 : tf==='4h'?14400 : 86400
-    const currentPrice = Number(info?.priceWei || 150000000000000n) / 1e18
+    buildChart()
+  }, [curveAddr, tf])
 
-    // flat candles at current price — always shown as baseline
-    function flatLine(price) {
-      if (!price || price <= 0) price = 0.00015
-      const out = []
-      // start from a clean aligned boundary, step forward
-      const startT = Math.floor((now - 48*int) / int) * int
-      for (let i = 0; i < 48; i++) {
-        out.push({ time: startT + i*int, open:price, high:price*1.002, low:price*0.998, close:price, volume:0 })
-      }
-      return out
-    }
-
+  async function buildChart() {
     try {
       const res = await fetch(`${SERVER}/api/candles/${curveAddr}?interval=${tf}`)
-      if (!res.ok) throw new Error('no data')
       const { candles, trades: tm } = await res.json()
 
-      const data = (candles?.length) ? candles : flatLine(currentPrice)
+      const now = Math.floor(Date.now()/1000)
+      const int = tf==='15m'?900 : tf==='1h'?3600 : tf==='4h'?14400 : 86400
+      const price = info?.priceWei ? Number(info.priceWei)/1e18 : 0.00015
 
-      try {
-        candle.setData(data)
-        vol.setData(data.map(c => ({ time:c.time, value:c.volume||0, color: c.close>=c.open?'rgba(34,197,94,0.3)':'rgba(239,68,68,0.3)' })))
-      } catch(e) { console.error('chart setData error:', e, 'data sample:', data[0]) }
+      let data = candles?.length ? candles : (() => {
+        const base = now - 60*int
+        return Array.from({length:60},(_,i) => ({ time: base+i*int, open:price, high:price*1.002, low:price*0.998, close:price, volume:0 }))
+      })()
 
-      const last = data[data.length-1]
-      if (last) {
-        try { candle.createPriceLine({ price:last.close, color:'#6E54FF', lineWidth:1, lineStyle:2, axisLabelVisible:true, axisLabelColor:'#6E54FF', axisLabelTextColor:'#fff' }) } catch {}
+      const ohlc = data.map(c => ({ x: new Date(c.time*1000), y: [c.open, c.high, c.low, c.close] }))
+      const vol  = data.map(c => ({ x: new Date(c.time*1000), y: c.volume || 0 }))
+
+      // stats
+      if (tm?.length) {
+        const vol24 = tm.filter(t=>t.ts>now-86400).reduce((s,t)=>s+t.volume,0)
+        const totalVol = tm.reduce((s,t)=>s+t.volume,0)
+        const c5m = data.filter(c=>c.time>now-300)
+        const c1h = data.filter(c=>c.time>now-3600)
+        const last = data[data.length-1]
+        setStats({
+          vol24h:vol24, totalVol, devFees:totalVol*0.015,
+          price: last?.close||price,
+          pct5m: c5m.length>=2?(c5m[c5m.length-1].close-c5m[0].open)/c5m[0].open*100:0,
+          pct1h: c1h.length>=2?(c1h[c1h.length-1].close-c1h[0].open)/c1h[0].open*100:0,
+        })
       }
 
-      if (candles?.length) {
-        const creatorAddr = info?.creator?.toLowerCase()
-        const devTrades = (tm||[]).filter(t => creatorAddr && t.addr?.toLowerCase()===creatorAddr)
-        if (devTrades.length) {
-          candle.setMarkers(devTrades.sort((a,b)=>a.ts-b.ts).map(t => ({
-            time:t.ts, position:t.type==='buy'?'belowBar':'aboveBar',
-            color:t.type==='buy'?'#22c55e':'#ef4444',
-            shape:t.type==='buy'?'arrowUp':'arrowDown', text:'D', size:0,
-          })))
-        }
-      }
+      setApexSeries([
+        { name:'Price', type:'candlestick', data: ohlc },
+        { name:'Volume', type:'bar', data: vol },
+      ])
 
-      chart.timeScale().fitContent()
-
-      const vol24 = (tm||[]).filter(t=>t.ts>now-86400).reduce((s,t)=>s+t.volume,0)
-      const totalVol = (tm||[]).reduce((s,t)=>s+t.volume,0)
-      const c5m = data.filter(c=>c.time>now-300)
-      const c1h = data.filter(c=>c.time>now-3600)
-      setStats({
-        vol24h:vol24, totalVol, devFees:totalVol*0.015,
-        price: last?.close||currentPrice,
-        pct5m: c5m.length>=2?(c5m[c5m.length-1].close-c5m[0].open)/c5m[0].open*100:0,
-        pct1h: c1h.length>=2?(c1h[c1h.length-1].close-c1h[0].open)/c1h[0].open*100:0,
+      setApexOpts({
+        chart: {
+          type:'candlestick', height:340, background:'#0E091C',
+          toolbar:{ show:false }, animations:{ enabled:false },
+          zoom:{ enabled:true }, selection:{ enabled:false },
+        },
+        theme: { mode:'dark' },
+        plotOptions: {
+          candlestick: { colors:{ upward:'#22c55e', downward:'#ef4444' }, wick:{ useFillColor:true } },
+          bar: { columnWidth:'80%' },
+        },
+        grid: { borderColor:'rgba(110,84,255,0.08)', strokeDashArray:0 },
+        xaxis: {
+          type:'datetime',
+          labels:{ style:{ colors:'#9ca3af', fontSize:'11px' }, datetimeFormatter:{ hour:'HH:mm', day:'dd MMM' } },
+          axisBorder:{ color:'#2a2a3a' }, axisTicks:{ color:'#2a2a3a' },
+        },
+        yaxis: [
+          { tooltip:{ enabled:true }, labels:{ style:{ colors:'#9ca3af', fontSize:'11px' }, formatter: v => v?.toFixed(8) }, axisBorder:{ color:'#2a2a3a' } },
+          { opposite:true, show:false, max: Math.max(...vol.map(v=>v.y||0))*6 },
+        ],
+        stroke:{ width:[1,1] },
+        tooltip:{ theme:'dark', x:{ format:'dd MMM HH:mm' } },
+        dataLabels:{ enabled:false },
+        legend:{ show:false },
+        fill:{ opacity:[1,0.4] },
+        colors:['transparent','rgba(110,84,255,0.5)'],
       })
-    } catch {
-      const data = flatLine(currentPrice)
-      try {
-        candle.setData(data)
-        vol.setData(data.map(c => ({ time:c.time, value:0, color:'rgba(110,84,255,0.15)' })))
-        chart.timeScale().fitContent()
-      } catch(e) { console.error('chart fallback error:', e, data[0]) }
+    } catch(e) {
+      console.error('chart error:', e)
     }
   }
 
@@ -455,7 +396,12 @@ export default function TokenDetail() {
                 </div>
 
                 {/* chart canvas */}
-                <div ref={chartContainerRef} style={{ height:340, width:'100%', minWidth:0, background:'#0E091C' }}></div>
+                <div style={{ height:340, width:'100%', minWidth:0, background:'#0E091C' }}>
+                  {apexOpts && apexSeries.length > 0
+                    ? <ApexChart type="candlestick" series={apexSeries} options={apexOpts} height={340} width="100%" />
+                    : <div style={{ height:340, display:'flex', alignItems:'center', justifyContent:'center', color:'var(--t3)', fontSize:13 }}>Loading chart…</div>
+                  }
+                </div>
 
                 {/* stats bar */}
                 <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', borderTop:'1px solid var(--bd)', borderBottom:'1px solid var(--bd)' }}>
