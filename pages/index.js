@@ -80,16 +80,28 @@ export default function Home() {
 
 
 // Demo tokens shown when platform is new (< 10 real tokens)
-const DEMO_TOKENS = [
-  { token:'0xdemo1', curve:'0xdemo1c', creator:'0xdemo', name:'MonShiba', symbol:'MSHIB', graduated:false, monRaisedNet:0n, capMon:400000000000000000000000n, bondedBps:2800n, marketCap:210000000000000000000000n, blockNumber:0n, colorIdx:10, isDemo:true },
-  { token:'0xdemo2', curve:'0xdemo2c', creator:'0xdemo', name:'PurpleNad', symbol:'PNAD', graduated:false, monRaisedNet:0n, capMon:400000000000000000000000n, bondedBps:5500n, marketCap:650000000000000000000000n, blockNumber:0n, colorIdx:11, isDemo:true },
-  { token:'0xdemo3', curve:'0xdemo3c', creator:'0xdemo', name:'MonDoge', symbol:'MDOGE', graduated:false, monRaisedNet:0n, capMon:400000000000000000000000n, bondedBps:1200n, marketCap:95000000000000000000000n, blockNumber:0n, colorIdx:12, isDemo:true },
-  { token:'0xdemo4', curve:'0xdemo4c', creator:'0xdemo', name:'NadPepe', symbol:'NPEPE', graduated:true, monRaisedNet:0n, capMon:400000000000000000000000n, bondedBps:10000n, marketCap:1200000000000000000000000n, blockNumber:0n, colorIdx:13, isDemo:true },
-  { token:'0xdemo5', curve:'0xdemo5c', creator:'0xdemo', name:'MonAI', symbol:'MAI', graduated:false, monRaisedNet:0n, capMon:400000000000000000000000n, bondedBps:7800n, marketCap:890000000000000000000000n, blockNumber:0n, colorIdx:14, isDemo:true },
-  { token:'0xdemo6', curve:'0xdemo6c', creator:'0xdemo', name:'LaunchPad', symbol:'LPAD', graduated:false, monRaisedNet:0n, capMon:400000000000000000000000n, bondedBps:3300n, marketCap:280000000000000000000000n, blockNumber:0n, colorIdx:15, isDemo:true },
-  { token:'0xdemo7', curve:'0xdemo7c', creator:'0xdemo', name:'MonCat', symbol:'MCAT', graduated:false, monRaisedNet:0n, capMon:400000000000000000000000n, bondedBps:900n, marketCap:72000000000000000000000n, blockNumber:0n, colorIdx:16, isDemo:true },
-  { token:'0xdemo8', curve:'0xdemo8c', creator:'0xdemo', name:'NadRocket', symbol:'NRKT', graduated:false, monRaisedNet:0n, capMon:400000000000000000000000n, bondedBps:4400n, marketCap:420000000000000000000000n, blockNumber:0n, colorIdx:17, isDemo:true },
+// marketCap stored as plain numbers for easy mutation; displayed via BigInt conversion
+const DEMO_TOKENS_BASE = [
+  { token:'0xdemo1', curve:'0xdemo1c', creator:'0xdemo', name:'MonShiba',  symbol:'MSHIB',  graduated:false, capMon:400000000000000000000000n, colorIdx:10, isDemo:true, _mc:210000,  _bps:2800  },
+  { token:'0xdemo2', curve:'0xdemo2c', creator:'0xdemo', name:'PurpleNad', symbol:'PNAD',   graduated:false, capMon:400000000000000000000000n, colorIdx:11, isDemo:true, _mc:650000,  _bps:5500  },
+  { token:'0xdemo3', curve:'0xdemo3c', creator:'0xdemo', name:'MonDoge',   symbol:'MDOGE',  graduated:false, capMon:400000000000000000000000n, colorIdx:12, isDemo:true, _mc:95000,   _bps:1200  },
+  { token:'0xdemo4', curve:'0xdemo4c', creator:'0xdemo', name:'NadPepe',   symbol:'NPEPE',  graduated:true,  capMon:400000000000000000000000n, colorIdx:13, isDemo:true, _mc:1200000, _bps:10000 },
+  { token:'0xdemo5', curve:'0xdemo5c', creator:'0xdemo', name:'MonAI',     symbol:'MAI',    graduated:false, capMon:400000000000000000000000n, colorIdx:14, isDemo:true, _mc:890000,  _bps:7800  },
+  { token:'0xdemo6', curve:'0xdemo6c', creator:'0xdemo', name:'LaunchPad', symbol:'LPAD',   graduated:false, capMon:400000000000000000000000n, colorIdx:15, isDemo:true, _mc:280000,  _bps:3300  },
+  { token:'0xdemo7', curve:'0xdemo7c', creator:'0xdemo', name:'MonCat',    symbol:'MCAT',   graduated:false, capMon:400000000000000000000000n, colorIdx:16, isDemo:true, _mc:72000,   _bps:900   },
+  { token:'0xdemo8', curve:'0xdemo8c', creator:'0xdemo', name:'NadRocket', symbol:'NRKT',   graduated:false, capMon:400000000000000000000000n, colorIdx:17, isDemo:true, _mc:420000,  _bps:4400  },
 ]
+function makeDemoTokens(bases) {
+  return bases.map(b => ({
+    ...b,
+    monRaisedNet: BigInt(Math.floor(b._mc * 1e18)),
+    marketCap:    BigInt(Math.floor(b._mc * 1e18)),
+    bondedBps:    BigInt(b._bps),
+    blockNumber:  0n,
+  }))
+}
+// mutable state for demo MC simulation (outside component to persist across renders)
+let _demoBases = DEMO_TOKENS_BASE.map(b => ({ ...b }))
   async function loadTokens() {
     if (!SERVER) return
     try {
@@ -113,7 +125,8 @@ const DEMO_TOKENS = [
         }
       })
       // fill with demo tokens until 10 real ones exist
-      const combined = list.length < 10 ? [...list, ...DEMO_TOKENS.slice(0, 10 - list.length)] : list
+      const demoCount = Math.max(0, 10 - list.length)
+      const combined = demoCount > 0 ? [...list, ...makeDemoTokens(_demoBases).slice(0, demoCount)] : list
       setTokens(combined)
       setMetas(map)
     } catch (e) {
@@ -122,6 +135,37 @@ const DEMO_TOKENS = [
       setLoading(false)
     }
   }
+
+  // Animate demo token market caps to simulate live buys/sells
+  useEffect(() => {
+    const iv = setInterval(() => {
+      setTokens(prev => {
+        const hasReal = prev.filter(t => !t.isDemo).length
+        const needsDemo = hasReal < 10
+        if (!needsDemo) return prev
+        // pick a random demo token and nudge its MC
+        const demoIdx = Math.floor(Math.random() * _demoBases.length)
+        const base = _demoBases[demoIdx]
+        if (base.graduated) return prev // don't move graduated tokens
+        // random ±0.5% to ±3% move, slight upward bias
+        const changePct = (Math.random() * 3.5 - 1.0) / 100
+        const newMc = Math.max(10000, base._mc * (1 + changePct))
+        // nudge bondedBps proportionally (cap at 9999 for non-graduated)
+        const newBps = Math.min(9999, Math.max(100, Math.round(base._bps * (1 + changePct * 0.5))))
+        _demoBases[demoIdx] = { ...base, _mc: newMc, _bps: newBps }
+        return prev.map(t => {
+          if (!t.isDemo || t.token !== base.token) return t
+          return {
+            ...t,
+            marketCap:    BigInt(Math.floor(newMc * 1e18)),
+            monRaisedNet: BigInt(Math.floor(newMc * 1e18)),
+            bondedBps:    BigInt(newBps),
+          }
+        })
+      })
+    }, 2500)
+    return () => clearInterval(iv)
+  }, [])
 
   function filtered() {
     const live = new Set(liveRooms.map(a=>a.toLowerCase()))
