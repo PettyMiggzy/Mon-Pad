@@ -133,6 +133,7 @@ export default function TokenDetail() {
   }
 
   async function loadTradesAndHolders(curveAddr) {
+    if (!SERVER) return
     try {
       const res = await fetch(`${SERVER}/api/candles/${curveAddr}?interval=15m`)
       if (!res.ok) return
@@ -162,6 +163,7 @@ export default function TokenDetail() {
   }, [curveAddr, tf])
 
   async function buildChart() {
+    setApexSeries([])
     try {
       const res = await fetch(`${SERVER}/api/candles/${curveAddr}?interval=${tf}`)
       const { candles, trades: tm } = await res.json()
@@ -177,14 +179,16 @@ export default function TokenDetail() {
       if (tm?.length) {
         const vol24 = tm.filter(t=>t.ts>now-86400).reduce((s,t)=>s+t.volume,0)
         const totalVol = tm.reduce((s,t)=>s+t.volume,0)
-        const c5m = data.filter(c=>c.time>now-300)
-        const c1h = data.filter(c=>c.time>now-3600)
+        const sorted = [...tm].sort((a,b) => a.ts - b.ts)
+        const lastPrice = sorted.length ? sorted[sorted.length-1].price : price
+        const price5mAgo = sorted.filter(t=>t.ts <= now-300).slice(-1)[0]?.price || lastPrice
+        const price1hAgo = sorted.filter(t=>t.ts <= now-3600).slice(-1)[0]?.price || lastPrice
         const last = data[data.length-1]
         setStats({
           vol24h:vol24, totalVol, devFees:totalVol*0.015,
           price: last?.close||price,
-          pct5m: c5m.length>=2?(c5m[c5m.length-1].close-c5m[0].open)/c5m[0].open*100:0,
-          pct1h: c1h.length>=2?(c1h[c1h.length-1].close-c1h[0].open)/c1h[0].open*100:0,
+          pct5m: price5mAgo > 0 ? (lastPrice - price5mAgo) / price5mAgo * 100 : 0,
+          pct1h: price1hAgo > 0 ? (lastPrice - price1hAgo) / price1hAgo * 100 : 0,
         })
       }
 
@@ -195,7 +199,22 @@ export default function TokenDetail() {
           y: [parseFloat(c.open), parseFloat(c.high), parseFloat(c.low), parseFloat(c.close)]
         }))
       }])
-    } catch(e) { console.error('chart error:', e) }
+    } catch(e) {
+      console.error('chart error:', e)
+      // show placeholder so chart doesn't stay empty forever
+      const now = Math.floor(Date.now()/1000)
+      const int = tf==='15m'?900 : tf==='1h'?3600 : tf==='4h'?14400 : 86400
+      const price = info?.priceWei ? Number(info.priceWei)/1e18 : 0.00015
+      const base = now - 60*int
+      const placeholder = Array.from({length:60},(_,i) => ({ time: base+i*int, open:price, high:price*1.002, low:price*0.998, close:price, volume:0 }))
+      setApexSeries([{
+        name: 'Price',
+        data: placeholder.map(c => ({
+          x: new Date(c.time * 1000),
+          y: [parseFloat(c.open), parseFloat(c.high), parseFloat(c.low), parseFloat(c.close)]
+        }))
+      }])
+    }
   }
 
   function handleBuy() {
