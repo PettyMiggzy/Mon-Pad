@@ -136,19 +136,20 @@ export default function Home() {
       {/* ═══ MOBILE-ONLY TOPBAR ═══ */}
       <div className="mobile-only-bar" style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '14px 16px 10px',
+        padding: '16px 20px 14px',
         position: 'sticky', top: 0, zIndex: 100,
         background: '#000',
-        borderBottom: '1px solid rgba(255,255,255,0.07)',
+        borderBottom: '1px solid rgba(255,255,255,0.08)',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <img src="/monpad-logo.png" alt="MonPad"
-            style={{ width: 36, height: 36, borderRadius: 10, objectFit: 'cover' }} />
-          <span style={{ fontSize: 22, fontWeight: 900, color: '#fff', letterSpacing: '-0.5px' }}>MonPad</span>
+            style={{ width: 42, height: 42, borderRadius: 12, objectFit: 'cover' }} />
+          <span style={{ fontSize: 26, fontWeight: 900, color: '#fff', letterSpacing: '-0.5px' }}>MonPad</span>
         </div>
         <button onClick={() => router.push('/create')} style={{
-          padding: '10px 20px', background: 'linear-gradient(135deg,#6E54FF,#85E6FF)',
-          border: 'none', borderRadius: 12, color: 'white', fontWeight: 800, fontSize: 15, cursor: 'pointer',
+          padding: '12px 24px', background: 'linear-gradient(135deg,#6E54FF,#85E6FF)',
+          border: 'none', borderRadius: 14, color: 'white', fontWeight: 900, fontSize: 17, cursor: 'pointer',
+          boxShadow: '0 4px 16px rgba(110,84,255,0.4)',
         }}>+ Launch</button>
       </div>
 
@@ -239,26 +240,26 @@ export default function Home() {
       </div></div>
 
       {/* ═══ SEARCH + TABS ═══ */}
-      <div style={{ padding: '0 16px 12px' }}>
-        <div style={{ position:'relative', marginBottom:12 }}>
-          <svg style={{ position:'absolute', left:14, top:'50%', transform:'translateY(-50%)', width:18, height:18, color:'rgba(255,255,255,0.4)', pointerEvents:'none' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <div style={{ padding: '12px 16px 14px' }}>
+        <div style={{ position:'relative', marginBottom:14 }}>
+          <svg style={{ position:'absolute', left:16, top:'50%', transform:'translateY(-50%)', width:20, height:20, color:'rgba(255,255,255,0.35)', pointerEvents:'none' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35" strokeLinecap="round"/>
           </svg>
           <input
             placeholder="Search tokens..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            style={{ width:'100%', background:'rgba(255,255,255,0.07)', border:'1px solid rgba(255,255,255,0.12)', borderRadius:14, padding:'14px 14px 14px 42px', fontSize:16, color:'#fff', outline:'none', fontFamily:'var(--sans)' }}
+            style={{ width:'100%', background:'rgba(255,255,255,0.07)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:16, padding:'16px 16px 16px 48px', fontSize:17, color:'#fff', outline:'none', fontFamily:'var(--sans)' }}
           />
         </div>
 
-        <div style={{ display:'flex', gap:8, overflowX:'auto', scrollbarWidth:'none' }}>
+        <div style={{ display:'flex', gap:10, overflowX:'auto', scrollbarWidth:'none' }}>
           {TABS.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               style={{
-                flexShrink:0, padding:'10px 20px', borderRadius:12, fontSize:15, fontWeight:700, border:'none', cursor:'pointer', whiteSpace:'nowrap', transition:'all .15s',
-                background: tab === t.id ? 'var(--p)' : 'rgba(255,255,255,0.08)',
-                color:      tab === t.id ? 'white'    : 'rgba(255,255,255,0.7)',
+                flexShrink:0, padding:'12px 22px', borderRadius:14, fontSize:16, fontWeight:700, border:'none', cursor:'pointer', whiteSpace:'nowrap', transition:'all .15s',
+                background: tab === t.id ? 'var(--p)' : 'rgba(255,255,255,0.09)',
+                color:      tab === t.id ? 'white'    : 'rgba(255,255,255,0.75)',
                 boxShadow:  tab === t.id ? '0 4px 16px rgba(110,84,255,0.4)' : 'none',
               }}>
               {t.label}
@@ -656,24 +657,24 @@ function TokenRow({ token: t, monPrice, isLive, onClick }) {
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 14,
-        padding: '16px 16px',
+        gap: 16,
+        padding: '20px 16px',
         cursor: 'pointer',
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
+        borderBottom: '1px solid rgba(255,255,255,0.07)',
         background: '#000',
-        minHeight: 100,
+        minHeight: 120,
       }}
     >
       {/* ── Image: large square, slight rounding ── */}
       <div style={{
-        width: 82, height: 82, borderRadius: 12, flexShrink: 0,
+        width: 96, height: 96, borderRadius: 14, flexShrink: 0,
         background: imgUrl ? '#111' : `linear-gradient(135deg,${color}44,${color}11)`,
         overflow: 'hidden', position: 'relative',
       }}>
         {imgUrl
           ? <img src={imgUrl} alt={name} style={{ width:'100%', height:'100%', objectFit:'cover' }}
               onError={e => { e.target.style.display = 'none' }} />
-          : <div style={{ width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:28, fontWeight:900, color }}>
+          : <div style={{ width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:34, fontWeight:900, color }}>
               {symbol.slice(0,2).toUpperCase()}
             </div>
         }
@@ -689,10 +690,10 @@ function TokenRow({ token: t, monPrice, isLive, onClick }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
           fontWeight: 700,
-          fontSize: 23,
+          fontSize: 27,
           color: '#ffffff',
           lineHeight: 1.2,
-          marginBottom: 8,
+          marginBottom: 10,
           display: '-webkit-box',
           WebkitLineClamp: 2,
           WebkitBoxOrient: 'vertical',
@@ -701,21 +702,21 @@ function TokenRow({ token: t, monPrice, isLive, onClick }) {
         }}>
           {name}
         </div>
-        <div style={{ display:'flex', alignItems:'center', gap:5, fontSize:15, color:'rgba(255,255,255,0.4)' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:17, color:'rgba(255,255,255,0.45)' }}>
           <span>{symbol.slice(0,1)}...</span>
-          <span style={{ color:'#00cc5a' }}>🌱</span>
+          <span style={{ color:'#22c55e' }}>🌱</span>
           <span>{timeAgo}</span>
         </div>
       </div>
 
-      {/* ── Sparkline: jagged, neon green ── */}
-      <div style={{ flexShrink: 0, width: 130, height: 72 }}>
-        <SparklineFill prices={sparkPrices} height={72} />
+      {/* ── Sparkline ── */}
+      <div style={{ flexShrink: 0, width: 150, height: 84 }}>
+        <SparklineFill prices={sparkPrices} height={84} />
       </div>
 
       {/* ── Market cap ── */}
       <div style={{ flexShrink: 0, textAlign: 'right', minWidth: 70 }}>
-        <div style={{ fontSize: 25, fontWeight: 700, color: '#ffffff', whiteSpace: 'nowrap', letterSpacing: '-0.5px' }}>
+        <div style={{ fontSize: 28, fontWeight: 700, color: '#ffffff', whiteSpace: 'nowrap', letterSpacing: '-0.5px' }}>
           {mc}
         </div>
         {t.graduated && (

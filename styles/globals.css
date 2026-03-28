@@ -342,13 +342,13 @@ input, textarea { font-family: var(--sans); }
 .bottom-nav {
   position: fixed;
   bottom: 0; left: 0; right: 0;
-  background: rgba(12,12,18,0.97);
-  border-top: 1px solid rgba(255,255,255,0.08);
+  background: rgba(10,10,14,0.98);
+  border-top: 1px solid rgba(255,255,255,0.09);
   display: flex;
   align-items: center;
-  height: 72px;
+  height: 80px;
   z-index: 150;
-  padding: 0 4px;
+  padding: 0 6px;
 }
 
 .nav-item {
@@ -357,7 +357,7 @@ input, textarea { font-family: var(--sans); }
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: 6px;
   cursor: pointer;
   padding: 6px 0;
   color: rgba(255,255,255,0.35);
@@ -366,8 +366,8 @@ input, textarea { font-family: var(--sans); }
   background: none;
 }
 .nav-item.on { color: #ffffff; }
-.nav-item span { font-size: 11px; font-weight: 600; letter-spacing: .2px; }
-.nav-item svg { width: 26px; height: 26px; }
+.nav-item span { font-size: 12px; font-weight: 600; letter-spacing: .2px; }
+.nav-item svg { width: 28px; height: 28px; }
 
 .nav-create {
   flex: 1;
@@ -375,20 +375,20 @@ input, textarea { font-family: var(--sans); }
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: 6px;
   cursor: pointer;
   border: none;
   background: none;
 }
 .nav-create-circle {
-  width: 48px; height: 48px;
+  width: 54px; height: 54px;
   background: var(--p);
   border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 4px 18px rgba(110,84,255,0.6);
+  box-shadow: 0 4px 20px rgba(110,84,255,0.65);
 }
-.nav-create-circle svg { width: 24px; height: 24px; color: white; }
-.nav-create > span { font-size: 11px; font-weight: 600; letter-spacing: .2px; color: rgba(255,255,255,0.35); }
+.nav-create-circle svg { width: 26px; height: 26px; color: white; }
+.nav-create > span { font-size: 12px; font-weight: 600; letter-spacing: .2px; color: rgba(255,255,255,0.35); }
 
 /* ═══════════════════════════════════════
    DESKTOP BREAKPOINT
@@ -419,7 +419,7 @@ input, textarea { font-family: var(--sans); }
 
   /* Page content: fills screen, safe area above bottom nav */
   .page-content {
-    padding-bottom: 84px !important;
+    padding-bottom: 96px !important;
     padding-top: 0 !important;
   }
 
