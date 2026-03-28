@@ -373,9 +373,13 @@ export default function TokenDetail() {
                   ))}
                 </div>
 
-                <div style={{ height:340, width:'100%', background:'#0E091C', overflow:'hidden' }}>
+                <div style={{ height:340, width:'100%', background:'#0E091C', overflow:'hidden', position:'relative' }}>
                   {apexSeries.length === 0
-                    ? <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100%', color:'#555', fontSize:14 }}>Loading chart…</div>
+                    ? <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100%', gap:12 }}>
+                        <div style={{ color:'#555', fontSize:14 }}>No trades yet</div>
+                        <div style={{ color:'#6E54FF', fontSize:12, fontWeight:600, animation:'pulse 2s ease-in-out infinite', opacity:0.8 }}>⏳ Waiting for first trade…</div>
+                        <div style={{ width:120, height:2, background:'linear-gradient(90deg,transparent,rgba(110,84,255,0.5),transparent)', borderRadius:999, animation:'pulse 2s ease-in-out infinite' }} />
+                      </div>
                     : <ApexChart type="candlestick" height={340} series={apexSeries} options={apexOptions} />
                   }
                 </div>
@@ -677,6 +681,30 @@ export default function TokenDetail() {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+
+        {/* Mobile sticky buy/sell button — always visible on mobile without scrolling */}
+        <div className="mobile-buy-sticky">
+          <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+            <div style={{ display:'flex', flex:1, background:'var(--bg3)', borderRadius:10, padding:3 }}>
+              {['buy','sell'].map(m => (
+                <button key={m} onClick={() => setMode(m)}
+                  style={{ flex:1, padding:'10px 0', borderRadius:8, border:'none', fontWeight:800, fontSize:14, cursor:'pointer',
+                    background: mode===m ? (m==='buy'?'var(--p)':'var(--r)') : 'transparent',
+                    color: mode===m ? 'white' : 'var(--t3)' }}>
+                  {m.charAt(0).toUpperCase()+m.slice(1)}
+                </button>
+              ))}
+            </div>
+            <button
+              style={{ flex:2, padding:'13px 0', borderRadius:10, border:'none', fontWeight:800, fontSize:15, cursor:'pointer',
+                background: mode==='buy' ? 'var(--p)' : 'var(--r)', color:'white',
+                opacity: (info.delisted||(info.pauseSells&&mode==='sell')||(info.pauseBuys&&mode==='buy')) ? 0.4 : 1 }}
+              onClick={() => { if (!userAddr) { document.querySelector('.wallet-btn')?.click(); return; } mode==='buy' ? handleBuy() : handleSell() }}
+              disabled={isPending||isConfirming||sellStep!=='idle'||!!info.delisted||(!!info.pauseSells&&mode==='sell')||(!!info.pauseBuys&&mode==='buy')}>
+              {sellStep==='approving' ? 'Approving…' : sellStep==='selling' ? 'Confirm sell…' : isPending ? 'Confirm in wallet…' : isConfirming ? 'Confirming…' : userAddr ? `${mode==='buy'?'Buy':'Sell'} ${dSym}` : 'Connect Wallet'}
+            </button>
           </div>
         </div>
       </Layout>

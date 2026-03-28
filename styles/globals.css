@@ -466,6 +466,25 @@ input, textarea { font-family: var(--sans); }
   .token-2col-right { width: 100% !important; position: static !important; max-height: none !important; border-right: none !important; border-top: 1px solid var(--bd); }
 }
 
+/* Mobile sticky buy/sell button */
+.mobile-buy-sticky {
+  display: none;
+}
+@media (max-width: 767px) {
+  .mobile-buy-sticky {
+    display: block;
+    position: fixed;
+    bottom: 60px;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    padding: 10px 16px;
+    background: rgba(14, 9, 28, 0.97);
+    border-top: 1px solid rgba(110, 84, 255, 0.2);
+    backdrop-filter: blur(10px);
+  }
+}
+
 
 /* ═══════════════════════════════════════
    TOKEN GRID — pump.fun style

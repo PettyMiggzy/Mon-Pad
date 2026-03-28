@@ -181,7 +181,11 @@ let _demoBases = DEMO_TOKENS_BASE.map(b => ({ ...b }))
 
   const list     = filtered()
   const live     = new Set(liveRooms.map(a=>a.toLowerCase()))
-  const trending = [...tokens].sort((a,b) => Number(b.monRaisedNet)-Number(a.monRaisedNet)).slice(0,6)
+  const trending = [...tokens].sort((a,b) => {
+    const mcA = Number(a.marketCap || a.monRaisedNet || 0n)
+    const mcB = Number(b.marketCap || b.monRaisedNet || 0n)
+    return mcB - mcA
+  }).slice(0,6)
 
   return (
     <Layout>
