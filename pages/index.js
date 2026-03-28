@@ -361,7 +361,18 @@ function TokenCard({ token: t, meta, isLive, monPrice, onClick }) {
         <div style={{ width:'100%', height:3, background:'var(--bg3)', borderRadius:999, overflow:'hidden' }}>
           <div style={{ height:'100%', background: t.graduated ? 'linear-gradient(90deg,#d97706,#FFAE45)' : `linear-gradient(90deg,${color},${color}88)`, borderRadius:999, width:`${Math.min(pct,100)}%`, transition:'width .4s ease' }} />
         </div>
-        <div style={{ fontSize:9, color:'var(--t3)', marginTop:3, fontFamily:'var(--mono)' }}>{pct.toFixed(1)}% bonded</div>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:3 }}>
+          <div style={{ fontSize:9, color:'var(--t3)', fontFamily:'var(--mono)' }}>{pct.toFixed(1)}% bonded</div>
+          {!t.isDemo && (
+            <div
+              style={{ fontSize:9, color:'var(--t3)', fontFamily:'var(--mono)', cursor:'pointer', userSelect:'none' }}
+              onClick={e => { e.stopPropagation(); navigator.clipboard?.writeText(t.token); e.currentTarget.textContent='✓ copied' ; setTimeout(()=>{ if(e.currentTarget) e.currentTarget.textContent = t.token.slice(0,5)+'…'+t.token.slice(-3) },1200) }}
+              title={t.token}
+            >
+              {t.token.slice(0,5)}…{t.token.slice(-3)}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
