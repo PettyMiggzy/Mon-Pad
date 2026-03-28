@@ -366,8 +366,8 @@ input, textarea { font-family: var(--sans); }
   background: none;
 }
 .nav-item.on { color: #ffffff; }
-.nav-item span { font-size: 12px; font-weight: 600; letter-spacing: .2px; }
-.nav-item svg { width: 28px; height: 28px; }
+.nav-item span { font-size: 13px; font-weight: 600; letter-spacing: .1px; color: inherit; }
+.nav-item svg { width: 30px; height: 30px; }
 
 .nav-create {
   flex: 1;
@@ -387,8 +387,8 @@ input, textarea { font-family: var(--sans); }
   display: flex; align-items: center; justify-content: center;
   box-shadow: 0 4px 20px rgba(110,84,255,0.65);
 }
-.nav-create-circle svg { width: 26px; height: 26px; color: white; }
-.nav-create > span { font-size: 12px; font-weight: 600; letter-spacing: .2px; color: rgba(255,255,255,0.35); }
+.nav-create-circle svg { width: 28px; height: 28px; color: white; }
+.nav-create > span { font-size: 13px; font-weight: 600; letter-spacing: .1px; color: rgba(255,255,255,0.35); }
 
 /* ═══════════════════════════════════════
    DESKTOP BREAKPOINT
