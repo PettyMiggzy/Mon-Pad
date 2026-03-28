@@ -495,13 +495,17 @@ input, textarea { font-family: var(--sans); }
 
 .tcard-img {
   width: 100%;
-  aspect-ratio: 1 / 1;
+  height: 110px;
   overflow: hidden;
   display: flex; align-items: center; justify-content: center;
   position: relative;
   background: var(--bg3);
 }
 .tcard-img img { width: 100%; height: 100%; object-fit: cover; }
+
+@media (min-width: 600px) {
+  .tcard-img { height: 130px; }
+}
 
 .tcard-body {
   padding: 8px;
