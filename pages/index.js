@@ -136,42 +136,39 @@ export default function Home() {
       {/* ═══ HERO BANNER ═══ */}
       <div style={{
         margin: '12px 16px',
-        padding: '24px 20px',
-        background: 'linear-gradient(135deg, rgba(110,84,255,0.15) 0%, rgba(133,230,255,0.06) 100%)',
-        border: '1px solid rgba(110,84,255,0.25)',
-        borderRadius: 18,
+        padding: '28px 20px',
+        background: 'linear-gradient(135deg, rgba(110,84,255,0.18) 0%, rgba(133,230,255,0.06) 100%)',
+        border: '1px solid rgba(110,84,255,0.3)',
+        borderRadius: 20,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         textAlign: 'center',
         gap: 0,
       }}>
-        <div>
-          <img src="/monpad-logo.png" alt="MonPad" style={{ width: 120, height: 120, borderRadius: 20, objectFit: 'cover', marginBottom: 10, boxShadow: '0 4px 24px rgba(110,84,255,0.4)' }} />
-          <div style={{ fontSize: 20, fontWeight: 900, color: '#fff', marginBottom: 4, letterSpacing: '-0.5px' }}>MonPad</div>
-          <div style={{ fontSize: 12, color: 'var(--t3)', fontWeight: 500, marginBottom: 16 }}>Fair launch · No presale · Devs earn 1.5% forever · 10 MON to launch</div>
-        </div>
+        <div style={{ fontSize: 32, fontWeight: 900, color: '#fff', marginBottom: 6, letterSpacing: '-1px' }}>MonPad</div>
+        <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.55)', fontWeight: 500, marginBottom: 20 }}>Fair launch · No presale · Devs earn 1.5% forever · 10 MON to launch</div>
         <button
           onClick={() => router.push('/create')}
           style={{
-            padding: '14px 36px',
+            padding: '16px 48px',
             background: 'linear-gradient(135deg,#6E54FF,#85E6FF)',
             border: 'none', borderRadius: 14,
-            color: 'white', fontWeight: 800, fontSize: 16,
+            color: 'white', fontWeight: 900, fontSize: 18,
             cursor: 'pointer', whiteSpace: 'nowrap',
-            boxShadow: '0 4px 24px rgba(110,84,255,0.4)',
+            boxShadow: '0 4px 24px rgba(110,84,255,0.5)',
             transition: 'transform .15s, box-shadow .15s',
           }}
-          onMouseEnter={e => { e.target.style.transform='translateY(-1px)'; e.target.style.boxShadow='0 6px 30px rgba(110,84,255,0.55)' }}
-          onMouseLeave={e => { e.target.style.transform='translateY(0)';    e.target.style.boxShadow='0 4px 24px rgba(110,84,255,0.4)' }}
+          onMouseEnter={e => { e.target.style.transform='translateY(-1px)'; e.target.style.boxShadow='0 6px 30px rgba(110,84,255,0.65)' }}
+          onMouseLeave={e => { e.target.style.transform='translateY(0)';    e.target.style.boxShadow='0 4px 24px rgba(110,84,255,0.5)' }}
         >
           + Launch Token
         </button>
       </div>
 
       {/* ═══ TRENDING CAROUSEL ═══ */}
-      <div style={{ padding: '4px 16px 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: 17, fontWeight: 800, color: 'var(--t2)' }}>🔥 Trending</span>
+      <div style={{ padding: '8px 16px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontSize: 20, fontWeight: 900, color: '#ffffff' }}>🔥 Trending</span>
         <div style={{ display: 'flex', gap: 4 }}>
           {['‹','›'].map((ch, i) => (
             <button key={ch} onClick={() => carouselRef.current?.scrollBy({ left: i === 0 ? -220 : 220, behavior: 'smooth' })}
@@ -223,28 +220,27 @@ export default function Home() {
       </div>
 
       {/* ═══ SEARCH + TABS ═══ */}
-      <div style={{ padding: '0 16px 10px' }}>
-        <div style={{ position:'relative', marginBottom:10 }}>
-          <svg style={{ position:'absolute', left:12, top:'50%', transform:'translateY(-50%)', width:16, height:16, color:'var(--t3)', pointerEvents:'none' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <div style={{ padding: '0 16px 12px' }}>
+        <div style={{ position:'relative', marginBottom:12 }}>
+          <svg style={{ position:'absolute', left:14, top:'50%', transform:'translateY(-50%)', width:18, height:18, color:'rgba(255,255,255,0.4)', pointerEvents:'none' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35" strokeLinecap="round"/>
           </svg>
           <input
             placeholder="Search tokens..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            style={{ width:'100%', background:'var(--bg2)', border:'1px solid var(--bd)', borderRadius:12, padding:'10px 12px 10px 36px', fontSize:14, color:'var(--t1)', outline:'none', fontFamily:'var(--sans)' }}
+            style={{ width:'100%', background:'rgba(255,255,255,0.07)', border:'1px solid rgba(255,255,255,0.12)', borderRadius:14, padding:'14px 14px 14px 42px', fontSize:16, color:'#fff', outline:'none', fontFamily:'var(--sans)' }}
           />
         </div>
 
-        <div style={{ display:'flex', gap:6, overflowX:'auto', scrollbarWidth:'none' }}>
+        <div style={{ display:'flex', gap:8, overflowX:'auto', scrollbarWidth:'none' }}>
           {TABS.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               style={{
-                flexShrink:0, padding:'8px 16px', borderRadius:10, fontSize:13, fontWeight:700, border:'none', cursor:'pointer', whiteSpace:'nowrap', transition:'all .15s',
-                background: tab === t.id ? 'var(--p)' : 'var(--bg2)',
-                color:      tab === t.id ? 'white'    : 'var(--t2)',
+                flexShrink:0, padding:'10px 20px', borderRadius:12, fontSize:15, fontWeight:700, border:'none', cursor:'pointer', whiteSpace:'nowrap', transition:'all .15s',
+                background: tab === t.id ? 'var(--p)' : 'rgba(255,255,255,0.08)',
+                color:      tab === t.id ? 'white'    : 'rgba(255,255,255,0.7)',
                 boxShadow:  tab === t.id ? '0 4px 16px rgba(110,84,255,0.4)' : 'none',
-                outline: tab === t.id ? 'none' : '1px solid var(--bd)',
               }}>
               {t.label}
             </button>
