@@ -359,12 +359,12 @@ function TokenCard({ token: t, meta, isLive, monPrice, onClick }) {
 
       {/* Info below image */}
       <div className="tcard-body">
-        <div style={{ fontWeight:800, fontSize:11, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', color:'var(--t1)', marginBottom:1 }}>{meta?.name || t.name}</div>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5 }}>
-          <div style={{ fontSize:9, color:'var(--p2)', fontFamily:'var(--mono)', fontWeight:700 }}>${meta?.symbol || t.symbol}</div>
-          <div style={{ fontSize:10, fontWeight:800, fontFamily:'var(--mono)', color:'var(--gold)' }}>{mcDisplay}</div>
+        <div style={{ fontWeight:800, fontSize:14, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', color:'var(--t1)', marginBottom:3 }}>{meta?.name || t.name}</div>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
+          <div style={{ fontSize:11, color:'var(--p2)', fontFamily:'var(--mono)', fontWeight:700 }}>${meta?.symbol || t.symbol}</div>
+          <div style={{ fontSize:13, fontWeight:800, fontFamily:'var(--mono)', color:'var(--gold)' }}>{mcDisplay}</div>
         </div>
-        <div style={{ width:'100%', height:3, background:'var(--bg3)', borderRadius:999, overflow:'hidden' }}>
+        <div style={{ width:'100%', height:4, background:'var(--bg3)', borderRadius:999, overflow:'hidden' }}>
           <div style={{ height:'100%', background: t.graduated ? 'linear-gradient(90deg,#d97706,#FFAE45)' : 'linear-gradient(90deg,var(--p),var(--cyan))', borderRadius:999, width:`${Math.min(pct,100)}%`, transition:'width .4s ease' }} />
         </div>
       </div>
