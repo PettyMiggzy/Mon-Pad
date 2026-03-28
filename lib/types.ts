@@ -10,4 +10,9 @@ export type Project = {
   price?: number;
   priceWeiPerToken?: bigint | number;
   uniqueBuyers: number;
+  pfpUrl?: string;
+  bannerUrl?: string;
+  desc?: string;
+  createdAt?: number;
+  priceHistory?: number[]; // sparkline prices
 };

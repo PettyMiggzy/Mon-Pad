@@ -258,9 +258,17 @@ export default function Home() {
       <div style={{ padding:'0 16px 100px' }}>
 
         {loading && (
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(320px, 1fr))', gap:10 }}>
+          <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
             {[...Array(6)].map((_, i) => (
-              <div key={i} style={{ height:160, borderRadius:16, background:'var(--bg2)', animation:'pulse 1.5s infinite' }} />
+              <div key={i} style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 12px' }}>
+                <div style={{ width:52, height:52, borderRadius:12, background:'var(--bg2)', animation:'pulse 1.5s infinite', flexShrink:0 }} />
+                <div style={{ flex:1, display:'flex', flexDirection:'column', gap:6 }}>
+                  <div style={{ width:120, height:14, borderRadius:6, background:'var(--bg2)', animation:'pulse 1.5s infinite' }} />
+                  <div style={{ width:80, height:10, borderRadius:6, background:'var(--bg2)', animation:'pulse 1.5s infinite' }} />
+                </div>
+                <div style={{ width:100, height:40, borderRadius:8, background:'var(--bg2)', animation:'pulse 1.5s infinite' }} />
+                <div style={{ width:72, height:20, borderRadius:6, background:'var(--bg2)', animation:'pulse 1.5s infinite' }} />
+              </div>
             ))}
           </div>
         )}
@@ -278,9 +286,9 @@ export default function Home() {
         )}
 
         {!loading && list.length > 0 && (
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(320px, 1fr))', gap:10 }}>
+          <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
             {list.map(t => (
-              <TokenCard
+              <TokenRow
                 key={t.token}
                 token={t}
                 monPrice={monPrice}
@@ -296,154 +304,163 @@ export default function Home() {
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
         @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
         input:focus { border-color: rgba(110,84,255,0.5) !important; }
+        .token-row:hover { background: rgba(110,84,255,0.06) !important; }
       `}</style>
     </Layout>
   )
 }
 
-function TokenCard({ token: t, monPrice, isLive, onClick }) {
+// ─── Sparkline SVG ───────────────────────────────────────────────────────────
+function Sparkline({ prices, color = '#22c55e', width = 100, height = 40 }) {
+  if (!prices || prices.length < 2) {
+    // flat line if no data
+    return (
+      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+        <line x1={0} y1={height / 2} x2={width} y2={height / 2} stroke={color} strokeWidth={1.5} strokeOpacity={0.4} />
+      </svg>
+    )
+  }
+
+  const min = Math.min(...prices)
+  const max = Math.max(...prices)
+  const range = max - min || 1
+  const pad = 3
+
+  const pts = prices.map((p, i) => {
+    const x = pad + (i / (prices.length - 1)) * (width - pad * 2)
+    const y = pad + (1 - (p - min) / range) * (height - pad * 2)
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  })
+
+  const isUp = prices[prices.length - 1] >= prices[0]
+  const lineColor = isUp ? '#22c55e' : '#ef4444'
+
+  // Build fill path (close down to bottom)
+  const fillD = `M ${pts[0]} L ${pts.join(' L ')} L ${(width - pad).toFixed(1)},${height} L ${pad},${height} Z`
+  const lineD = `M ${pts.join(' L ')}`
+
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ overflow: 'visible' }}>
+      <defs>
+        <linearGradient id={`sg-${lineColor.replace('#','')}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={lineColor} stopOpacity="0.25" />
+          <stop offset="100%" stopColor={lineColor} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={fillD} fill={`url(#sg-${lineColor.replace('#','')})`} />
+      <path d={lineD} fill="none" stroke={lineColor} strokeWidth={1.8} strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+// ─── Pump.fun-style single row ────────────────────────────────────────────────
+function TokenRow({ token: t, monPrice, isLive, onClick }) {
+  const [sparkPrices, setSparkPrices] = useState(null)
+
   const color   = COLORS[t.colorIdx % COLORS.length]
-  const pct     = Math.min(100, Number(t.bondedBps) / 100)
   const mc      = fmtUSD(t.marketCap || t.monRaisedNet, monPrice)
   const change  = t.change24h || 0
   const isUp    = change >= 0
-  const holders = t.uniqueBuyers || 0
   const symbol  = t.symbol || '??'
   const name    = t.name   || 'Unknown'
-  const desc    = t.desc   || ''
   const imgUrl  = t.pfpUrl || ''
-  const contract = t.token || ''
+  const pct     = Math.min(100, Number(t.bondedBps) / 100)
+  const holders = t.uniqueBuyers || 0
 
-  // ATH market cap
-  const athWei  = t.ath > 0 ? BigInt(Math.floor(t.ath * 1_000_000_000 * 1e18)) : null
-  const athDisp = athWei ? fmtUSD(athWei, monPrice) : null
+  // Load sparkline from candles API
+  useEffect(() => {
+    if (!t.curve || !SERVER) return
+    fetch(`${SERVER}/api/candles/${t.curve}?interval=1h`)
+      .then(r => r.json())
+      .then(data => {
+        const candles = data?.candles || []
+        if (candles.length >= 2) {
+          setSparkPrices(candles.map(c => c.close))
+        }
+      })
+      .catch(() => {})
+  }, [t.curve])
+
+  // Determine sparkline color from real data or change24h
+  const sparkIsUp = sparkPrices
+    ? sparkPrices[sparkPrices.length - 1] >= sparkPrices[0]
+    : isUp
+  const sparkColor = sparkIsUp ? '#22c55e' : '#ef4444'
 
   return (
     <div
+      className="token-row"
       onClick={onClick}
       style={{
-        background: 'var(--bg2)',
-        border: '1px solid var(--bd)',
-        borderRadius: 16,
-        overflow: 'hidden',
-        cursor: 'pointer',
-        transition: 'transform .15s, border-color .15s, box-shadow .15s',
         display: 'flex',
-        flexDirection: 'column',
-      }}
-      onMouseEnter={e => {
-        e.currentTarget.style.transform = 'translateY(-2px)'
-        e.currentTarget.style.borderColor = `${color}55`
-        e.currentTarget.style.boxShadow = `0 8px 30px rgba(0,0,0,0.3)`
-      }}
-      onMouseLeave={e => {
-        e.currentTarget.style.transform = 'translateY(0)'
-        e.currentTarget.style.borderColor = 'var(--bd)'
-        e.currentTarget.style.boxShadow = 'none'
+        alignItems: 'center',
+        gap: 12,
+        padding: '10px 12px',
+        cursor: 'pointer',
+        borderBottom: '1px solid rgba(255,255,255,0.04)',
+        transition: 'background .12s',
+        borderRadius: 10,
       }}
     >
-      {/* ── TOP ROW: image + info ── */}
-      <div style={{ display:'flex', flexDirection:'row' }}>
+      {/* ── Avatar ── */}
+      <div style={{
+        width: 52, height: 52, borderRadius: 12, flexShrink: 0,
+        background: imgUrl ? '#000' : `linear-gradient(135deg,${color}55,${color}22)`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        overflow: 'hidden', position: 'relative',
+        border: `1px solid ${color}33`,
+      }}>
+        {imgUrl
+          ? <img src={imgUrl} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none' }} />
+          : <span style={{ fontSize: 18, fontWeight: 900, color, textShadow: `0 0 12px ${color}` }}>{symbol.slice(0, 2).toUpperCase()}</span>
+        }
+        {t.graduated && (
+          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: '#d97706cc', color: 'white', fontSize: 8, fontWeight: 800, textAlign: 'center', padding: '1px 0' }}>GRAD</div>
+        )}
+        {isLive && !t.graduated && (
+          <div style={{ position: 'absolute', top: 2, right: 2, width: 7, height: 7, borderRadius: '50%', background: '#ef4444', boxShadow: '0 0 5px #ef4444', animation: 'blink 1.5s infinite' }} />
+        )}
+      </div>
 
-        {/* Image */}
-        <div style={{
-          width: 110, height: 110, flexShrink: 0,
-          background: imgUrl ? '#000' : `linear-gradient(135deg,${color}44,${color}11)`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          position: 'relative', overflow: 'hidden',
-        }}>
-          {imgUrl
-            ? <img src={imgUrl} alt={name} style={{ width:'100%', height:'100%', objectFit:'cover' }} onError={e => { e.target.style.display='none' }} />
-            : <span style={{ fontSize:32, fontWeight:900, color, textShadow:`0 0 24px ${color}` }}>{symbol.slice(0,2).toUpperCase()}</span>
-          }
-          {/* badges */}
-          {t.graduated && (
-            <div style={{ position:'absolute', top:5, left:5, background:'#d97706', color:'white', fontSize:9, fontWeight:800, padding:'2px 6px', borderRadius:5 }}>🎓 GRAD</div>
-          )}
-          {isLive && !t.graduated && (
-            <div style={{ position:'absolute', top:5, left:5, background:'#ef4444', color:'white', fontSize:9, fontWeight:800, padding:'2px 6px', borderRadius:5, display:'flex', alignItems:'center', gap:3 }}>
-              <span style={{ width:5, height:5, background:'white', borderRadius:'50%', animation:'blink 1.5s infinite' }} />LIVE
-            </div>
-          )}
-        </div>
-
-        {/* Info */}
-        <div style={{ flex:1, padding:'10px 12px', minWidth:0, display:'flex', flexDirection:'column', gap:3 }}>
-
-          {/* Symbol + change */}
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-            <span style={{
-              background: `${color}30`, color, border: `1px solid ${color}55`,
-              borderRadius: 6, padding: '1px 8px', fontSize: 11, fontWeight: 800, fontFamily:'var(--mono)',
-            }}>
-              ${symbol}
-            </span>
-            {change !== 0 && (
-              <span style={{ fontSize:11, fontWeight:700, color: isUp ? '#22c55e' : '#ef4444', fontFamily:'var(--mono)' }}>
-                {isUp ? '▲' : '▼'} {Math.abs(change).toFixed(1)}%
-              </span>
-            )}
-          </div>
-
-          {/* Name */}
-          <div style={{ fontSize:16, fontWeight:800, color:'var(--t1)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+      {/* ── Name + meta ── */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
+          <span style={{ fontWeight: 800, color: 'var(--t1)', fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160 }}>
             {name}
-          </div>
-
-          {/* Description */}
-          {desc ? (
-            <div style={{ fontSize:11, color:'var(--t3)', lineHeight:1.4, overflow:'hidden', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical' }}>
-              {desc}
-            </div>
-          ) : (
-            <div style={{ fontSize:11, color:'var(--t3)', fontStyle:'italic' }}>No description</div>
+          </span>
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--t3)', fontFamily: 'var(--mono)', flexShrink: 0 }}>
+            ${symbol}
+          </span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+          <span style={{ fontSize: 11, color: 'var(--t3)' }}>
+            👥 {fmtNum(holders)}
+          </span>
+          <span style={{ fontSize: 11, color: 'var(--t3)', fontFamily: 'var(--mono)' }}>
+            {pct.toFixed(0)}% bonded
+          </span>
+          {change !== 0 && (
+            <span style={{ fontSize: 11, fontWeight: 700, color: isUp ? '#22c55e' : '#ef4444' }}>
+              {isUp ? '▲' : '▼'}{Math.abs(change).toFixed(1)}%
+            </span>
           )}
-
-          {/* Holders + contract */}
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:'auto' }}>
-            <span style={{ fontSize:10, color:'var(--t3)', display:'flex', alignItems:'center', gap:3 }}>
-              👥 <span style={{ color:'var(--t2)', fontWeight:600 }}>{fmtNum(holders)} holders</span>
-            </span>
-            <span style={{ fontSize:10, color:'var(--t3)', fontFamily:'var(--mono)' }}>
-              {fmtAddr(contract)}
-            </span>
-          </div>
-
         </div>
       </div>
 
-      {/* ── BOTTOM: MC / ATH / progress ── */}
-      <div style={{ padding:'8px 12px 10px', borderTop:'1px solid rgba(255,255,255,0.04)' }}>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
-          <div style={{ fontSize:12 }}>
-            <span style={{ color:'var(--t3)', marginRight:4 }}>MC</span>
-            <span style={{ fontWeight:800, color:'var(--t1)', fontFamily:'var(--mono)' }}>{mc}</span>
-          </div>
-          {athDisp && (
-            <div style={{ fontSize:12 }}>
-              <span style={{ color:'var(--t3)', marginRight:4 }}>ATH</span>
-              <span style={{ fontWeight:800, color:'var(--p2)', fontFamily:'var(--mono)' }}>{athDisp}</span>
-            </div>
-          )}
-          <div style={{ fontSize:11, color: t.graduated ? '#22c55e' : 'var(--t3)', fontWeight:700, fontFamily:'var(--mono)' }}>
-            {t.graduated ? '✓ Graduated' : `${pct.toFixed(1)}%`}
-          </div>
-        </div>
-
-        {/* Progress bar */}
-        <div style={{ height:5, background:'rgba(255,255,255,0.06)', borderRadius:999, overflow:'hidden' }}>
-          <div style={{
-            height:'100%', borderRadius:999,
-            width: `${pct}%`,
-            background: t.graduated
-              ? 'linear-gradient(90deg,#d97706,#FFAE45)'
-              : `linear-gradient(90deg,${color},${color}99)`,
-            transition: 'width .4s ease',
-            boxShadow: `0 0 8px ${color}88`,
-          }} />
-        </div>
+      {/* ── Sparkline ── */}
+      <div style={{ flexShrink: 0, width: 100, height: 40, display: 'flex', alignItems: 'center' }}>
+        <Sparkline prices={sparkPrices} color={sparkColor} width={100} height={40} />
       </div>
 
+      {/* ── Market Cap ── */}
+      <div style={{ flexShrink: 0, minWidth: 72, textAlign: 'right' }}>
+        <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--t1)', fontFamily: 'var(--mono)' }}>
+          {mc}
+        </div>
+        {t.graduated && (
+          <div style={{ fontSize: 9, fontWeight: 700, color: '#22c55e', marginTop: 2 }}>✓ Grad</div>
+        )}
+      </div>
     </div>
   )
 }
