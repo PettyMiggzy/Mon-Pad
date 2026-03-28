@@ -332,13 +332,13 @@ export default function TokenDetail() {
               </div>
             </div>
             <div style={{ display:'flex', gap:6, flexShrink:0 }}>
-              <button onClick={() => navigator.clipboard.writeText(tokenAddr||'')}
+              <button className="token-header-copy-btn" onClick={() => navigator.clipboard.writeText(tokenAddr||'')}
                 style={{ padding:'7px 12px', background:'var(--bg2)', border:'1px solid var(--bd2)', borderRadius:8, fontSize:12, color:'var(--t2)', cursor:'pointer', fontFamily:'var(--mono)', whiteSpace:'nowrap' }}>
-                {fmtAddr(tokenAddr)} ⎘
+                <span className="addr-copy-text">{fmtAddr(tokenAddr)} </span>⎘
               </button>
-              <button onClick={() => navigator.share?.({ url: window.location.href }) || navigator.clipboard.writeText(window.location.href)}
+              <button className="token-header-share-btn" onClick={() => navigator.share?.({ url: window.location.href }) || navigator.clipboard.writeText(window.location.href)}
                 style={{ padding:'7px 12px', background:'var(--bg2)', border:'1px solid var(--bd2)', borderRadius:8, fontSize:12, color:'var(--t2)', cursor:'pointer' }}>
-                Share ↗
+                <span className="share-text">Share </span>↗
               </button>
             </div>
           </div>
@@ -356,9 +356,9 @@ export default function TokenDetail() {
                   </span>
                 </div>
 
-                <div style={{ padding:'0 14px 8px', display:'flex', gap:6, alignItems:'center' }}>
+                <div className="tf-btn-row" style={{ padding:'0 14px 8px', display:'flex', gap:6, alignItems:'center' }}>
                   {TF_OPTIONS.map(t => (
-                    <button key={t} onClick={() => setTf(t)}
+                    <button key={t} className="tf-btn" onClick={() => setTf(t)}
                       style={{ padding:'4px 10px', borderRadius:6, border:'none', fontSize:12, fontWeight:700, cursor:'pointer',
                         background: tf===t ? 'rgba(110,84,255,0.2)' : 'transparent',
                         color: tf===t ? 'var(--p2)' : 'var(--t3)' }}>
@@ -378,7 +378,7 @@ export default function TokenDetail() {
                   }
                 </div>
 
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', borderTop:'1px solid var(--bd)', borderBottom:'1px solid var(--bd)' }}>
+                <div className="stats-4col" style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', borderTop:'1px solid var(--bd)', borderBottom:'1px solid var(--bd)' }}>
                   {[
                     ['VOL 24H', chartStats.vol24h > 0 ? fmtMON(BigInt(Math.floor(chartStats.vol24h*1e18))) + ' MON' : '—'],
                     ['PRICE',   `${(Number(info.priceWei)/1e18).toFixed(8)} MON`],
@@ -411,11 +411,11 @@ export default function TokenDetail() {
               </div>
 
               <div>
-                <div style={{ display:'flex', borderBottom:'1px solid var(--bd)' }}>
+                <div style={{ display:'flex', borderBottom:'1px solid var(--bd)', overflowX:'auto' }}>
                   {DETAIL_TABS.map(t => (
-                    <button key={t} onClick={() => setTab(t)}
-                      style={{ flex:1, padding:'12px 0', border:'none', borderBottom: tab===t ? '2px solid var(--p)' : '2px solid transparent',
-                        background:'transparent', color: tab===t ? 'var(--t1)' : 'var(--t3)', fontSize:13, fontWeight:700, cursor:'pointer', marginBottom:-1 }}>
+                    <button key={t} className="detail-tab" onClick={() => setTab(t)}
+                      style={{ flex:1, padding:'12px 6px', border:'none', borderBottom: tab===t ? '2px solid var(--p)' : '2px solid transparent',
+                        background:'transparent', color: tab===t ? 'var(--t1)' : 'var(--t3)', fontSize:13, fontWeight:700, cursor:'pointer', marginBottom:-1, whiteSpace:'nowrap' }}>
                       {t}
                     </button>
                   ))}
@@ -505,7 +505,7 @@ export default function TokenDetail() {
               <div style={{ padding:'12px 14px 0' }}>
                 <div style={{ display:'flex', background:'var(--bg3)', borderRadius:10, padding:3, marginBottom:12 }}>
                   {['buy','sell'].map(m => (
-                    <button key={m} onClick={() => setMode(m)}
+                    <button key={m} className="buy-sell-mode-btn" onClick={() => setMode(m)}
                       style={{ flex:1, padding:'9px 0', borderRadius:8, border:'none', fontWeight:800, fontSize:14, cursor:'pointer', transition:'all .15s',
                         background: mode===m ? (m==='buy'?'var(--p)':'var(--r)') : 'transparent',
                         color: mode===m ? 'white' : 'var(--t3)' }}>
@@ -523,7 +523,7 @@ export default function TokenDetail() {
 
                 {!customAmt && (
                   <div style={{ position:'relative', marginBottom:8 }}>
-                    <input type="number" placeholder={`0.0 ${mode==='buy'?'MON':dSym}`} value={amt} onChange={e => setAmt(e.target.value)}
+                    <input type="number" className="buy-sell-input" placeholder={`0.0 ${mode==='buy'?'MON':dSym}`} value={amt} onChange={e => setAmt(e.target.value)}
                       style={{ width:'100%', padding:'14px 60px 14px 14px', fontSize:20, fontWeight:800, fontFamily:'var(--mono)',
                         background:'var(--bg2)', border:'1px solid var(--bd2)', borderRadius:10, color:'var(--t1)', outline:'none', boxSizing:'border-box' }} />
                     <button onClick={() => { mode==='sell' ? setAmt((Number(tokenBalance)/1e18).toFixed(0)) : setAmt('') }}
@@ -683,7 +683,7 @@ export default function TokenDetail() {
           <div style={{ display:'flex', gap:8, alignItems:'center' }}>
             <div style={{ display:'flex', flex:1, background:'var(--bg3)', borderRadius:10, padding:3 }}>
               {['buy','sell'].map(m => (
-                <button key={m} onClick={() => setMode(m)}
+                <button key={m} className="buy-sell-mode-btn" onClick={() => setMode(m)}
                   style={{ flex:1, padding:'10px 0', borderRadius:8, border:'none', fontWeight:800, fontSize:14, cursor:'pointer',
                     background: mode===m ? (m==='buy'?'var(--p)':'var(--r)') : 'transparent',
                     color: mode===m ? 'white' : 'var(--t3)' }}>

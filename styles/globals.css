@@ -774,3 +774,121 @@ input, textarea { font-family: var(--sans); }
 /* scroll area legacy */
 .scroll-area { flex: 1; overflow-y: auto; padding-bottom: 80px; }
 .scroll-area::-webkit-scrollbar { display: none; }
+
+/* ═══════════════════════════════════════
+   COMPREHENSIVE MOBILE FIXES
+═══════════════════════════════════════ */
+
+@media (max-width: 767px) {
+  /* 1. Launch banner — stack vertically on mobile */
+  .launch-banner {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 10px !important;
+  }
+  .launch-banner button {
+    align-self: flex-start;
+  }
+
+  /* 2. Trending carousel — hide arrows, smaller title */
+  .trending-arrows {
+    display: none !important;
+  }
+  .trending-title {
+    font-size: 14px !important;
+  }
+
+  /* 3. Trending carousel card images — max 100px tall */
+  .trend-carousel-card-img {
+    height: 100px !important;
+    max-height: 100px !important;
+  }
+
+  /* 4. Tab pills — min 44px touch target */
+  .tab-pill {
+    min-height: 44px !important;
+    padding: 10px 14px !important;
+    display: inline-flex !important;
+    align-items: center;
+  }
+
+  /* 5. Token grid — 12px side padding on mobile */
+  .token-grid-wrap {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+
+  /* Token card font sizes */
+  .tcard-name { font-size: 11px !important; }
+  .tcard-mc   { font-size: 10px !important; }
+  .tcard-sym  { font-size: 9px !important; }
+
+  /* 6. Page content padding for bottom nav — already set to 80px */
+
+  /* 7. Token header — copy and share buttons: icon only */
+  .addr-copy-text { display: none !important; }
+  .share-text     { display: none !important; }
+  .token-header-copy-btn,
+  .token-header-share-btn {
+    padding: 7px 10px !important;
+    min-width: 36px;
+    min-height: 44px !important;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* 8. Chart timeframe buttons — full width row */
+  .tf-btn-row {
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+  }
+  .tf-btn {
+    flex: 1 !important;
+    text-align: center;
+    padding: 6px 4px !important;
+  }
+
+  /* 9. Stats bar — 2×2 grid instead of 1×4 */
+  .stats-4col {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  .stats-4col > div:nth-child(2) {
+    border-right: none !important;
+  }
+  .stats-4col > div:nth-child(3) {
+    border-bottom: none;
+  }
+
+  /* 10. Buy/sell toggle and inputs — min 48px */
+  .buy-sell-mode-btn {
+    min-height: 48px !important;
+  }
+  .buy-sell-input {
+    min-height: 48px !important;
+  }
+
+  /* 11. Detail tabs — no text wrapping */
+  .detail-tab {
+    white-space: nowrap !important;
+    font-size: 12px !important;
+    padding: 12px 6px !important;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* 13. Generic touch targets */
+  .btn-primary { min-height: 44px; }
+  .btn-ghost   { min-height: 44px; }
+  .back-btn    { min-height: 44px; min-width: 44px; }
+}
+
+/* 14. Very small screens (< 375px) — reduce base font */
+@media (max-width: 374px) {
+  html, body { font-size: 14px; }
+  .tcard-name { font-size: 10px !important; }
+  .tcard-mc   { font-size: 9px !important;  }
+  .tcard-sym  { font-size: 8px !important;  }
+  .trending-title { font-size: 13px !important; }
+}

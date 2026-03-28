@@ -190,7 +190,7 @@ let _demoBases = DEMO_TOKENS_BASE.map(b => ({ ...b }))
   return (
     <Layout>
       {/* LAUNCH BANNER */}
-      <div style={{ margin:'12px 16px', padding:'14px 18px', background:'linear-gradient(135deg,rgba(110,84,255,0.15),rgba(133,230,255,0.08))', border:'1px solid rgba(110,84,255,0.25)', borderRadius:14, display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, flexWrap:'wrap' }}>
+      <div className="launch-banner" style={{ margin:'12px 16px', padding:'14px 18px', background:'linear-gradient(135deg,rgba(110,84,255,0.15),rgba(133,230,255,0.08))', border:'1px solid rgba(110,84,255,0.25)', borderRadius:14, display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
         <div>
           <div style={{ fontSize:15, fontWeight:800, marginBottom:2 }}>🚀 MonPad is live on Monad Mainnet</div>
           <div style={{ fontSize:12, color:'var(--t3)' }}>Launch your token in seconds. Fair launch, no presale, no rug.</div>
@@ -202,8 +202,8 @@ let _demoBases = DEMO_TOKENS_BASE.map(b => ({ ...b }))
       </div>
       {/* TRENDING CAROUSEL */}
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'16px 16px 10px' }}>
-        <div style={{ fontSize:17, fontWeight:800 }}>Trending coins</div>
-        <div style={{ display:'flex', gap:6 }}>
+        <div className="trending-title" style={{ fontSize:17, fontWeight:800 }}>Trending coins</div>
+        <div className="trending-arrows" style={{ display:'flex', gap:6 }}>
           {['‹','›'].map((ch,i) => (
             <button key={ch}
               onClick={() => carouselRef.current?.scrollBy({ left: i===0?-240:240, behavior:'smooth' })}
@@ -227,10 +227,10 @@ let _demoBases = DEMO_TOKENS_BASE.map(b => ({ ...b }))
           const color  = GRAD_COLORS[t.colorIdx % GRAD_COLORS.length]
           return (
             <div key={t.token} onClick={() => router.push(`/token/${t.token}`)}
-              style={{ flexShrink:0, width:230, borderRadius:12, overflow:'hidden', position:'relative', cursor:'pointer', scrollSnapAlign:'start', background: meta?.bannerUrl ? '#000' : `linear-gradient(135deg,${color}22,${color}08)`, border:`1px solid ${color}22` }}>
+              style={{ flexShrink:0, width:'min(230px, 60vw)', borderRadius:12, overflow:'hidden', position:'relative', cursor:'pointer', scrollSnapAlign:'start', background: meta?.bannerUrl ? '#000' : `linear-gradient(135deg,${color}22,${color}08)`, border:`1px solid ${color}22` }}>
               {meta?.bannerUrl
-                ? <img src={fixUrl(meta.bannerUrl)} alt="" style={{ width:'100%', height:145, objectFit:'cover', display:'block' }} />
-                : <div style={{ height:145, display:'flex', alignItems:'center', justifyContent:'center', fontSize:54, fontWeight:900, color:`${color}20` }}>{(t.symbol||'?').slice(0,2)}</div>
+                ? <img src={fixUrl(meta.bannerUrl)} alt="" className="trend-carousel-card-img" style={{ width:'100%', height:100, objectFit:'cover', display:'block' }} />
+                : <div className="trend-carousel-card-img" style={{ height:100, display:'flex', alignItems:'center', justifyContent:'center', fontSize:42, fontWeight:900, color:`${color}20` }}>{(t.symbol||'?').slice(0,2)}</div>
               }
               {isLive && (
                 <div style={{ position:'absolute', top:8, left:8, background:'#ef4444', color:'white', fontSize:10, fontWeight:800, padding:'3px 8px', borderRadius:99, display:'flex', alignItems:'center', gap:4 }}>
@@ -277,7 +277,7 @@ let _demoBases = DEMO_TOKENS_BASE.map(b => ({ ...b }))
       </div>
 
       {/* TOKEN GRID — 3 columns like pump.fun */}
-      <div style={{ padding:'12px 16px' }}>
+      <div className="token-grid-wrap" style={{ padding:'12px 16px' }}>
         {loading && (
           <div className="token-grid">
             {[...Array(8)].map((_,i) => (
@@ -353,10 +353,10 @@ function TokenCard({ token: t, meta, isLive, monPrice, onClick }) {
       <div className="tcard-body">
         <div>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
-            <div style={{ fontWeight:800, fontSize:12, lineHeight:1.2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1, marginRight:4 }}>{meta?.name || t.name}</div>
-            <div style={{ fontSize:11, fontWeight:800, fontFamily:'var(--mono)', color:'var(--gold)', flexShrink:0 }}>{mcDisplay}</div>
+            <div className="tcard-name" style={{ fontWeight:800, fontSize:12, lineHeight:1.2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1, marginRight:4 }}>{meta?.name || t.name}</div>
+            <div className="tcard-mc" style={{ fontSize:11, fontWeight:800, fontFamily:'var(--mono)', color:'var(--gold)', flexShrink:0 }}>{mcDisplay}</div>
           </div>
-          <div style={{ fontSize:10, color:'var(--t3)', fontFamily:'var(--mono)', marginTop:1 }}>${meta?.symbol || t.symbol}</div>
+          <div className="tcard-sym" style={{ fontSize:10, color:'var(--t3)', fontFamily:'var(--mono)', marginTop:1 }}>${meta?.symbol || t.symbol}</div>
         </div>
         <div>
           <div style={{ width:'100%', height:3, background:'var(--bg3)', borderRadius:999, overflow:'hidden', marginBottom:3 }}>
@@ -366,7 +366,7 @@ function TokenCard({ token: t, meta, isLive, monPrice, onClick }) {
             <div style={{ fontSize:9, color:'var(--t3)', fontFamily:'var(--mono)' }}>{pct.toFixed(1)}%</div>
             {!t.isDemo && (
               <div
-                style={{ fontSize:9, color:'var(--t3)', fontFamily:'var(--mono)', cursor:'pointer', userSelect:'none' }}
+                style={{ fontSize:9, color:'var(--t3)', fontFamily:'var(--mono)', cursor:'pointer', userSelect:'none', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'60%' }}
                 onClick={e => { e.stopPropagation(); navigator.clipboard?.writeText(t.token); e.currentTarget.textContent='✓'; setTimeout(()=>{ if(e.currentTarget) e.currentTarget.textContent = t.token.slice(0,5)+'…'+t.token.slice(-3) },1200) }}
                 title={t.token}
               >
