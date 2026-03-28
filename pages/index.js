@@ -478,17 +478,18 @@ function TokenCard({ token: t, monPrice, isLive, onClick }) {
   )
 }
 
-// ─── Full-width responsive sparkline (stretches to fill container) ───────────
-function SparklineFill({ prices, color = '#00ff88', height = 80 }) {
+// ─── Jagged sparkline — matches pump.fun app exactly ─────────────────────────
+function SparklineFill({ prices, height = 72 }) {
   const isUp = prices && prices.length >= 2
     ? prices[prices.length - 1] >= prices[0]
     : true
-  const lineColor = isUp ? '#00ff88' : '#ef4444'
+  const lineColor = isUp ? '#00ff7f' : '#ff4444'
 
   if (!prices || prices.length < 2) {
     return (
       <svg width="100%" height={height} viewBox="0 0 100 100" preserveAspectRatio="none">
-        <line x1={2} y1={65} x2={98} y2={65} stroke={lineColor} strokeWidth={3} strokeOpacity={0.35} strokeLinecap="round" />
+        <line x1={0} y1={60} x2={100} y2={60}
+          stroke={lineColor} strokeWidth={2.5} strokeOpacity={0.3} strokeLinecap="round" />
       </svg>
     )
   }
@@ -497,36 +498,35 @@ function SparklineFill({ prices, color = '#00ff88', height = 80 }) {
   const min = Math.min(...prices)
   const max = Math.max(...prices)
   const range = max - min || 1
-  const padX = 2, padY = 8
+  const padY = 6
 
-  const pts = prices.map((p, i) => [
-    padX + (i / (prices.length - 1)) * (W - padX * 2),
-    padY + (1 - (p - min) / range) * (H - padY * 2),
-  ])
+  // Straight line segments (jagged) — exactly like pump.fun
+  const pts = prices.map((p, i) => {
+    const x = (i / (prices.length - 1)) * W
+    const y = padY + (1 - (p - min) / range) * (H - padY * 2)
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  })
+  const polyline = pts.join(' ')
 
-  // Smooth bezier
-  let d = `M ${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)}`
-  for (let i = 1; i < pts.length; i++) {
-    const cx = (pts[i-1][0] + pts[i][0]) / 2
-    d += ` C ${cx.toFixed(1)} ${pts[i-1][1].toFixed(1)}, ${cx.toFixed(1)} ${pts[i][1].toFixed(1)}, ${pts[i][0].toFixed(1)} ${pts[i][1].toFixed(1)}`
-  }
-
-  const uid = `glow-${lineColor.replace('#','')}`
+  const uid = `spk-${Math.abs(prices[0] * 1000 | 0)}`
 
   return (
     <svg width="100%" height={height} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
       <defs>
-        <filter id={uid}>
-          <feGaussianBlur stdDeviation="1.5" result="blur" />
+        <filter id={uid} x="-10%" y="-30%" width="120%" height="160%">
+          <feGaussianBlur stdDeviation="1.2" result="blur" />
           <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
         </filter>
       </defs>
-      {/* soft glow underneath */}
-      <path d={d} fill="none" stroke={lineColor} strokeWidth={5} strokeOpacity={0.18}
+      {/* glow halo */}
+      <polyline points={polyline} fill="none"
+        stroke={lineColor} strokeWidth={5} strokeOpacity={0.15}
         strokeLinejoin="round" strokeLinecap="round" />
-      {/* sharp bright line */}
-      <path d={d} fill="none" stroke={lineColor} strokeWidth={2.5}
-        strokeLinejoin="round" strokeLinecap="round" filter={`url(#${uid})`} />
+      {/* sharp jagged line */}
+      <polyline points={polyline} fill="none"
+        stroke={lineColor} strokeWidth={2}
+        strokeLinejoin="round" strokeLinecap="round"
+        filter={`url(#${uid})`} />
     </svg>
   )
 }
@@ -628,36 +628,39 @@ function TokenRow({ token: t, monPrice, isLive, onClick }) {
         display: 'flex',
         alignItems: 'center',
         gap: 14,
-        padding: '18px 16px',
+        padding: '16px 16px',
         cursor: 'pointer',
-        borderBottom: '1px solid rgba(255,255,255,0.07)',
+        borderBottom: '1px solid rgba(255,255,255,0.06)',
         background: '#000',
+        minHeight: 100,
       }}
     >
-      {/* ── Image ── */}
+      {/* ── Image: large square, slight rounding ── */}
       <div style={{
-        width: 88, height: 88, borderRadius: 14, flexShrink: 0,
+        width: 82, height: 82, borderRadius: 12, flexShrink: 0,
         background: imgUrl ? '#111' : `linear-gradient(135deg,${color}44,${color}11)`,
         overflow: 'hidden', position: 'relative',
       }}>
         {imgUrl
           ? <img src={imgUrl} alt={name} style={{ width:'100%', height:'100%', objectFit:'cover' }}
               onError={e => { e.target.style.display = 'none' }} />
-          : <div style={{ width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:30, fontWeight:900, color }}>
+          : <div style={{ width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:28, fontWeight:900, color }}>
               {symbol.slice(0,2).toUpperCase()}
             </div>
         }
+        {t.graduated && (
+          <div style={{ position:'absolute', bottom:0, left:0, right:0, background:'#92400ecc', color:'#fbbf24', fontSize:9, fontWeight:900, textAlign:'center', padding:'2px 0' }}>GRAD</div>
+        )}
         {isLive && (
-          <div style={{ position:'absolute', top:3, right:3, width:8, height:8, borderRadius:'50%', background:'#ef4444', boxShadow:'0 0 6px #ef4444', animation:'blink 1.5s infinite' }} />
+          <div style={{ position:'absolute', top:4, right:4, width:9, height:9, borderRadius:'50%', background:'#ef4444', boxShadow:'0 0 7px #ef4444', animation:'blink 1.5s infinite' }} />
         )}
       </div>
 
       {/* ── Name + sub-line ── */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        {/* Name: large, wraps to 2 lines */}
         <div style={{
           fontWeight: 700,
-          fontSize: 22,
+          fontSize: 23,
           color: '#ffffff',
           lineHeight: 1.2,
           marginBottom: 8,
@@ -665,29 +668,29 @@ function TokenRow({ token: t, monPrice, isLive, onClick }) {
           WebkitLineClamp: 2,
           WebkitBoxOrient: 'vertical',
           overflow: 'hidden',
+          wordBreak: 'break-word',
         }}>
           {name}
         </div>
-        {/* Sub-line: "G... 🌱 28m" */}
-        <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:15, color:'rgba(255,255,255,0.45)' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:5, fontSize:15, color:'rgba(255,255,255,0.4)' }}>
           <span>{symbol.slice(0,1)}...</span>
-          <span style={{ color:'#3ecf6b', fontSize:15 }}>🌱</span>
+          <span style={{ color:'#00cc5a' }}>🌱</span>
           <span>{timeAgo}</span>
         </div>
       </div>
 
-      {/* ── Sparkline ── */}
-      <div style={{ flexShrink: 0, width: 130, height: 70 }}>
-        <SparklineFill prices={sparkPrices} color={sparkColor} height={70} />
+      {/* ── Sparkline: jagged, neon green ── */}
+      <div style={{ flexShrink: 0, width: 130, height: 72 }}>
+        <SparklineFill prices={sparkPrices} height={72} />
       </div>
 
-      {/* ── Market cap: large, right-aligned ── */}
-      <div style={{ flexShrink: 0, textAlign: 'right', minWidth: 68 }}>
-        <div style={{ fontSize: 24, fontWeight: 800, color: '#ffffff', whiteSpace: 'nowrap', letterSpacing: '-0.5px' }}>
+      {/* ── Market cap ── */}
+      <div style={{ flexShrink: 0, textAlign: 'right', minWidth: 70 }}>
+        <div style={{ fontSize: 25, fontWeight: 700, color: '#ffffff', whiteSpace: 'nowrap', letterSpacing: '-0.5px' }}>
           {mc}
         </div>
         {t.graduated && (
-          <div style={{ fontSize: 10, color: '#3ecf6b', fontWeight: 700, marginTop: 1 }}>✓ Grad</div>
+          <div style={{ fontSize: 11, color: '#00ff7f', fontWeight: 700, marginTop: 2 }}>✓ Grad</div>
         )}
       </div>
     </div>
