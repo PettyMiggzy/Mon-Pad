@@ -143,26 +143,22 @@ export default function Home() {
       }}>
         <img src="/monpad-text-logo.png" alt="MonPad"
           style={{ height: 40, width: 140, objectFit: 'contain', objectPosition: 'left' }} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {/* Telegram */}
           <a href="https://t.me/Monpadlounge" target="_blank" rel="noreferrer" style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            width: 46, height: 46, borderRadius: '50%',
-            background: 'transparent',
-            flexShrink: 0,
+            width: 36, height: 36, background: 'transparent', flexShrink: 0,
           }}>
-            <svg viewBox="0 0 24 24" fill="white" width="30" height="30">
+            <svg viewBox="0 0 24 24" fill="white" width="26" height="26">
               <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/>
             </svg>
           </a>
           {/* Wallet */}
           <button onClick={() => router.push('/portfolio')} style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            width: 46, height: 46, borderRadius: '50%',
-            background: 'transparent', border: 'none', cursor: 'pointer',
-            flexShrink: 0,
+            width: 36, height: 36, background: 'transparent', border: 'none', cursor: 'pointer', flexShrink: 0,
           }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="28" height="28">
+            <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="26" height="26">
               <path d="M20 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/>
               <path d="M16 3H8a2 2 0 0 0-2 2v2h12V5a2 2 0 0 0-2-2z"/>
               <circle cx="17" cy="13" r="1.5" fill="white" stroke="none"/>
@@ -526,12 +522,9 @@ function TokenCard({ token: t, monPrice, isLive, onClick }) {
   )
 }
 
-// ─── Jagged sparkline — matches pump.fun app exactly ─────────────────────────
-function SparklineFill({ prices, height = 72 }) {
-  const isUp = prices && prices.length >= 2
-    ? prices[prices.length - 1] >= prices[0]
-    : true
-  const lineColor = isUp ? '#00ff7f' : '#ff4444'
+// ─── Jagged sparkline ────────────────────────────────────────────────────────
+function SparklineFill({ prices, color, height = 72 }) {
+  const lineColor = color || '#a855f7'
 
   if (!prices || prices.length < 2) {
     return (
@@ -609,7 +602,7 @@ function Sparkline({ prices, color = '#22c55e', width = 100, height = 50 }) {
   }
 
   const isUp = prices[prices.length - 1] >= prices[0]
-  const lineColor = isUp ? '#00ff88' : '#ef4444'
+  const lineColor = '#a855f7'
   const glowId = `glow-${width}-${height}`
 
   return (
@@ -665,8 +658,7 @@ function TokenRow({ token: t, monPrice, isLive, onClick }) {
       .catch(() => {})
   }, [t.curve])
 
-  const sparkIsUp = sparkPrices ? sparkPrices[sparkPrices.length - 1] >= sparkPrices[0] : true
-  const sparkColor = sparkIsUp ? '#00ff88' : '#ef4444'
+  const sparkColor = '#a855f7'  // bright purple — MonPad brand color
 
   return (
     <div
@@ -709,15 +701,13 @@ function TokenRow({ token: t, monPrice, isLive, onClick }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
           fontWeight: 600,
-          fontSize: 21,
+          fontSize: 18,
           color: '#ffffff',
-          lineHeight: 1.25,
-          marginBottom: 6,
-          wordBreak: 'break-word',
-          display: '-webkit-box',
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: 'vertical',
+          lineHeight: 1.3,
+          marginBottom: 5,
           overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
         }}>
           {name}
         </div>
