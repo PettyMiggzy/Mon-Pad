@@ -258,19 +258,27 @@ export default function Home() {
       <div style={{ padding:'0 16px 100px' }}>
 
         {loading && (
-          <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
-            {[...Array(6)].map((_, i) => (
-              <div key={i} style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 12px' }}>
-                <div style={{ width:52, height:52, borderRadius:12, background:'var(--bg2)', animation:'pulse 1.5s infinite', flexShrink:0 }} />
-                <div style={{ flex:1, display:'flex', flexDirection:'column', gap:6 }}>
-                  <div style={{ width:120, height:14, borderRadius:6, background:'var(--bg2)', animation:'pulse 1.5s infinite' }} />
-                  <div style={{ width:80, height:10, borderRadius:6, background:'var(--bg2)', animation:'pulse 1.5s infinite' }} />
+          <>
+            {/* Desktop skeleton */}
+            <div className="desktop-grid" style={{ display:'none' }}>
+              {[...Array(8)].map((_, i) => (
+                <div key={i} style={{ display:'flex', gap:10, padding:10, borderRadius:12, background:'var(--bg2)', animation:'pulse 1.5s infinite', height:100 }} />
+              ))}
+            </div>
+            {/* Mobile skeleton */}
+            <div className="mobile-list">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 12px' }}>
+                  <div style={{ width:52, height:52, borderRadius:12, background:'var(--bg2)', animation:'pulse 1.5s infinite', flexShrink:0 }} />
+                  <div style={{ flex:1, display:'flex', flexDirection:'column', gap:6 }}>
+                    <div style={{ width:120, height:14, borderRadius:6, background:'var(--bg2)', animation:'pulse 1.5s infinite' }} />
+                    <div style={{ width:80, height:10, borderRadius:6, background:'var(--bg2)', animation:'pulse 1.5s infinite' }} />
+                  </div>
+                  <div style={{ width:80, height:30, borderRadius:6, background:'var(--bg2)', animation:'pulse 1.5s infinite' }} />
                 </div>
-                <div style={{ width:100, height:40, borderRadius:8, background:'var(--bg2)', animation:'pulse 1.5s infinite' }} />
-                <div style={{ width:72, height:20, borderRadius:6, background:'var(--bg2)', animation:'pulse 1.5s infinite' }} />
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          </>
         )}
 
         {!loading && list.length === 0 && (
@@ -286,17 +294,33 @@ export default function Home() {
         )}
 
         {!loading && list.length > 0 && (
-          <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
-            {list.map(t => (
-              <TokenRow
-                key={t.token}
-                token={t}
-                monPrice={monPrice}
-                isLive={liveSet.has(t.token?.toLowerCase())}
-                onClick={() => router.push(`/token/${t.token}`)}
-              />
-            ))}
-          </div>
+          <>
+            {/* ── DESKTOP: 4-col pump.fun card grid ── */}
+            <div className="desktop-grid" style={{ display:'none' }}>
+              {list.map(t => (
+                <TokenCard
+                  key={t.token}
+                  token={t}
+                  monPrice={monPrice}
+                  isLive={liveSet.has(t.token?.toLowerCase())}
+                  onClick={() => router.push(`/token/${t.token}`)}
+                />
+              ))}
+            </div>
+
+            {/* ── MOBILE: single-row list with sparkline ── */}
+            <div className="mobile-list" style={{ display:'flex', flexDirection:'column', gap:2 }}>
+              {list.map(t => (
+                <TokenRow
+                  key={t.token}
+                  token={t}
+                  monPrice={monPrice}
+                  isLive={liveSet.has(t.token?.toLowerCase())}
+                  onClick={() => router.push(`/token/${t.token}`)}
+                />
+              ))}
+            </div>
+          </>
         )}
       </div>
 
@@ -304,9 +328,158 @@ export default function Home() {
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
         @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
         input:focus { border-color: rgba(110,84,255,0.5) !important; }
-        .token-row:hover { background: rgba(110,84,255,0.06) !important; }
+
+        /* Desktop: show card grid, hide row list */
+        @media (min-width: 640px) {
+          .desktop-grid {
+            display: grid !important;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+          }
+          .mobile-list { display: none !important; }
+        }
+
+        /* Mobile: show row list, hide card grid */
+        @media (max-width: 639px) {
+          .desktop-grid { display: none !important; }
+          .mobile-list  { display: flex !important; flex-direction: column; gap: 2px; }
+        }
+
+        .token-card:hover  { background: rgba(255,255,255,0.05) !important; }
+        .token-row:hover   { background: rgba(110,84,255,0.06) !important; }
       `}</style>
     </Layout>
+  )
+}
+
+// ─── Desktop pump.fun card (4-col grid) ──────────────────────────────────────
+function TokenCard({ token: t, monPrice, isLive, onClick }) {
+  const color  = COLORS[t.colorIdx % COLORS.length]
+  const mc     = fmtUSD(t.marketCap || t.monRaisedNet, monPrice)
+  const change = t.change24h || 0
+  const isUp   = change >= 0
+  const symbol = t.symbol || '??'
+  const name   = t.name   || 'Unknown'
+  const imgUrl = t.pfpUrl || ''
+  const desc   = t.desc   || ''
+  const pct    = Math.min(100, Number(t.bondedBps) / 100)
+  const creator = t.creator ? t.creator.slice(0, 6) : ''
+  const timeAgo = t.createdAt
+    ? (() => {
+        const diff = Math.floor((Date.now() - t.createdAt) / 1000)
+        if (diff < 60)         return `${diff}s ago`
+        if (diff < 3600)       return `${Math.floor(diff/60)}m ago`
+        if (diff < 86400)      return `${Math.floor(diff/3600)}h ago`
+        return `${Math.floor(diff/86400)}d ago`
+      })()
+    : ''
+
+  return (
+    <div
+      className="token-card"
+      onClick={onClick}
+      style={{
+        background: 'var(--bg2)',
+        border: '1px solid var(--bd)',
+        borderRadius: 12,
+        overflow: 'hidden',
+        cursor: 'pointer',
+        transition: 'border-color .15s, box-shadow .15s',
+        display: 'flex',
+        flexDirection: 'row',
+        gap: 0,
+      }}
+      onMouseEnter={e => {
+        e.currentTarget.style.borderColor = `${color}55`
+        e.currentTarget.style.boxShadow = `0 4px 20px rgba(0,0,0,0.35)`
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.borderColor = 'var(--bd)'
+        e.currentTarget.style.boxShadow = 'none'
+      }}
+    >
+      {/* ── Square image ── */}
+      <div style={{
+        width: 90, minHeight: 90, flexShrink: 0,
+        background: imgUrl ? '#000' : `linear-gradient(135deg,${color}44,${color}11)`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        overflow: 'hidden', position: 'relative',
+      }}>
+        {imgUrl
+          ? <img src={imgUrl} alt={name} style={{ width:'100%', height:'100%', objectFit:'cover' }}
+              onError={e => { e.target.style.display='none' }} />
+          : <span style={{ fontSize:26, fontWeight:900, color, textShadow:`0 0 16px ${color}` }}>
+              {symbol.slice(0,2).toUpperCase()}
+            </span>
+        }
+        {t.graduated && (
+          <div style={{ position:'absolute', top:4, left:4, background:'#d97706', color:'white', fontSize:9, fontWeight:800, padding:'2px 6px', borderRadius:5 }}>🎓</div>
+        )}
+        {isLive && !t.graduated && (
+          <div style={{ position:'absolute', top:4, left:4, background:'#ef4444', color:'white', fontSize:9, fontWeight:800, padding:'2px 5px', borderRadius:4, display:'flex', alignItems:'center', gap:3 }}>
+            <span style={{ width:5, height:5, background:'white', borderRadius:'50%', animation:'blink 1.5s infinite', flexShrink:0 }} />LIVE
+          </div>
+        )}
+      </div>
+
+      {/* ── Right: all info ── */}
+      <div style={{ flex:1, minWidth:0, padding:'8px 10px', display:'flex', flexDirection:'column', gap:3 }}>
+
+        {/* Name */}
+        <div style={{ fontWeight:800, fontSize:14, color:'var(--t1)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', lineHeight:1.2 }}>
+          {name}
+        </div>
+
+        {/* Ticker */}
+        <div style={{ fontSize:11, color:'var(--t3)', fontFamily:'var(--mono)', fontWeight:600 }}>
+          {symbol}
+        </div>
+
+        {/* Creator + time */}
+        <div style={{ display:'flex', alignItems:'center', gap:5, fontSize:11, color:'var(--t3)' }}>
+          <span style={{ display:'inline-block', width:7, height:7, borderRadius:'50%', background:'#22c55e', flexShrink:0 }} />
+          <span style={{ fontFamily:'var(--mono)', color:'var(--t2)' }}>{creator}</span>
+          {timeAgo && <span style={{ color:'var(--t3)' }}>{timeAgo}</span>}
+        </div>
+
+        {/* Description */}
+        {desc && (
+          <div style={{ fontSize:11, color:'var(--t3)', overflow:'hidden', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', lineHeight:1.4, marginTop:2 }}>
+            {desc}
+          </div>
+        )}
+
+        {/* Spacer */}
+        <div style={{ flex:1 }} />
+
+        {/* MC + progress + change */}
+        <div style={{ marginTop: 4 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4 }}>
+            <span style={{ fontSize:12, color:'var(--t3)' }}>MC</span>
+            <span style={{ fontSize:12, fontWeight:800, color:'var(--t1)', fontFamily:'var(--mono)' }}>{mc}</span>
+            {/* Progress bar */}
+            <div style={{ flex:1, height:4, borderRadius:999, background:'rgba(255,255,255,0.08)', overflow:'hidden' }}>
+              <div style={{
+                height:'100%', borderRadius:999,
+                width: `${pct}%`,
+                background: t.graduated
+                  ? 'linear-gradient(90deg,#22c55e,#16a34a)'
+                  : `linear-gradient(90deg,${color},${color}99)`,
+                boxShadow: `0 0 6px ${color}66`,
+                transition: 'width .4s',
+              }} />
+            </div>
+            {/* % change */}
+            {change !== 0 && (
+              <span style={{ fontSize:11, fontWeight:700, color: isUp ? '#22c55e' : '#ef4444', fontFamily:'var(--mono)', flexShrink:0 }}>
+                {isUp ? '↑' : '↓'}{Math.abs(change).toFixed(2)}%
+              </span>
+            )}
+          </div>
+        </div>
+
+      </div>
+    </div>
   )
 }
 
