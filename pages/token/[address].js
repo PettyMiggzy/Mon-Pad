@@ -21,7 +21,7 @@ function fixUrl(url) {
   return url
 }
 const DETAIL_TABS = ['Comments', 'Trades', 'Holders']
-const TF_OPTIONS  = ['15m', '1h', '4h', '1d']
+const TF_OPTIONS  = ['1m', '5m', '15m', '1h', 'all']
 
 export default function TokenDetail() {
   const router = useRouter()
@@ -295,82 +295,107 @@ export default function TokenDetail() {
   const dName       = meta?.name    || info.name
   const dSym        = meta?.symbol  || info.symbol
 
-  // Determine chart direction for color
-  const chartPrices = apexSeries[0]?.data?.map(d => d.y?.[3] ?? d.y) ?? []
-  const chartIsUp = chartPrices.length < 2 || chartPrices[chartPrices.length-1] >= chartPrices[0]
-  const chartColor = chartIsUp ? '#00ff7f' : '#ef4444'
-  const chartColorDark = chartIsUp ? '#00cc55' : '#cc2222'
-
-  // Convert candlestick series to line series for area chart
+  // Convert candlestick series → line (close price)
   const lineSeries = apexSeries.length > 0 ? [{
     name: 'Price',
     data: apexSeries[0].data.map(d => ({
       x: d.x,
-      y: Array.isArray(d.y) ? d.y[3] : d.y  // use close price
+      y: Array.isArray(d.y) ? d.y[3] : d.y
     }))
   }] : []
 
+  const chartPrices = lineSeries[0]?.data?.map(d => d.y) ?? []
+  const chartIsUp   = chartPrices.length < 2 || chartPrices[chartPrices.length-1] >= chartPrices[0]
+  const chartColor  = chartIsUp ? '#00ff7f' : '#ef4444'
+  const currentPrice = chartPrices[chartPrices.length - 1] ?? 0
+
   const apexOptions = {
     chart: {
-      type: 'area',
-      background: 'transparent',
+      type: 'line',
+      background: '#000',
       toolbar: { show: false },
       zoom: { enabled: false },
       animations: { enabled: false },
-      sparkline: { enabled: false },
+      fontFamily: 'inherit',
     },
     theme: { mode: 'dark' },
     stroke: {
-      curve: 'smooth',
-      width: 2.5,
+      curve: 'straight',   // jagged, not smooth — matches pump.fun
+      width: 2,
       colors: [chartColor],
     },
-    fill: {
-      type: 'gradient',
-      gradient: {
-        shadeIntensity: 1,
-        opacityFrom: 0.35,
-        opacityTo: 0.01,
-        stops: [0, 100],
-        colorStops: [{
-          offset: 0,
-          color: chartColor,
-          opacity: 0.35,
-        }, {
-          offset: 100,
-          color: chartColor,
-          opacity: 0,
-        }],
-      },
-      colors: [chartColor],
-    },
+    fill: { type: 'solid', opacity: 0 },  // no fill, line only
+    colors: [chartColor],
     xaxis: {
       type: 'datetime',
-      labels: { style: { colors: '#555', fontSize: '11px' } },
+      labels: { style: { colors: '#444', fontSize: '11px' } },
       axisBorder: { show: false },
       axisTicks: { show: false },
     },
     yaxis: {
+      opposite: true,  // price labels on RIGHT like pump.fun
       labels: {
         style: { colors: '#555', fontSize: '11px' },
-        formatter: v => v < 0.001 ? v.toExponential(2) : v.toFixed(6),
-        offsetX: -8,
+        formatter: v => {
+          if (!v) return ''
+          const mon = Number(v)
+          if (mon >= 1000) return (mon/1000).toFixed(0) + 'K'
+          if (mon < 0.001) return mon.toExponential(2)
+          return mon.toFixed(6)
+        },
       },
     },
     grid: {
-      borderColor: 'rgba(255,255,255,0.05)',
+      borderColor: 'rgba(255,255,255,0.06)',
       strokeDashArray: 0,
       xaxis: { lines: { show: false } },
       yaxis: { lines: { show: true } },
-      padding: { left: 8, right: 8 },
+      padding: { left: 0, right: 0, top: 10, bottom: 0 },
+    },
+    annotations: {
+      yaxis: currentPrice > 0 ? [{
+        y: currentPrice,
+        borderColor: 'rgba(255,255,255,0.5)',
+        borderWidth: 1,
+        strokeDashArray: 4,
+        label: {
+          text: currentPrice < 0.001 ? currentPrice.toExponential(4) : currentPrice.toFixed(8),
+          position: 'right',
+          offsetX: 0,
+          style: {
+            background: chartColor,
+            color: '#000',
+            fontSize: '11px',
+            fontWeight: 700,
+            padding: { top: 3, bottom: 3, left: 6, right: 6 },
+            borderRadius: 4,
+          },
+        },
+      }] : [],
     },
     dataLabels: { enabled: false },
+    markers: { size: 0 },
     tooltip: {
       theme: 'dark',
-      x: { format: 'dd MMM HH:mm' },
-      y: { formatter: v => v < 0.001 ? v.toExponential(4) : v.toFixed(8) },
+      x: { format: 'HH:mm:ss' },
+      y: { formatter: v => v < 0.001 ? v.toExponential(4) : v.toFixed(8) + ' MON' },
     },
-    markers: { size: 0 },
+    // neon glow via drop-shadow filter
+    chart: {
+      type: 'line',
+      background: '#000',
+      toolbar: { show: false },
+      zoom: { enabled: false },
+      animations: { enabled: false },
+      dropShadow: {
+        enabled: true,
+        color: chartColor,
+        top: 0,
+        left: 0,
+        blur: 6,
+        opacity: 0.6,
+      },
+    },
   }
 
   return (
@@ -424,25 +449,28 @@ export default function TokenDetail() {
                   </span>
                 </div>
 
-                <div className="tf-btn-row" style={{ padding:'0 14px 8px', display:'flex', gap:6, alignItems:'center' }}>
+                <div className="tf-btn-row" style={{ padding:'8px 14px', display:'flex', gap:6, alignItems:'center', background:'#000' }}>
                   {TF_OPTIONS.map(t => (
                     <button key={t} className="tf-btn" onClick={() => setTf(t)}
-                      style={{ padding:'4px 10px', borderRadius:6, border:'none', fontSize:12, fontWeight:700, cursor:'pointer',
-                        background: tf===t ? 'rgba(110,84,255,0.2)' : 'transparent',
-                        color: tf===t ? 'var(--p2)' : 'var(--t3)' }}>
-                      {t}
+                      style={{
+                        padding:'6px 14px', borderRadius:20, border:'none', fontSize:13, fontWeight:700, cursor:'pointer',
+                        background: tf===t ? 'rgba(255,255,255,0.15)' : 'transparent',
+                        color: tf===t ? '#ffffff' : '#555',
+                        textTransform: 'capitalize',
+                      }}>
+                      {t === 'all' ? 'All' : t}
                     </button>
                   ))}
                 </div>
 
-                <div style={{ height:340, width:'100%', background:'#000', overflow:'hidden', position:'relative' }}>
+                <div style={{ height:360, width:'100%', background:'#000', overflow:'hidden', position:'relative' }}>
                   {lineSeries.length === 0 || lineSeries[0]?.data?.length === 0
                     ? <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100%', gap:12 }}>
                         <div style={{ color:'#555', fontSize:14 }}>No trades yet</div>
                         <div style={{ color:'#6E54FF', fontSize:12, fontWeight:600, animation:'pulse 2s ease-in-out infinite', opacity:0.8 }}>⏳ Waiting for first trade…</div>
                         <div style={{ width:120, height:2, background:'linear-gradient(90deg,transparent,rgba(110,84,255,0.5),transparent)', borderRadius:999, animation:'pulse 2s ease-in-out infinite' }} />
                       </div>
-                    : <ApexChart type="area" height={340} series={lineSeries} options={apexOptions} />
+                    : <ApexChart type="line" height={360} series={lineSeries} options={apexOptions} />
                   }
                 </div>
 
