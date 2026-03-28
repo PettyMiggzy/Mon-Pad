@@ -275,9 +275,9 @@ let _demoBases = DEMO_TOKENS_BASE.map(b => ({ ...b }))
       {/* TOKEN GRID — 3 columns like pump.fun */}
       <div style={{ padding:'12px 16px' }}>
         {loading && (
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12 }}>
-            {[...Array(9)].map((_,i) => (
-              <div key={i} style={{ height:110, borderRadius:12, background:'var(--bg2)', animation:'pulse 1.5s infinite' }} />
+          <div className="token-grid">
+            {[...Array(8)].map((_,i) => (
+              <div key={i} style={{ borderRadius:12, background:'var(--bg2)', animation:'pulse 1.5s infinite', aspectRatio:'1/1.3' }} />
             ))}
           </div>
         )}
@@ -302,14 +302,13 @@ let _demoBases = DEMO_TOKENS_BASE.map(b => ({ ...b }))
               <TokenCard key={t.token} token={t} meta={metas[t.token?.toLowerCase()]} isLive={live.has(t.token?.toLowerCase())} monPrice={monPrice} onClick={() => router.push(`/token/${t.token}`)} />
             ))}
             {list.length < 6 && Array.from({ length: Math.max(0, 4 - list.length) }).map((_, i) => (
-              <div key={`demo-${i}`} style={{ display:'flex', gap:10, padding:10, border:'1px dashed var(--bd2)', borderRadius:12, background:'var(--bg2)', opacity:0.4, cursor:'default' }}>
-                <div style={{ width:72, height:72, borderRadius:9, background:'linear-gradient(135deg,var(--p)20,var(--bg3))', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:24 }}>
+              <div key={`empty-${i}`} className="tcard" style={{ opacity:0.35, cursor:'default' }}>
+                <div className="tcard-img" style={{ background:'var(--bg3)', fontSize:32 }}>
                   {['🚀','💎','🔥','⚡'][i]}
                 </div>
-                <div style={{ flex:1 }}>
-                  <div style={{ fontSize:13, fontWeight:700, color:'var(--t3)', marginBottom:4 }}>Your token here</div>
-                  <div style={{ fontSize:11, color:'var(--t3)' }}>Launch on MonPad for 10 MON</div>
-                  <div style={{ fontSize:11, color:'var(--p2)', marginTop:6, fontWeight:600 }}>+ Create →</div>
+                <div className="tcard-body">
+                  <div style={{ fontSize:12, fontWeight:700, color:'var(--t3)', marginBottom:2 }}>Your token here</div>
+                  <div style={{ fontSize:10, color:'var(--p2)', fontWeight:600 }}>+ Launch →</div>
                 </div>
               </div>
             ))}
@@ -323,46 +322,42 @@ let _demoBases = DEMO_TOKENS_BASE.map(b => ({ ...b }))
 function TokenCard({ token: t, meta, isLive, monPrice, onClick }) {
   const pct   = Number(t.bondedBps) / 100
   const color = GRAD_COLORS[t.colorIdx % GRAD_COLORS.length]
+  const mcDisplay = fmtUSD(t.marketCap || t.monRaisedNet, monPrice)
 
   return (
     <div className="tcard" onClick={onClick}>
-      {/* Image */}
-      <div className="tcard-img" style={{ background: meta?.pfpUrl ? '#000' : `linear-gradient(135deg,${color}30,${color}10)`, position:'relative', overflow:'hidden' }}>
+      {/* Square image */}
+      <div className="tcard-img" style={{ background: meta?.pfpUrl ? '#000' : `linear-gradient(135deg,${color}30,${color}10)` }}>
         {meta?.pfpUrl
           ? <img src={fixUrl(meta.pfpUrl)} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
-          : <span style={{ fontSize:24, fontWeight:900, color:`${color}50` }}>{(t.symbol||'?').slice(0,2)}</span>
+          : <span style={{ fontSize:28, fontWeight:900, color:`${color}60` }}>{(t.symbol||'?').slice(0,2)}</span>
         }
-        {t.graduated && <div className="tcard-badge" style={{ background:'var(--gold)', color:'#000' }}>🎓 GRAD</div>}
+        {t.graduated && (
+          <div className="tcard-badge" style={{ background:'var(--gold)', color:'#000' }}>🎓</div>
+        )}
         {isLive && !t.graduated && (
-          <div className="tcard-badge" style={{ display:'flex', alignItems:'center', gap:3 }}>
-            <span style={{ width:5, height:5, background:'white', borderRadius:'50%', animation:'blink 1.5s infinite' }} />
-            LIVE
+          <div className="tcard-badge" style={{ display:'flex', alignItems:'center', gap:3, background:'#ef4444' }}>
+            <span style={{ width:5, height:5, background:'white', borderRadius:'50%', animation:'blink 1.5s infinite' }} />LIVE
           </div>
+        )}
+        {t.isDemo && (
+          <div style={{ position:'absolute', bottom:4, right:4, fontSize:9, background:'rgba(0,0,0,0.6)', color:'rgba(255,255,255,0.4)', padding:'1px 5px', borderRadius:4, fontWeight:700 }}>DEMO</div>
         )}
       </div>
 
-      {/* Info */}
+      {/* Info below image */}
       <div className="tcard-body">
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:2 }}>
-          <div style={{ fontWeight:800, fontSize:13, lineHeight:1.2 }}>{meta?.name || t.name}</div>
-          <div style={{ fontSize:11, fontWeight:700, fontFamily:'var(--mono)', color:'var(--t1)', flexShrink:0, marginLeft:4 }}>{fmtUSD(t.marketCap || t.monRaisedNet, monPrice)}</div>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:2 }}>
+          <div style={{ fontWeight:800, fontSize:12, lineHeight:1.2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1, marginRight:4 }}>{meta?.name || t.name}</div>
+          <div style={{ fontSize:11, fontWeight:800, fontFamily:'var(--mono)', color:'var(--gold)', flexShrink:0 }}>{mcDisplay}</div>
         </div>
-        <div style={{ fontSize:11, color:'var(--t3)', marginBottom:5, fontFamily:'var(--mono)' }}>${meta?.symbol || t.symbol}</div>
+        <div style={{ fontSize:10, color:'var(--t3)', marginBottom:5, fontFamily:'var(--mono)' }}>${meta?.symbol || t.symbol}</div>
 
-        {/* Progress bar */}
-        <div style={{ width:'100%', height:3, background:'var(--bg3)', borderRadius:999, overflow:'hidden', marginBottom:4 }}>
-          <div style={{ height:'100%', background: t.graduated ? 'linear-gradient(90deg,#d97706,#FFAE45)' : `linear-gradient(90deg,${color},${color}88)`, borderRadius:999, width:`${Math.min(pct,100)}%` }} />
+        {/* Bonding progress bar */}
+        <div style={{ width:'100%', height:3, background:'var(--bg3)', borderRadius:999, overflow:'hidden' }}>
+          <div style={{ height:'100%', background: t.graduated ? 'linear-gradient(90deg,#d97706,#FFAE45)' : `linear-gradient(90deg,${color},${color}88)`, borderRadius:999, width:`${Math.min(pct,100)}%`, transition:'width .4s ease' }} />
         </div>
-
-        {/* MC label + pct */}
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <span style={{ fontSize:10, color:'var(--t3)' }}>MC {fmtUSD(t.marketCap || t.monRaisedNet, monPrice)}</span>
-          <span style={{ fontSize:10, fontWeight:700, color: pct >= 70 ? 'var(--gold)' : 'var(--t3)', fontFamily:'var(--mono)' }}>↑{pct.toFixed(1)}%</span>
-        </div>
-
-        {meta?.desc && (
-          <div style={{ fontSize:11, color:'var(--t3)', marginTop:4, overflow:'hidden', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical' }}>{meta.desc}</div>
-        )}
+        <div style={{ fontSize:9, color:'var(--t3)', marginTop:3, fontFamily:'var(--mono)' }}>{pct.toFixed(1)}% bonded</div>
       </div>
     </div>
   )
