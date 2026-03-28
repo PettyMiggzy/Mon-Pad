@@ -282,7 +282,7 @@ let _demoBases = DEMO_TOKENS_BASE.map(b => ({ ...b }))
       {/* TOKEN GRID — 3 columns like pump.fun */}
       <div className="token-grid-wrap" style={{ padding:'12px 16px' }}>
         {loading && (
-          <div className="token-grid" style={{ gridTemplateColumns:"repeat(2,1fr)", gap:8 }}>
+          <div className="token-grid">
             {[...Array(8)].map((_,i) => (
               <div key={i} style={{ borderRadius:12, background:'var(--bg2)', animation:'pulse 1.5s infinite', height:200 }} />
             ))}
@@ -304,7 +304,7 @@ let _demoBases = DEMO_TOKENS_BASE.map(b => ({ ...b }))
         )}
 
         {!loading && list.length > 0 && (
-          <div className="token-grid" style={{ gridTemplateColumns:"repeat(2,1fr)", gap:8 }}>
+          <div className="token-grid">
             {list.map(t => (
               <TokenCard key={t.token} token={t} meta={metas[t.token?.toLowerCase()]} isLive={live.has(t.token?.toLowerCase())} monPrice={monPrice} onClick={() => !t.isDemo && router.push(`/token/${t.token}`)} />
             ))}
@@ -359,20 +359,13 @@ function TokenCard({ token: t, meta, isLive, monPrice, onClick }) {
 
       {/* Info below image */}
       <div className="tcard-body">
-        <div style={{ fontWeight:800, fontSize:12, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', color:'var(--t1)', marginBottom:2 }}>{meta?.name || t.name}</div>
-        <div style={{ fontSize:10, color:'var(--p2)', fontFamily:'var(--mono)', fontWeight:700, marginBottom:4 }}>${meta?.symbol || t.symbol}</div>
-        <div style={{ fontSize:11, fontWeight:800, fontFamily:'var(--mono)', color:'var(--gold)', marginBottom:4 }}>{mcDisplay}</div>
-        <div style={{ width:'100%', height:4, background:'var(--bg3)', borderRadius:999, overflow:'hidden', marginBottom:4 }}>
-          <div style={{ height:'100%', background: t.graduated ? 'linear-gradient(90deg,#d97706,#FFAE45)' : 'linear-gradient(90deg,var(--p),var(--cyan))', borderRadius:999, width:`${Math.min(pct,100)}%`, transition:'width .4s ease' }} />
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:2 }}>
+          <div style={{ fontWeight:800, fontSize:13, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1, marginRight:8, color:'var(--t1)' }}>{meta?.name || t.name}</div>
+          <div style={{ fontSize:12, fontWeight:800, fontFamily:'var(--mono)', color:'var(--gold)', flexShrink:0 }}>{mcDisplay}</div>
         </div>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <div style={{ fontSize:10, color:'var(--t3)', fontFamily:'var(--mono)' }}>{pct.toFixed(1)}%</div>
-          {!t.isDemo && (
-            <div style={{ fontSize:9, color:'var(--t3)', fontFamily:'var(--mono)', cursor:'pointer', opacity:0.7 }}
-              onClick={e => { e.stopPropagation(); navigator.clipboard?.writeText(t.token); e.currentTarget.textContent='✓'; setTimeout(()=>{ if(e.currentTarget) e.currentTarget.textContent=t.token.slice(0,5)+'…'+t.token.slice(-3) },1200) }}>
-              {t.token.slice(0,5)}…{t.token.slice(-3)}
-            </div>
-          )}
+        <div style={{ fontSize:10, color:'var(--p2)', fontFamily:'var(--mono)', marginBottom:6 }}>${meta?.symbol || t.symbol}</div>
+        <div style={{ width:'100%', height:3, background:'var(--bg3)', borderRadius:999, overflow:'hidden' }}>
+          <div style={{ height:'100%', background: t.graduated ? 'linear-gradient(90deg,#d97706,#FFAE45)' : 'linear-gradient(90deg,var(--p),var(--cyan))', borderRadius:999, width:`${Math.min(pct,100)}%`, transition:'width .4s ease' }} />
         </div>
       </div>
     </div>
