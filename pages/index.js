@@ -327,38 +327,43 @@ let _demoBases = DEMO_TOKENS_BASE.map(b => ({ ...b }))
   )
 }
 
-function timeAgo(blockNumber) {
-  // rough estimate: Monad ~1s block time
-  if (!blockNumber || blockNumber === 0) return ''
-  const secsAgo = Number(BigInt(Date.now()) / 1000n - BigInt(blockNumber) / 1n)
-  // We don't have exact timestamp, so skip if blockNumber looks wrong
-  return ''
+function shortAddr(a) {
+  if (!a) return ''
+  return a.length > 10 ? `${a.slice(0,6)}…${a.slice(-4)}` : a
 }
 
-function fmtVol(n) {
-  if (!n || n <= 0) return '0'
-  if (n >= 1_000_000) return `${(n/1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n/1_000).toFixed(1)}K`
-  return n.toFixed(1)
+function fmtMONval(n) {
+  if (!n || n <= 0) return '$0'
+  if (n >= 1_000_000) return `$${(n/1_000_000).toFixed(2)}M`
+  if (n >= 1_000) return `$${(n/1_000).toFixed(1)}K`
+  return `$${n.toFixed(2)}`
 }
 
 function TokenCard({ token: t, meta, isLive, monPrice, onClick }) {
   const pct        = Number(t.bondedBps) / 100
   const color      = GRAD_COLORS[t.colorIdx % GRAD_COLORS.length]
   const mcDisplay  = fmtUSD(t.marketCap || t.monRaisedNet, monPrice)
-  const athDisplay = t.ath > 0 ? fmtUSD(BigInt(Math.floor(t.ath * 1e9 * 1e18)), monPrice) : null
   const change24h  = t.change24h || 0
   const isUp       = change24h >= 0
-  const vol24h     = t.vol24h || 0
-  const holders    = t.uniqueBuyers || 0
+  const imgUrl     = fixUrl(meta?.pfpUrl || t.pfpUrl || '')
+  const symbol     = meta?.symbol || t.symbol || '??'
+  const name       = meta?.name   || t.name   || 'Unknown'
+  const desc       = meta?.desc   || meta?.description || ''
+  const contract   = t.token || t.tokenAddress || ''
+
+  // ATH: t.ath is price in MON per token, MC = ath * 1B supply
+  const athMon = t.ath > 0 ? t.ath * 1_000_000_000 : 0
+  const athDisplay = athMon > 0 ? fmtUSD(BigInt(Math.floor(athMon * 1e18)), monPrice) : null
 
   return (
     <div className="tcard" onClick={onClick} style={{ cursor: t.isDemo ? 'default' : 'pointer', opacity: t.isDemo ? 0.85 : 1 }}>
-      {/* Square image left */}
-      <div className="tcard-img" style={{ background: (meta?.pfpUrl || t.pfpUrl) ? '#000' : `linear-gradient(135deg,${color}30,#0c0c12)` }}>
-        {(meta?.pfpUrl || t.pfpUrl)
-          ? <img src={fixUrl(meta?.pfpUrl || t.pfpUrl)} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} onError={e => e.target.style.display='none'} />
-          : <span style={{ fontSize:28, fontWeight:900, color:`${color}` }}>{(t.symbol||'?').slice(0,2)}</span>
+
+      {/* ── Image left ── */}
+      <div className="tcard-img" style={{ background: imgUrl ? '#000' : `linear-gradient(135deg,${color}55,${color}11)` }}>
+        {imgUrl
+          ? <img src={imgUrl} alt={name} style={{ width:'100%', height:'100%', objectFit:'cover' }}
+              onError={e => { e.target.style.display='none'; e.target.parentNode.style.background=`linear-gradient(135deg,${color}55,${color}11)` }} />
+          : <span style={{ fontSize:30, fontWeight:900, color:color, textShadow:`0 0 20px ${color}88` }}>{symbol.slice(0,2).toUpperCase()}</span>
         }
         {t.graduated && <div className="tcard-badge" style={{ background:'var(--gold)', color:'#000' }}>🎓</div>}
         {isLive && !t.graduated && (
@@ -368,64 +373,69 @@ function TokenCard({ token: t, meta, isLive, monPrice, onClick }) {
         )}
       </div>
 
-      {/* Info right — nad.fun style */}
+      {/* ── Info right ── */}
       <div className="tcard-body">
-        <div>
-          {/* Top row: symbol badge + 24h change */}
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:4 }}>
-            <div style={{ display:'inline-block', background:'rgba(110,84,255,0.25)', borderRadius:6, padding:'2px 10px', fontSize:11, fontWeight:800, color:'var(--p2)', fontFamily:'var(--mono)' }}>${meta?.symbol || t.symbol}</div>
-            {change24h !== 0 && (
-              <span style={{ fontSize:11, fontWeight:700, color: isUp ? 'var(--g)' : 'var(--r)', fontFamily:'var(--mono)' }}>
-                {isUp ? '▲' : '▼'} {Math.abs(change24h).toFixed(1)}%
-              </span>
-            )}
+
+        {/* Top: symbol + 24h change */}
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:3 }}>
+          <div style={{ background:'rgba(110,84,255,0.25)', borderRadius:6, padding:'2px 9px', fontSize:11, fontWeight:800, color:'var(--p2)', fontFamily:'var(--mono)' }}>
+            ${symbol}
           </div>
-          {/* Token name */}
-          <div style={{ fontSize:15, fontWeight:800, color:'var(--t1)', lineHeight:1.2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', marginBottom:3 }}>{meta?.name || t.name}</div>
-          {/* Description if available */}
-          {(meta?.desc || meta?.description) && (
-            <div style={{ fontSize:11, color:'var(--t3)', lineHeight:1.4, overflow:'hidden', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', marginBottom:4 }}>{meta?.desc || meta?.description}</div>
+          {change24h !== 0 && (
+            <span style={{ fontSize:11, fontWeight:700, color: isUp ? 'var(--g)' : 'var(--r)', fontFamily:'var(--mono)' }}>
+              {isUp ? '▲' : '▼'}{Math.abs(change24h).toFixed(1)}%
+            </span>
           )}
         </div>
 
-        {/* Stats row */}
-        <div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'4px 8px', marginBottom:6 }}>
-            <div>
-              <span style={{ fontSize:10, color:'var(--t3)' }}>MC </span>
-              <span style={{ fontSize:12, fontWeight:800, fontFamily:'var(--mono)', color:'var(--gold)' }}>{mcDisplay}</span>
-            </div>
-            {athDisplay && (
-              <div>
-                <span style={{ fontSize:10, color:'var(--t3)' }}>ATH </span>
-                <span style={{ fontSize:12, fontWeight:700, fontFamily:'var(--mono)', color:'var(--p2)' }}>{athDisplay}</span>
-              </div>
-            )}
-            {vol24h > 0 && (
-              <div>
-                <span style={{ fontSize:10, color:'var(--t3)' }}>Vol </span>
-                <span style={{ fontSize:12, fontWeight:700, fontFamily:'var(--mono)', color:'var(--cyan)' }}>{fmtVol(vol24h)} MON</span>
-              </div>
-            )}
-            {holders > 0 && (
-              <div style={{ display:'flex', alignItems:'center', gap:3 }}>
-                <span style={{ fontSize:10 }}>👥</span>
-                <span style={{ fontSize:12, fontWeight:700, color:'var(--t2)' }}>{holders}</span>
-              </div>
-            )}
-          </div>
-
-          {/* Bonding bar */}
-          <div style={{ display:'flex', justifyContent:'space-between', fontSize:10, color:'var(--t3)', marginBottom:3 }}>
-            <span>Bonding</span>
-            <span style={{ fontWeight:700, color: t.graduated ? 'var(--g)' : 'var(--t2)', fontFamily:'var(--mono)' }}>
-              {t.graduated ? '✓ Graduated' : `${pct.toFixed(1)}%`}
-            </span>
-          </div>
-          <div style={{ width:'100%', height:4, background:'var(--bg3)', borderRadius:999, overflow:'hidden' }}>
-            <div style={{ height:'100%', background: t.graduated ? 'linear-gradient(90deg,#d97706,#FFAE45)' : 'linear-gradient(90deg,var(--p),var(--cyan))', borderRadius:999, width:`${Math.min(pct,100)}%`, transition:'width .4s ease' }} />
-          </div>
+        {/* Name */}
+        <div style={{ fontSize:15, fontWeight:800, color:'var(--t1)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', marginBottom:2 }}>
+          {name}
         </div>
+
+        {/* Description */}
+        {desc && (
+          <div style={{ fontSize:11, color:'var(--t3)', lineHeight:1.4, overflow:'hidden', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', marginBottom:4 }}>
+            {desc}
+          </div>
+        )}
+
+        {/* Contract address */}
+        <div style={{ fontSize:10, color:'var(--t3)', fontFamily:'var(--mono)', marginBottom:6 }}>
+          {shortAddr(contract)}
+        </div>
+
+        {/* Stats: MC + ATH */}
+        <div style={{ display:'flex', gap:10, marginBottom:6 }}>
+          <div>
+            <span style={{ fontSize:10, color:'var(--t3)' }}>MC </span>
+            <span style={{ fontSize:12, fontWeight:800, fontFamily:'var(--mono)', color:'var(--gold)' }}>{mcDisplay}</span>
+          </div>
+          {athDisplay && (
+            <div>
+              <span style={{ fontSize:10, color:'var(--t3)' }}>ATH </span>
+              <span style={{ fontSize:12, fontWeight:700, fontFamily:'var(--mono)', color:'var(--p2)' }}>{athDisplay}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Bonding progress bar */}
+        <div style={{ display:'flex', justifyContent:'space-between', fontSize:10, color:'var(--t3)', marginBottom:3 }}>
+          <span>Bonding curve</span>
+          <span style={{ fontWeight:700, color: t.graduated ? 'var(--g)' : 'var(--p3)', fontFamily:'var(--mono)' }}>
+            {t.graduated ? '✓ Grad' : `${pct.toFixed(1)}%`}
+          </span>
+        </div>
+        <div style={{ width:'100%', height:5, background:'var(--bg3)', borderRadius:999, overflow:'hidden' }}>
+          <div style={{
+            height:'100%',
+            background: t.graduated ? 'linear-gradient(90deg,#d97706,#FFAE45)' : 'linear-gradient(90deg,var(--p),var(--cyan))',
+            borderRadius:999,
+            width:`${Math.min(pct,100)}%`,
+            transition:'width .4s ease'
+          }} />
+        </div>
+
       </div>
     </div>
   )
