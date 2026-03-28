@@ -348,21 +348,28 @@ function TokenCard({ token: t, meta, isLive, monPrice, onClick }) {
         )}
       </div>
 
-      {/* Info right */}
+      {/* Info right — nad.fun style */}
       <div className="tcard-body">
-        {/* Symbol badge + name */}
-        <div style={{ display:'inline-block', background:'rgba(110,84,255,0.2)', border:'1px solid rgba(110,84,255,0.3)', borderRadius:5, padding:'2px 8px', fontSize:10, fontWeight:800, color:'var(--p2)', fontFamily:'var(--mono)', marginBottom:4 }}>${meta?.symbol || t.symbol}</div>
-        <div style={{ fontSize:15, fontWeight:800, color:'var(--t1)', marginBottom:6, lineHeight:1.2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{meta?.name || t.name}</div>
-        {/* MC row */}
-        <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
-          <span style={{ fontSize:11, color:'var(--t3)' }}>MC</span>
-          <span style={{ fontSize:13, fontWeight:800, fontFamily:'var(--mono)', color:'var(--gold)' }}>{mcDisplay}</span>
+        <div>
+          {/* Symbol badge */}
+          <div style={{ display:'inline-block', background:'rgba(110,84,255,0.25)', borderRadius:6, padding:'2px 10px', fontSize:11, fontWeight:800, color:'var(--p2)', fontFamily:'var(--mono)', marginBottom:6 }}>${meta?.symbol || t.symbol}</div>
+          {/* Token name */}
+          <div style={{ fontSize:17, fontWeight:800, color:'var(--t1)', lineHeight:1.2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', marginBottom:4 }}>{meta?.name || t.name}</div>
+          {/* Description if available */}
+          {(meta?.desc || meta?.description) && (
+            <div style={{ fontSize:11, color:'var(--t3)', lineHeight:1.5, overflow:'hidden', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', marginBottom:6 }}>{meta?.desc || meta?.description}</div>
+          )}
         </div>
-        {/* Bonding bar */}
-        <div style={{ width:'100%', height:4, background:'var(--bg3)', borderRadius:999, overflow:'hidden', marginBottom:3 }}>
-          <div style={{ height:'100%', background: t.graduated ? 'linear-gradient(90deg,#d97706,#FFAE45)' : 'linear-gradient(90deg,var(--p),var(--cyan))', borderRadius:999, width:`${Math.min(pct,100)}%`, transition:'width .4s ease' }} />
+        <div>
+          {/* MC + bonding */}
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5 }}>
+            <span style={{ fontSize:12, color:'var(--t3)' }}>MC <span style={{ fontSize:14, fontWeight:800, fontFamily:'var(--mono)', color:'var(--gold)' }}>{mcDisplay}</span></span>
+            <span style={{ fontSize:10, color:'var(--t3)', fontFamily:'var(--mono)' }}>{pct.toFixed(1)}%</span>
+          </div>
+          <div style={{ width:'100%', height:4, background:'var(--bg3)', borderRadius:999, overflow:'hidden' }}>
+            <div style={{ height:'100%', background: t.graduated ? 'linear-gradient(90deg,#d97706,#FFAE45)' : 'linear-gradient(90deg,var(--p),var(--cyan))', borderRadius:999, width:`${Math.min(pct,100)}%`, transition:'width .4s ease' }} />
+          </div>
         </div>
-        <div style={{ fontSize:10, color:'var(--t3)', fontFamily:'var(--mono)' }}>{pct.toFixed(1)}% bonded{t.isDemo ? ' · demo' : ''}</div>
       </div>
     </div>
   )

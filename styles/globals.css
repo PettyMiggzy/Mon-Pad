@@ -507,7 +507,7 @@ input, textarea { font-family: var(--sans); }
   display: flex;
   flex-direction: row;
   border: 1px solid var(--bd);
-  border-radius: 12px;
+  border-radius: 14px;
   cursor: pointer;
   transition: border-color .15s, background .15s;
   background: var(--bg2);
@@ -517,25 +517,25 @@ input, textarea { font-family: var(--sans); }
 .tcard:hover { border-color: rgba(110,84,255,0.3); background: rgba(110,84,255,0.03); }
 
 .tcard-img {
-  width: 110px;
-  height: 110px;
+  width: 130px;
+  height: 130px;
   flex-shrink: 0;
   overflow: hidden;
   display: flex; align-items: center; justify-content: center;
   position: relative;
   background: var(--bg3);
-  font-size: 28px;
+  font-size: 36px;
   font-weight: 900;
 }
 .tcard-img img { width: 100%; height: 100%; object-fit: cover; }
 
 .tcard-body {
   flex: 1;
-  padding: 12px 14px;
+  padding: 14px 16px;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: space-between;
 }
 
 .tcard-badge {
