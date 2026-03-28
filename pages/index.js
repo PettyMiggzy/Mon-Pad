@@ -172,7 +172,7 @@ export default function Home() {
 
       {/* ═══ TRENDING CAROUSEL ═══ */}
       <div style={{ padding: '4px 16px 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--t2)' }}>🔥 Trending</span>
+        <span style={{ fontSize: 17, fontWeight: 800, color: 'var(--t2)' }}>🔥 Trending</span>
         <div style={{ display: 'flex', gap: 4 }}>
           {['‹','›'].map((ch, i) => (
             <button key={ch} onClick={() => carouselRef.current?.scrollBy({ left: i === 0 ? -220 : 220, behavior: 'smooth' })}
@@ -183,14 +183,14 @@ export default function Home() {
         </div>
       </div>
 
-      <div ref={carouselRef} style={{ display:'flex', gap:10, padding:'0 16px 12px', overflowX:'auto', scrollbarWidth:'none', WebkitOverflowScrolling:'touch' }}>
+      <div ref={carouselRef} style={{ display:'flex', gap:12, padding:'0 16px 16px', overflowX:'auto', scrollbarWidth:'none', WebkitOverflowScrolling:'touch' }}>
         {trending.map((t, i) => {
           const color = COLORS[t.colorIdx % COLORS.length]
           const mc    = fmtUSD(t.marketCap || t.monRaisedNet, monPrice)
           return (
             <div key={t.token} onClick={() => router.push(`/token/${t.token}`)}
               style={{
-                flexShrink: 0, width: 200, borderRadius: 16, overflow: 'hidden',
+                flexShrink: 0, width: 240, borderRadius: 18, overflow: 'hidden',
                 position: 'relative', cursor: 'pointer',
                 border: `1px solid ${color}33`,
                 background: t.bannerUrl ? '#000' : `linear-gradient(135deg,${color}22,${color}08)`,
@@ -200,10 +200,10 @@ export default function Home() {
               onMouseLeave={e => e.currentTarget.style.transform='translateY(0)'}
             >
               {t.bannerUrl
-                ? <img src={t.bannerUrl} alt="" style={{ width:'100%', height:130, objectFit:'cover', display:'block' }} />
-                : <div style={{ height:130, display:'flex', alignItems:'center', justifyContent:'center', fontSize:48, fontWeight:900, color:`${color}40` }}>
+                ? <img src={t.bannerUrl} alt="" style={{ width:'100%', height:160, objectFit:'cover', display:'block' }} />
+                : <div style={{ height:160, display:'flex', alignItems:'center', justifyContent:'center', fontSize:56, fontWeight:900, color:`${color}40` }}>
                     {t.pfpUrl
-                      ? <img src={t.pfpUrl} alt="" style={{ width:85, height:85, borderRadius:'50%', objectFit:'cover', border:`2px solid ${color}55` }} />
+                      ? <img src={t.pfpUrl} alt="" style={{ width:100, height:100, borderRadius:'50%', objectFit:'cover', border:`3px solid ${color}66` }} />
                       : (t.symbol||'?').slice(0,2)
                     }
                   </div>
@@ -214,9 +214,9 @@ export default function Home() {
                   <span style={{ width:5, height:5, background:'white', borderRadius:'50%', animation:'blink 1.5s infinite' }} />LIVE
                 </div>
               )}
-              <div style={{ position:'absolute', bottom:0, left:0, right:0, padding:'10px 12px', zIndex:2 }}>
-                <div style={{ fontSize:16, fontWeight:900, color:'white', lineHeight:1.1 }}>{mc}</div>
-                <div style={{ fontSize:12, color:'rgba(255,255,255,0.65)', fontWeight:700 }}>${t.symbol}</div>
+              <div style={{ position:'absolute', bottom:0, left:0, right:0, padding:'12px 14px', zIndex:2 }}>
+                <div style={{ fontSize:19, fontWeight:900, color:'white', lineHeight:1.1 }}>{mc}</div>
+                <div style={{ fontSize:13, color:'rgba(255,255,255,0.65)', fontWeight:700 }}>${t.symbol}</div>
               </div>
             </div>
           )
@@ -580,7 +580,7 @@ function TokenRow({ token: t, monPrice, isLive, onClick }) {
         display: 'flex',
         alignItems: 'center',
         gap: 14,
-        padding: '14px 16px',
+        padding: '16px 16px',
         cursor: 'pointer',
         borderBottom: '1px solid rgba(255,255,255,0.06)',
         transition: 'background .12s',
@@ -588,7 +588,7 @@ function TokenRow({ token: t, monPrice, isLive, onClick }) {
     >
       {/* ── Large square image ── */}
       <div style={{
-        width: 80, height: 80, borderRadius: 16, flexShrink: 0,
+        width: 96, height: 96, borderRadius: 18, flexShrink: 0,
         background: imgUrl ? '#111' : `linear-gradient(135deg,${color}55,${color}11)`,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         overflow: 'hidden', position: 'relative',
@@ -596,7 +596,7 @@ function TokenRow({ token: t, monPrice, isLive, onClick }) {
         {imgUrl
           ? <img src={imgUrl} alt={name} style={{ width:'100%', height:'100%', objectFit:'cover' }}
               onError={e => { e.target.style.display = 'none' }} />
-          : <span style={{ fontSize:26, fontWeight:900, color, textShadow:`0 0 14px ${color}` }}>
+          : <span style={{ fontSize:30, fontWeight:900, color, textShadow:`0 0 14px ${color}` }}>
               {symbol.slice(0, 2).toUpperCase()}
             </span>
         }
@@ -609,13 +609,13 @@ function TokenRow({ token: t, monPrice, isLive, onClick }) {
       </div>
 
       {/* ── Name + sub-line ── */}
-      <div style={{ width: 90, flexShrink: 0 }}>
+      <div style={{ width: 110, flexShrink: 0 }}>
         {/* Name — wraps naturally, ~2 lines, large font */}
-        <div style={{ fontWeight: 700, fontSize: 17, color: '#ffffff', lineHeight: 1.2, marginBottom: 6 }}>
+        <div style={{ fontWeight: 700, fontSize: 19, color: '#ffffff', lineHeight: 1.2, marginBottom: 7 }}>
           {name}
         </div>
         {/* Ticker + seedling + time */}
-        <div style={{ display:'flex', alignItems:'center', gap:4, fontSize:13, color:'rgba(255,255,255,0.45)' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:4, fontSize:14, color:'rgba(255,255,255,0.45)' }}>
           <span>{tickerShort}</span>
           <span style={{ color:'#22c55e' }}>🌱</span>
           <span>{timeAgo}</span>
@@ -623,13 +623,13 @@ function TokenRow({ token: t, monPrice, isLive, onClick }) {
       </div>
 
       {/* ── Sparkline ── */}
-      <div style={{ flex: 1, minWidth: 0, height: 60, display:'flex', alignItems:'center' }}>
-        <Sparkline prices={sparkPrices} color={sparkColor} width={130} height={60} />
+      <div style={{ flex: 1, minWidth: 0, height: 70, display:'flex', alignItems:'center' }}>
+        <Sparkline prices={sparkPrices} color={sparkColor} width={140} height={70} />
       </div>
 
       {/* ── Market Cap — large, bold ── */}
       <div style={{ flexShrink: 0, textAlign: 'right' }}>
-        <div style={{ fontSize: 20, fontWeight: 800, color: '#ffffff', whiteSpace: 'nowrap', letterSpacing: '-0.3px' }}>
+        <div style={{ fontSize: 22, fontWeight: 800, color: '#ffffff', whiteSpace: 'nowrap', letterSpacing: '-0.5px' }}>
           {mc}
         </div>
         {t.graduated && (
