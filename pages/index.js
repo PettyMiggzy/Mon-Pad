@@ -671,7 +671,7 @@ function TokenRow({ token: t, monPrice, isLive, onClick }) {
     >
       {/* ── Image: large square, barely rounded like pump.fun ── */}
       <div style={{
-        width: 72, height: 72, borderRadius: 12, flexShrink: 0,
+        width: 80, height: 80, borderRadius: 10, flexShrink: 0,
         background: imgUrl ? '#111' : `linear-gradient(135deg,${color}44,${color}11)`,
         overflow: 'hidden', position: 'relative',
       }}>
@@ -693,11 +693,11 @@ function TokenRow({ token: t, monPrice, isLive, onClick }) {
       {/* ── Name + sub-line ── */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
-          fontWeight: 700,
-          fontSize: 20,
+          fontWeight: 600,
+          fontSize: 21,
           color: '#ffffff',
-          lineHeight: 1.2,
-          marginBottom: 5,
+          lineHeight: 1.25,
+          marginBottom: 6,
           wordBreak: 'break-word',
           display: '-webkit-box',
           WebkitLineClamp: 2,
@@ -706,21 +706,23 @@ function TokenRow({ token: t, monPrice, isLive, onClick }) {
         }}>
           {name}
         </div>
-        <div style={{ display:'flex', alignItems:'center', gap:5, fontSize:14, color:'rgba(255,255,255,0.45)' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:5, fontSize:14, color:'rgba(255,255,255,0.4)' }}>
           <span>{symbol.slice(0,1)}...</span>
-          <span style={{ color:'#22c55e', fontSize:12 }}>🌱</span>
+          <span style={{ color:'#22c55e', fontSize:13 }}>♥</span>
           <span>{timeAgo}</span>
         </div>
       </div>
 
-      {/* ── Sparkline ── */}
-      <div style={{ flex: 1, minWidth: 0, maxWidth: 110, height: 56, alignSelf: 'center' }}>
-        <SparklineFill prices={sparkPrices} height={56} />
-      </div>
+      {/* ── Sparkline: only if data exists ── */}
+      {sparkPrices && sparkPrices.length >= 2 && (
+        <div style={{ flexShrink: 0, width: 100, height: 64, alignSelf: 'center' }}>
+          <SparklineFill prices={sparkPrices} height={64} />
+        </div>
+      )}
 
       {/* ── Market cap ── */}
-      <div style={{ flexShrink: 0, textAlign: 'right', width: 64 }}>
-        <div style={{ fontSize: 22, fontWeight: 700, color: '#ffffff', whiteSpace: 'nowrap', letterSpacing: '-0.3px', lineHeight: 1 }}>
+      <div style={{ flexShrink: 0, textAlign: 'right', minWidth: 60, marginLeft: 'auto' }}>
+        <div style={{ fontSize: 22, fontWeight: 600, color: '#ffffff', whiteSpace: 'nowrap', letterSpacing: '-0.3px', lineHeight: 1 }}>
           {mc}
         </div>
         {t.graduated && (
