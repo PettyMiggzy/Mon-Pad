@@ -491,12 +491,16 @@ input, textarea { font-family: var(--sans); }
 ═══════════════════════════════════════ */
 .token-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(1, 1fr);
+  gap: 6px;
+}
+
+@media (min-width: 480px) {
+  .token-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
 @media (min-width: 900px) {
-  .token-grid { grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .token-grid { grid-template-columns: repeat(3, 1fr); gap: 10px; }
 }
 
 /* Card: pump.fun style — image left, info right */
@@ -510,6 +514,8 @@ input, textarea { font-family: var(--sans); }
   background: var(--bg2);
   overflow: hidden;
   height: 80px;
+  min-width: 0;
+  width: 100%;
 }
 .tcard:hover { border-color: rgba(110,84,255,0.35); background: rgba(110,84,255,0.04); }
 
