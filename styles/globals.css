@@ -167,7 +167,7 @@ input, textarea { font-family: var(--sans); }
 .social-icon-sm:hover { color: var(--p2); }
 
 .sidebar-logo-txt {
-  font-size: 18px; font-weight: 800; letter-spacing: -.5px;
+  font-size: 22px; font-weight: 900; letter-spacing: -.5px;
   color: white;
 }
 .sidebar-logo-txt span { color: var(--p2); }
