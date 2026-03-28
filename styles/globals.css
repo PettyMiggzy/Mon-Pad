@@ -403,52 +403,60 @@ input, textarea { font-family: var(--sans); }
   .topbar { position: sticky; top: 0; }
 }
 
-/* hide desktop-only topbar items on mobile */
+/* ═══════════════════════════════════════
+   MOBILE OVERRIDES
+═══════════════════════════════════════ */
 @media (max-width: 767px) {
-  .topbar-create-btn { display: none !important; }
+  :root {
+    --topbar-h: 64px;
+  }
+
+  /* Hide desktop-only items */
+  .topbar-create-btn   { display: none !important; }
   .topbar-monpad-brand { display: none !important; }
-  .search-kbd { display: none; }
-  .topbar-search { flex: 1; min-width: 0; }
+  .search-kbd          { display: none; }
 
-  /* fix wallet button on mobile */
-  .wallet-btn {
-    font-size: 12px !important;
-    padding: 6px 10px !important;
-    max-width: 120px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  /* fix topbar height and layout */
+  /* Topbar: bigger, more breathing room */
   .topbar {
-    height: 52px;
-    padding: 0 10px;
-    gap: 6px;
+    height: 64px;
+    padding: 0 14px;
+    gap: 10px;
   }
 
-  /* search bar compact on mobile */
+  /* Search bar in topbar: bigger */
   .topbar-search {
-    height: 36px;
-    padding: 0 8px;
+    height: 44px;
+    padding: 0 12px;
+    border-radius: 12px;
+    font-size: 16px;
   }
-  .search-input { font-size: 13px; padding: 8px 0; }
+  .topbar-search svg { width: 18px; height: 18px; }
+  .search-input { font-size: 16px; padding: 10px 0; }
 
-  /* page content safe area for bottom nav */
+  /* Wallet button */
+  .wallet-btn {
+    font-size: 14px !important;
+    padding: 8px 14px !important;
+  }
+
+  /* Page content: safe area above bottom nav */
   .page-content {
-    padding-bottom: 80px !important;
+    padding-bottom: 90px !important;
   }
 
-  /* fix token page trade panel on mobile */
+  /* Token page trade panel */
   .trade-panel {
     position: fixed !important;
-    bottom: 60px !important;
+    bottom: 72px !important;
     left: 0 !important;
     right: 0 !important;
     border-radius: 20px 20px 0 0 !important;
     max-height: 85vh !important;
     overflow-y: auto !important;
   }
+
+  /* Mobile logo in topbar */
+  .mobile-logo img { width: 38px !important; height: 38px !important; }
 }
 
 /* ═══════════════════════════════════════

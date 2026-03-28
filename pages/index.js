@@ -135,40 +135,40 @@ export default function Home() {
 
       {/* ═══ HERO BANNER ═══ */}
       <div style={{
-        margin: '12px 16px',
-        padding: '28px 20px',
+        margin: '16px 16px',
+        padding: '36px 24px',
         background: 'linear-gradient(135deg, rgba(110,84,255,0.18) 0%, rgba(133,230,255,0.06) 100%)',
         border: '1px solid rgba(110,84,255,0.3)',
-        borderRadius: 20,
+        borderRadius: 22,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         textAlign: 'center',
-        gap: 0,
       }}>
-        <div style={{ fontSize: 32, fontWeight: 900, color: '#fff', marginBottom: 6, letterSpacing: '-1px' }}>MonPad</div>
-        <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.55)', fontWeight: 500, marginBottom: 20 }}>Fair launch · No presale · Devs earn 1.5% forever · 10 MON to launch</div>
+        <div style={{ fontSize: 44, fontWeight: 900, color: '#fff', marginBottom: 10, letterSpacing: '-2px', lineHeight: 1 }}>MonPad</div>
+        <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.5)', fontWeight: 500, marginBottom: 28, lineHeight: 1.5 }}>Fair launch · No presale · Devs earn 1.5% forever · 10 MON to launch</div>
         <button
           onClick={() => router.push('/create')}
           style={{
-            padding: '16px 48px',
+            padding: '18px 56px',
             background: 'linear-gradient(135deg,#6E54FF,#85E6FF)',
-            border: 'none', borderRadius: 14,
-            color: 'white', fontWeight: 900, fontSize: 18,
+            border: 'none', borderRadius: 16,
+            color: 'white', fontWeight: 900, fontSize: 20,
             cursor: 'pointer', whiteSpace: 'nowrap',
-            boxShadow: '0 4px 24px rgba(110,84,255,0.5)',
+            boxShadow: '0 6px 28px rgba(110,84,255,0.55)',
             transition: 'transform .15s, box-shadow .15s',
+            width: '100%',
           }}
-          onMouseEnter={e => { e.target.style.transform='translateY(-1px)'; e.target.style.boxShadow='0 6px 30px rgba(110,84,255,0.65)' }}
-          onMouseLeave={e => { e.target.style.transform='translateY(0)';    e.target.style.boxShadow='0 4px 24px rgba(110,84,255,0.5)' }}
+          onMouseEnter={e => { e.target.style.transform='translateY(-1px)'; e.target.style.boxShadow='0 8px 36px rgba(110,84,255,0.7)' }}
+          onMouseLeave={e => { e.target.style.transform='translateY(0)';    e.target.style.boxShadow='0 6px 28px rgba(110,84,255,0.55)' }}
         >
           + Launch Token
         </button>
       </div>
 
       {/* ═══ TRENDING CAROUSEL ═══ */}
-      <div style={{ padding: '8px 16px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: 20, fontWeight: 900, color: '#ffffff' }}>🔥 Trending</span>
+      <div style={{ padding: '12px 16px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontSize: 22, fontWeight: 900, color: '#ffffff' }}>🔥 Trending</span>
         <div style={{ display: 'flex', gap: 4 }}>
           {['‹','›'].map((ch, i) => (
             <button key={ch} onClick={() => carouselRef.current?.scrollBy({ left: i === 0 ? -220 : 220, behavior: 'smooth' })}
@@ -627,23 +627,23 @@ function TokenRow({ token: t, monPrice, isLive, onClick }) {
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 12,
-        padding: '14px 16px',
+        gap: 14,
+        padding: '18px 16px',
         cursor: 'pointer',
         borderBottom: '1px solid rgba(255,255,255,0.07)',
         background: '#000',
       }}
     >
-      {/* ── Image: 72px, slightly rounded like pump.fun ── */}
+      {/* ── Image ── */}
       <div style={{
-        width: 72, height: 72, borderRadius: 10, flexShrink: 0,
+        width: 88, height: 88, borderRadius: 14, flexShrink: 0,
         background: imgUrl ? '#111' : `linear-gradient(135deg,${color}44,${color}11)`,
         overflow: 'hidden', position: 'relative',
       }}>
         {imgUrl
           ? <img src={imgUrl} alt={name} style={{ width:'100%', height:'100%', objectFit:'cover' }}
               onError={e => { e.target.style.display = 'none' }} />
-          : <div style={{ width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:24, fontWeight:900, color }}>
+          : <div style={{ width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:30, fontWeight:900, color }}>
               {symbol.slice(0,2).toUpperCase()}
             </div>
         }
@@ -657,10 +657,10 @@ function TokenRow({ token: t, monPrice, isLive, onClick }) {
         {/* Name: large, wraps to 2 lines */}
         <div style={{
           fontWeight: 700,
-          fontSize: 19,
+          fontSize: 22,
           color: '#ffffff',
           lineHeight: 1.2,
-          marginBottom: 6,
+          marginBottom: 8,
           display: '-webkit-box',
           WebkitLineClamp: 2,
           WebkitBoxOrient: 'vertical',
@@ -669,21 +669,21 @@ function TokenRow({ token: t, monPrice, isLive, onClick }) {
           {name}
         </div>
         {/* Sub-line: "G... 🌱 28m" */}
-        <div style={{ display:'flex', alignItems:'center', gap:5, fontSize:14, color:'rgba(255,255,255,0.4)' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:15, color:'rgba(255,255,255,0.45)' }}>
           <span>{symbol.slice(0,1)}...</span>
-          <span style={{ color:'#3ecf6b', fontSize:13 }}>🌱</span>
+          <span style={{ color:'#3ecf6b', fontSize:15 }}>🌱</span>
           <span>{timeAgo}</span>
         </div>
       </div>
 
-      {/* ── Sparkline: fixed 120px, neon green line ── */}
-      <div style={{ flexShrink: 0, width: 120, height: 60 }}>
-        <SparklineFill prices={sparkPrices} color={sparkColor} height={60} />
+      {/* ── Sparkline ── */}
+      <div style={{ flexShrink: 0, width: 130, height: 70 }}>
+        <SparklineFill prices={sparkPrices} color={sparkColor} height={70} />
       </div>
 
       {/* ── Market cap: large, right-aligned ── */}
       <div style={{ flexShrink: 0, textAlign: 'right', minWidth: 68 }}>
-        <div style={{ fontSize: 21, fontWeight: 800, color: '#ffffff', whiteSpace: 'nowrap', letterSpacing: '-0.3px' }}>
+        <div style={{ fontSize: 24, fontWeight: 800, color: '#ffffff', whiteSpace: 'nowrap', letterSpacing: '-0.5px' }}>
           {mc}
         </div>
         {t.graduated && (
