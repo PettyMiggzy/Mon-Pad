@@ -680,26 +680,47 @@ export default function TokenDetail() {
 
         {/* Mobile sticky buy/sell button — always visible on mobile without scrolling */}
         <div className="mobile-buy-sticky">
-          <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-            <div style={{ display:'flex', flex:1, background:'var(--bg3)', borderRadius:10, padding:3 }}>
-              {['buy','sell'].map(m => (
-                <button key={m} className="buy-sell-mode-btn" onClick={() => setMode(m)}
-                  style={{ flex:1, padding:'10px 0', borderRadius:8, border:'none', fontWeight:800, fontSize:14, cursor:'pointer',
-                    background: mode===m ? (m==='buy'?'var(--p)':'var(--r)') : 'transparent',
-                    color: mode===m ? 'white' : 'var(--t3)' }}>
-                  {m.charAt(0).toUpperCase()+m.slice(1)}
-                </button>
-              ))}
-            </div>
-            <button
-              style={{ flex:2, padding:'13px 0', borderRadius:10, border:'none', fontWeight:800, fontSize:15, cursor:'pointer',
-                background: mode==='buy' ? 'var(--p)' : 'var(--r)', color:'white',
-                opacity: (info.delisted||(info.pauseSells&&mode==='sell')||(info.pauseBuys&&mode==='buy')) ? 0.4 : 1 }}
-              onClick={() => { if (!userAddr) { document.querySelector('.wallet-btn')?.click(); return; } mode==='buy' ? handleBuy() : handleSell() }}
-              disabled={isPending||isConfirming||sellStep!=='idle'||!!info.delisted||(!!info.pauseSells&&mode==='sell')||(!!info.pauseBuys&&mode==='buy')}>
-              {sellStep==='approving' ? 'Approving…' : sellStep==='selling' ? 'Confirm sell…' : isPending ? 'Confirm in wallet…' : isConfirming ? 'Confirming…' : userAddr ? `${mode==='buy'?'Buy':'Sell'} ${dSym}` : 'Connect Wallet'}
-            </button>
+          {/* Mode toggle */}
+          <div style={{ display:'flex', background:'var(--bg3)', borderRadius:10, padding:3, marginBottom:8 }}>
+            {['buy','sell'].map(m => (
+              <button key={m} className="buy-sell-mode-btn" onClick={() => setMode(m)}
+                style={{ flex:1, padding:'9px 0', borderRadius:8, border:'none', fontWeight:800, fontSize:13, cursor:'pointer',
+                  background: mode===m ? (m==='buy'?'var(--p)':'var(--r)') : 'transparent',
+                  color: mode===m ? 'white' : 'var(--t3)' }}>
+                {m.charAt(0).toUpperCase()+m.slice(1)}
+              </button>
+            ))}
           </div>
+          {/* Quick amounts + input row */}
+          <div style={{ display:'flex', gap:6, marginBottom:8 }}>
+            {mode==='buy'
+              ? ['100','500','1000'].map(n => (
+                  <button key={n} onClick={() => setAmt(n)}
+                    style={{ flex:1, padding:'7px 0', textAlign:'center', background: amt===n?'rgba(110,84,255,0.25)':'rgba(110,84,255,0.08)', border: amt===n?'1px solid var(--p)':'1px solid rgba(110,84,255,0.15)', borderRadius:7, fontSize:11, fontWeight:700, color:'var(--p2)', cursor:'pointer' }}>
+                    {n}
+                  </button>
+                ))
+              : ['25%','50%','100%'].map(p => (
+                  <button key={p} onClick={() => setAmt((Number(tokenBalance)/1e18*(parseInt(p)/100)).toFixed(0))}
+                    style={{ flex:1, padding:'7px 0', textAlign:'center', background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.15)', borderRadius:7, fontSize:11, fontWeight:700, color:'var(--r)', cursor:'pointer' }}>
+                    {p}
+                  </button>
+                ))
+            }
+            <input type="number" placeholder="Amt" value={amt} onChange={e => setAmt(e.target.value)}
+              className="buy-sell-input"
+              style={{ flex:1.5, padding:'7px 10px', fontSize:13, fontWeight:700, fontFamily:'var(--mono)',
+                background:'var(--bg2)', border:'1px solid var(--bd2)', borderRadius:7, color:'var(--t1)', outline:'none' }} />
+          </div>
+          {/* Buy/Sell button */}
+          <button
+            style={{ width:'100%', padding:'14px 0', borderRadius:10, border:'none', fontWeight:800, fontSize:16, cursor:'pointer',
+              background: mode==='buy' ? 'var(--p)' : 'var(--r)', color:'white',
+              opacity: (info.delisted||(info.pauseSells&&mode==='sell')||(info.pauseBuys&&mode==='buy')) ? 0.4 : 1 }}
+            onClick={() => { if (!userAddr) { document.querySelector('.wallet-btn')?.click(); return; } mode==='buy' ? handleBuy() : handleSell() }}
+            disabled={isPending||isConfirming||sellStep!=='idle'||!!info.delisted||(!!info.pauseSells&&mode==='sell')||(!!info.pauseBuys&&mode==='buy')}>
+            {sellStep==='approving' ? 'Approving…' : sellStep==='selling' ? 'Confirm sell…' : isPending ? 'Confirm in wallet…' : isConfirming ? 'Confirming…' : userAddr ? `${mode==='buy'?'Buy':'Sell'} ${dSym}` : 'Connect Wallet'}
+          </button>
         </div>
       </Layout>
     </>

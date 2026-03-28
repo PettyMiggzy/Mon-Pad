@@ -463,7 +463,8 @@ input, textarea { font-family: var(--sans); }
 @media (max-width: 767px) {
   .token-2col { flex-direction: column !important; }
   .token-2col-left { border-right: none !important; }
-  .token-2col-right { width: 100% !important; position: static !important; max-height: none !important; border-right: none !important; border-top: 1px solid var(--bd); }
+  /* Hide the full buy/sell panel on mobile — sticky bar handles it */
+  .token-2col-right { display: none !important; }
 }
 
 /* Mobile sticky buy/sell button */
