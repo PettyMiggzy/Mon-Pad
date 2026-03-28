@@ -514,18 +514,18 @@ input, textarea { font-family: var(--sans); }
 
 .tcard-img {
   width: 100%;
-  height: 90px;
+  height: 70px;
   overflow: hidden;
   display: flex; align-items: center; justify-content: center;
   position: relative;
   background: var(--bg3);
-  font-size: 28px;
+  font-size: 22px;
   font-weight: 900;
 }
 .tcard-img img { width: 100%; height: 100%; object-fit: cover; }
 
 @media (min-width: 600px) {
-  .tcard-img { height: 120px; }
+  .tcard-img { height: 100px; }
 }
 
 .tcard-body {
