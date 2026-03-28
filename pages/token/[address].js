@@ -295,14 +295,82 @@ export default function TokenDetail() {
   const dName       = meta?.name    || info.name
   const dSym        = meta?.symbol  || info.symbol
 
+  // Determine chart direction for color
+  const chartPrices = apexSeries[0]?.data?.map(d => d.y?.[3] ?? d.y) ?? []
+  const chartIsUp = chartPrices.length < 2 || chartPrices[chartPrices.length-1] >= chartPrices[0]
+  const chartColor = chartIsUp ? '#00ff7f' : '#ef4444'
+  const chartColorDark = chartIsUp ? '#00cc55' : '#cc2222'
+
+  // Convert candlestick series to line series for area chart
+  const lineSeries = apexSeries.length > 0 ? [{
+    name: 'Price',
+    data: apexSeries[0].data.map(d => ({
+      x: d.x,
+      y: Array.isArray(d.y) ? d.y[3] : d.y  // use close price
+    }))
+  }] : []
+
   const apexOptions = {
-    chart: { type:'candlestick', background:'#0E091C', toolbar:{ show:false }, zoom:{ enabled:true }, animations:{ enabled:false } },
-    theme: { mode:'dark' },
-    xaxis: { type:'datetime', labels:{ style:{ colors:'#666', fontSize:'11px' } }, axisBorder:{ color:'#1e1535' }, axisTicks:{ color:'#1e1535' } },
-    yaxis: { tooltip:{ enabled:true }, labels:{ style:{ colors:'#666', fontSize:'11px' }, formatter: v => v < 0.001 ? v.toExponential(4) : v.toFixed(8) } },
-    grid: { borderColor:'#1e1535', strokeDashArray:3 },
-    plotOptions: { candlestick: { colors:{ upward:'#22c55e', downward:'#ef4444' }, wick:{ useFillColor:true } } },
-    tooltip: { theme:'dark', x:{ format:'dd MMM HH:mm' } },
+    chart: {
+      type: 'area',
+      background: 'transparent',
+      toolbar: { show: false },
+      zoom: { enabled: false },
+      animations: { enabled: false },
+      sparkline: { enabled: false },
+    },
+    theme: { mode: 'dark' },
+    stroke: {
+      curve: 'smooth',
+      width: 2.5,
+      colors: [chartColor],
+    },
+    fill: {
+      type: 'gradient',
+      gradient: {
+        shadeIntensity: 1,
+        opacityFrom: 0.35,
+        opacityTo: 0.01,
+        stops: [0, 100],
+        colorStops: [{
+          offset: 0,
+          color: chartColor,
+          opacity: 0.35,
+        }, {
+          offset: 100,
+          color: chartColor,
+          opacity: 0,
+        }],
+      },
+      colors: [chartColor],
+    },
+    xaxis: {
+      type: 'datetime',
+      labels: { style: { colors: '#555', fontSize: '11px' } },
+      axisBorder: { show: false },
+      axisTicks: { show: false },
+    },
+    yaxis: {
+      labels: {
+        style: { colors: '#555', fontSize: '11px' },
+        formatter: v => v < 0.001 ? v.toExponential(2) : v.toFixed(6),
+        offsetX: -8,
+      },
+    },
+    grid: {
+      borderColor: 'rgba(255,255,255,0.05)',
+      strokeDashArray: 0,
+      xaxis: { lines: { show: false } },
+      yaxis: { lines: { show: true } },
+      padding: { left: 8, right: 8 },
+    },
+    dataLabels: { enabled: false },
+    tooltip: {
+      theme: 'dark',
+      x: { format: 'dd MMM HH:mm' },
+      y: { formatter: v => v < 0.001 ? v.toExponential(4) : v.toFixed(8) },
+    },
+    markers: { size: 0 },
   }
 
   return (
@@ -367,14 +435,14 @@ export default function TokenDetail() {
                   ))}
                 </div>
 
-                <div style={{ height:340, width:'100%', background:'#0E091C', overflow:'hidden', position:'relative' }}>
-                  {apexSeries.length === 0
+                <div style={{ height:340, width:'100%', background:'#000', overflow:'hidden', position:'relative' }}>
+                  {lineSeries.length === 0 || lineSeries[0]?.data?.length === 0
                     ? <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100%', gap:12 }}>
                         <div style={{ color:'#555', fontSize:14 }}>No trades yet</div>
                         <div style={{ color:'#6E54FF', fontSize:12, fontWeight:600, animation:'pulse 2s ease-in-out infinite', opacity:0.8 }}>⏳ Waiting for first trade…</div>
                         <div style={{ width:120, height:2, background:'linear-gradient(90deg,transparent,rgba(110,84,255,0.5),transparent)', borderRadius:999, animation:'pulse 2s ease-in-out infinite' }} />
                       </div>
-                    : <ApexChart type="candlestick" height={340} series={apexSeries} options={apexOptions} />
+                    : <ApexChart type="area" height={340} series={lineSeries} options={apexOptions} />
                   }
                 </div>
 
