@@ -530,7 +530,7 @@ function SparklineFill({ prices, color, height = 72 }) {
     return (
       <svg width="100%" height={height} viewBox="0 0 100 100" preserveAspectRatio="none">
         <line x1={0} y1={60} x2={100} y2={60}
-          stroke={lineColor} strokeWidth={2.5} strokeOpacity={0.3} strokeLinecap="round" />
+          stroke={lineColor} strokeWidth={2.5} strokeOpacity={1} strokeLinecap="round" />
       </svg>
     )
   }
