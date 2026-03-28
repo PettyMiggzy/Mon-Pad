@@ -82,14 +82,14 @@ export default function Home() {
 // Demo tokens shown when platform is new (< 10 real tokens)
 // marketCap stored as plain numbers for easy mutation; displayed via BigInt conversion
 const DEMO_TOKENS_BASE = [
-  { token:'0xdemo1', curve:'0xdemo1c', creator:'0xdemo', name:'MonShiba',  symbol:'MSHIB',  graduated:false, capMon:400000000000000000000000n, colorIdx:10, isDemo:true, _mc:210000,  _bps:2800  },
-  { token:'0xdemo2', curve:'0xdemo2c', creator:'0xdemo', name:'PurpleNad', symbol:'PNAD',   graduated:false, capMon:400000000000000000000000n, colorIdx:11, isDemo:true, _mc:650000,  _bps:5500  },
-  { token:'0xdemo3', curve:'0xdemo3c', creator:'0xdemo', name:'MonDoge',   symbol:'MDOGE',  graduated:false, capMon:400000000000000000000000n, colorIdx:12, isDemo:true, _mc:95000,   _bps:1200  },
-  { token:'0xdemo4', curve:'0xdemo4c', creator:'0xdemo', name:'NadPepe',   symbol:'NPEPE',  graduated:true,  capMon:400000000000000000000000n, colorIdx:13, isDemo:true, _mc:1200000, _bps:10000 },
-  { token:'0xdemo5', curve:'0xdemo5c', creator:'0xdemo', name:'MonAI',     symbol:'MAI',    graduated:false, capMon:400000000000000000000000n, colorIdx:14, isDemo:true, _mc:890000,  _bps:7800  },
-  { token:'0xdemo6', curve:'0xdemo6c', creator:'0xdemo', name:'LaunchPad', symbol:'LPAD',   graduated:false, capMon:400000000000000000000000n, colorIdx:15, isDemo:true, _mc:280000,  _bps:3300  },
-  { token:'0xdemo7', curve:'0xdemo7c', creator:'0xdemo', name:'MonCat',    symbol:'MCAT',   graduated:false, capMon:400000000000000000000000n, colorIdx:16, isDemo:true, _mc:72000,   _bps:900   },
-  { token:'0xdemo8', curve:'0xdemo8c', creator:'0xdemo', name:'NadRocket', symbol:'NRKT',   graduated:false, capMon:400000000000000000000000n, colorIdx:17, isDemo:true, _mc:420000,  _bps:4400  },
+  { token:'0xdemo1', curve:'0xdemo1c', creator:'0xdemo', name:'MonShiba',  symbol:'MSHIB',  graduated:false, capMon:400000000000000000000000n, colorIdx:10, isDemo:true, _mc:210000,  _bps:2800,  _img:'https://assets.coingecko.com/coins/images/37075/small/shiba.png' },
+  { token:'0xdemo2', curve:'0xdemo2c', creator:'0xdemo', name:'PurpleNad', symbol:'PNAD',   graduated:false, capMon:400000000000000000000000n, colorIdx:11, isDemo:true, _mc:650000,  _bps:5500,  _img:'https://assets.coingecko.com/coins/images/24413/small/apecoin.jpg' },
+  { token:'0xdemo3', curve:'0xdemo3c', creator:'0xdemo', name:'MonDoge',   symbol:'MDOGE',  graduated:false, capMon:400000000000000000000000n, colorIdx:12, isDemo:true, _mc:95000,   _bps:1200,  _img:'https://assets.coingecko.com/coins/images/5/small/dogecoin.png' },
+  { token:'0xdemo4', curve:'0xdemo4c', creator:'0xdemo', name:'NadPepe',   symbol:'NPEPE',  graduated:true,  capMon:400000000000000000000000n, colorIdx:13, isDemo:true, _mc:1200000, _bps:10000, _img:'https://assets.coingecko.com/coins/images/29850/small/pepe-token.jpeg' },
+  { token:'0xdemo5', curve:'0xdemo5c', creator:'0xdemo', name:'MonAI',     symbol:'MAI',    graduated:false, capMon:400000000000000000000000n, colorIdx:14, isDemo:true, _mc:890000,  _bps:7800,  _img:'https://assets.coingecko.com/coins/images/28821/small/ai.png' },
+  { token:'0xdemo6', curve:'0xdemo6c', creator:'0xdemo', name:'LaunchPad', symbol:'LPAD',   graduated:false, capMon:400000000000000000000000n, colorIdx:15, isDemo:true, _mc:280000,  _bps:3300,  _img:'https://assets.coingecko.com/coins/images/28177/small/JmAn.png' },
+  { token:'0xdemo7', curve:'0xdemo7c', creator:'0xdemo', name:'MonCat',    symbol:'MCAT',   graduated:false, capMon:400000000000000000000000n, colorIdx:16, isDemo:true, _mc:72000,   _bps:900,   _img:'https://assets.coingecko.com/coins/images/17456/small/X_Nyan.png' },
+  { token:'0xdemo8', curve:'0xdemo8c', creator:'0xdemo', name:'NadRocket', symbol:'NRKT',   graduated:false, capMon:400000000000000000000000n, colorIdx:17, isDemo:true, _mc:420000,  _bps:4400,  _img:'https://assets.coingecko.com/coins/images/11840/small/1200px-FLOKI_coin.png' },
 ]
 function makeDemoTokens(bases) {
   return bases.map(b => ({
@@ -98,6 +98,7 @@ function makeDemoTokens(bases) {
     marketCap:    BigInt(Math.floor(b._mc * 1e18)),
     bondedBps:    BigInt(b._bps),
     blockNumber:  0n,
+    pfpUrl:       b._img || null,
   }))
 }
 // mutable state for demo MC simulation (outside component to persist across renders)
@@ -335,8 +336,8 @@ function TokenCard({ token: t, meta, isLive, monPrice, onClick }) {
     <div className="tcard" onClick={onClick} style={{ cursor: t.isDemo ? 'default' : 'pointer', opacity: t.isDemo ? 0.85 : 1 }}>
       {/* Square image left */}
       <div className="tcard-img" style={{ background: meta?.pfpUrl ? '#000' : `linear-gradient(135deg,${color}30,#0c0c12)` }}>
-        {meta?.pfpUrl
-          ? <img src={fixUrl(meta.pfpUrl)} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+        {(meta?.pfpUrl || t.pfpUrl)
+          ? <img src={fixUrl(meta?.pfpUrl || t.pfpUrl)} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} onError={e => e.target.style.display='none'} />
           : <span style={{ fontSize:28, fontWeight:900, color:`${color}` }}>{(t.symbol||'?').slice(0,2)}</span>
         }
         {t.graduated && <div className="tcard-badge" style={{ background:'var(--gold)', color:'#000' }}>🎓</div>}
