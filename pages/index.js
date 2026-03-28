@@ -133,8 +133,27 @@ export default function Home() {
   return (
     <Layout>
 
-      {/* ═══ HERO BANNER ═══ */}
-      <div style={{
+      {/* ═══ MOBILE-ONLY TOPBAR ═══ */}
+      <div className="mobile-only-bar" style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '14px 16px 10px',
+        position: 'sticky', top: 0, zIndex: 100,
+        background: '#000',
+        borderBottom: '1px solid rgba(255,255,255,0.07)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <img src="/monpad-logo.png" alt="MonPad"
+            style={{ width: 36, height: 36, borderRadius: 10, objectFit: 'cover' }} />
+          <span style={{ fontSize: 22, fontWeight: 900, color: '#fff', letterSpacing: '-0.5px' }}>MonPad</span>
+        </div>
+        <button onClick={() => router.push('/create')} style={{
+          padding: '10px 20px', background: 'linear-gradient(135deg,#6E54FF,#85E6FF)',
+          border: 'none', borderRadius: 12, color: 'white', fontWeight: 800, fontSize: 15, cursor: 'pointer',
+        }}>+ Launch</button>
+      </div>
+
+      {/* ═══ HERO BANNER — desktop only ═══ */}
+      <div className="desktop-only" style={{
         margin: '16px 16px',
         padding: '36px 24px',
         background: 'linear-gradient(135deg, rgba(110,84,255,0.18) 0%, rgba(133,230,255,0.06) 100%)',
@@ -166,8 +185,8 @@ export default function Home() {
         </button>
       </div>
 
-      {/* ═══ TRENDING CAROUSEL ═══ */}
-      <div style={{ padding: '12px 16px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      {/* ═══ TRENDING CAROUSEL — desktop only ═══ */}
+      <div className="desktop-only" style={{ padding: '12px 16px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ fontSize: 22, fontWeight: 900, color: '#ffffff' }}>🔥 Trending</span>
         <div style={{ display: 'flex', gap: 4 }}>
           {['‹','›'].map((ch, i) => (
@@ -179,7 +198,7 @@ export default function Home() {
         </div>
       </div>
 
-      <div ref={carouselRef} style={{ display:'flex', gap:12, padding:'0 16px 16px', overflowX:'auto', scrollbarWidth:'none', WebkitOverflowScrolling:'touch' }}>
+      <div className="desktop-only" ref={carouselRef} style={{ display:'flex', gap:12, padding:'0 16px 16px', overflowX:'auto', scrollbarWidth:'none', WebkitOverflowScrolling:'touch' }}>
         {trending.map((t, i) => {
           const color = COLORS[t.colorIdx % COLORS.length]
           const mc    = fmtUSD(t.marketCap || t.monRaisedNet, monPrice)
@@ -342,6 +361,17 @@ export default function Home() {
 
         .token-card:hover  { background: rgba(255,255,255,0.04) !important; }
         .token-row:hover   { background: #0a0a0a !important; }
+
+        /* Mobile: hide hero/carousel, show minimal bar */
+        @media (max-width: 767px) {
+          .desktop-only    { display: none !important; }
+          .mobile-only-bar { display: flex !important; }
+        }
+        /* Desktop: hide mobile bar */
+        @media (min-width: 768px) {
+          .mobile-only-bar { display: none !important; }
+          .desktop-only    { display: revert !important; }
+        }
       `}</style>
     </Layout>
   )

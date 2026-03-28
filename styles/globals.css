@@ -407,42 +407,24 @@ input, textarea { font-family: var(--sans); }
    MOBILE OVERRIDES
 ═══════════════════════════════════════ */
 @media (max-width: 767px) {
-  :root {
-    --topbar-h: 64px;
-  }
+  :root { --topbar-h: 0px; }
 
-  /* Hide desktop-only items */
-  .topbar-create-btn   { display: none !important; }
-  .topbar-monpad-brand { display: none !important; }
-  .search-kbd          { display: none; }
+  /* ── Hide ALL chrome on mobile ── */
+  .topbar      { display: none !important; }
+  .stats-bar   { display: none !important; }
+  .sidebar     { display: none !important; }
 
-  /* Topbar: bigger, more breathing room */
-  .topbar {
-    height: 64px;
-    padding: 0 14px;
-    gap: 10px;
-  }
+  /* Main area: full width, no offset */
+  .main-area   { margin-left: 0 !important; }
 
-  /* Search bar in topbar: bigger */
-  .topbar-search {
-    height: 44px;
-    padding: 0 12px;
-    border-radius: 12px;
-    font-size: 16px;
-  }
-  .topbar-search svg { width: 18px; height: 18px; }
-  .search-input { font-size: 16px; padding: 10px 0; }
-
-  /* Wallet button */
-  .wallet-btn {
-    font-size: 14px !important;
-    padding: 8px 14px !important;
-  }
-
-  /* Page content: safe area above bottom nav */
+  /* Page content: fills screen, safe area above bottom nav */
   .page-content {
-    padding-bottom: 90px !important;
+    padding-bottom: 84px !important;
+    padding-top: 0 !important;
   }
+
+  /* Bottom nav stays */
+  .bottom-nav { display: flex !important; }
 
   /* Token page trade panel */
   .trade-panel {
@@ -454,9 +436,6 @@ input, textarea { font-family: var(--sans); }
     max-height: 85vh !important;
     overflow-y: auto !important;
   }
-
-  /* Mobile logo in topbar */
-  .mobile-logo img { width: 38px !important; height: 38px !important; }
 }
 
 /* ═══════════════════════════════════════
