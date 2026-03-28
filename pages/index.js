@@ -214,12 +214,12 @@ let _demoBases = DEMO_TOKENS_BASE.map(b => ({ ...b }))
         </div>
       </div>
 
-      <div ref={carouselRef} style={{ display:'flex', gap:10, padding:'0 16px 8px', overflowX:'auto', scrollSnapType:'x mandatory', scrollbarWidth:'none', WebkitOverflowScrolling:'touch', msOverflowStyle:'none' }}>
+      <div ref={carouselRef} style={{ display:'flex', gap:10, padding:'0 16px 8px', overflowX:'auto', scrollbarWidth:'none', WebkitOverflowScrolling:'touch', msOverflowStyle:'none', touchAction:'pan-x' }}>
         {trending.length === 0 && !loading && (
           <div style={{ color:'var(--t3)', fontSize:13, padding:'20px 0' }}>No tokens yet — launch the first one!</div>
         )}
         {loading && [0,1,2,4].map(i => (
-          <div key={i} style={{ flexShrink:0, width:230, height:145, borderRadius:12, background:'var(--bg2)', scrollSnapAlign:'start', animation:'pulse 1.5s infinite' }} />
+          <div key={i} style={{ flexShrink:0, width:'min(230px, 60vw)', height:145, borderRadius:12, background:'var(--bg2)', scrollSnapAlign:'start', animation:'pulse 1.5s infinite' }} />
         ))}
         {trending.map((t,i) => {
           const meta = metas[t.token?.toLowerCase()]
