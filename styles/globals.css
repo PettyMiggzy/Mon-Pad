@@ -489,47 +489,53 @@ input, textarea { font-family: var(--sans); }
    TOKEN GRID — pump.fun style
 ═══════════════════════════════════════ */
 .token-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+@media (min-width: 768px) {
+  .token-grid { display: grid; grid-template-columns: repeat(2, 1fr); }
 }
 
 @media (min-width: 1100px) {
   .token-grid { grid-template-columns: repeat(3, 1fr); }
 }
 
-/* Card: vertical — image top, info below, 2-col grid */
+/* Card: nad.fun style — horizontal, image left, info right */
 .tcard {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   border: 1px solid var(--bd);
-  border-radius: 10px;
+  border-radius: 12px;
   cursor: pointer;
   transition: border-color .15s, background .15s;
   background: var(--bg2);
   overflow: hidden;
   width: 100%;
-  min-width: 0;
 }
-.tcard:hover { border-color: rgba(110,84,255,0.35); background: rgba(110,84,255,0.04); }
+.tcard:hover { border-color: rgba(110,84,255,0.3); background: rgba(110,84,255,0.03); }
 
 .tcard-img {
-  width: 100%;
-  aspect-ratio: 1 / 1;
+  width: 110px;
+  height: 110px;
+  flex-shrink: 0;
   overflow: hidden;
   display: flex; align-items: center; justify-content: center;
   position: relative;
   background: var(--bg3);
-  font-size: 40px;
+  font-size: 28px;
   font-weight: 900;
-  flex-shrink: 0;
 }
 .tcard-img img { width: 100%; height: 100%; object-fit: cover; }
 
 .tcard-body {
-  padding: 8px 10px 10px;
+  flex: 1;
+  padding: 12px 14px;
   min-width: 0;
-  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .tcard-badge {

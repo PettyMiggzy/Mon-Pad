@@ -332,35 +332,36 @@ function TokenCard({ token: t, meta, isLive, monPrice, onClick }) {
   const mcDisplay = fmtUSD(t.marketCap || t.monRaisedNet, monPrice)
 
   return (
-    <div className="tcard" onClick={onClick} style={{ cursor: t.isDemo ? 'default' : 'pointer', opacity: t.isDemo ? 0.75 : 1 }}>
-      {/* Image — square like nad.fun */}
+    <div className="tcard" onClick={onClick} style={{ cursor: t.isDemo ? 'default' : 'pointer', opacity: t.isDemo ? 0.85 : 1 }}>
+      {/* Square image left */}
       <div className="tcard-img" style={{ background: meta?.pfpUrl ? '#000' : `linear-gradient(135deg,${color}30,#0c0c12)` }}>
         {meta?.pfpUrl
           ? <img src={fixUrl(meta.pfpUrl)} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
-          : <span style={{ fontSize:'40px', fontWeight:900, color:`${color}` }}>{(t.symbol||'?').slice(0,2)}</span>
+          : <span style={{ fontSize:28, fontWeight:900, color:`${color}` }}>{(t.symbol||'?').slice(0,2)}</span>
         }
-        <div style={{ position:'absolute', inset:0, background:'linear-gradient(to bottom, transparent 40%, rgba(12,12,18,0.75) 100%)', pointerEvents:'none' }} />
-        {t.graduated && <div className="tcard-badge" style={{ background:'var(--gold)', color:'#000', zIndex:2 }}>🎓</div>}
+        {t.graduated && <div className="tcard-badge" style={{ background:'var(--gold)', color:'#000' }}>🎓</div>}
         {isLive && !t.graduated && (
-          <div className="tcard-badge" style={{ display:'flex', alignItems:'center', gap:3, background:'#ef4444', zIndex:2 }}>
+          <div className="tcard-badge" style={{ display:'flex', alignItems:'center', gap:3, background:'#ef4444' }}>
             <span style={{ width:5, height:5, background:'white', borderRadius:'50%', animation:'blink 1.5s infinite' }} />LIVE
           </div>
         )}
-        {/* Name overlay at bottom of image like nad.fun */}
-        <div style={{ position:'absolute', bottom:0, left:0, right:0, padding:'6px 8px', zIndex:2 }}>
-          <div style={{ fontSize:12, fontWeight:800, color:'white', textShadow:'0 1px 4px rgba(0,0,0,0.8)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{meta?.name || t.name}</div>
-        </div>
       </div>
 
-      {/* Info below image */}
+      {/* Info right */}
       <div className="tcard-body">
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
-          <div style={{ fontSize:11, color:'var(--p2)', fontFamily:'var(--mono)', fontWeight:700 }}>${meta?.symbol || t.symbol}</div>
-          <div style={{ fontSize:12, fontWeight:800, fontFamily:'var(--mono)', color:'var(--gold)' }}>{mcDisplay}</div>
+        {/* Symbol badge + name */}
+        <div style={{ display:'inline-block', background:'rgba(110,84,255,0.2)', border:'1px solid rgba(110,84,255,0.3)', borderRadius:5, padding:'2px 8px', fontSize:10, fontWeight:800, color:'var(--p2)', fontFamily:'var(--mono)', marginBottom:4 }}>${meta?.symbol || t.symbol}</div>
+        <div style={{ fontSize:15, fontWeight:800, color:'var(--t1)', marginBottom:6, lineHeight:1.2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{meta?.name || t.name}</div>
+        {/* MC row */}
+        <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
+          <span style={{ fontSize:11, color:'var(--t3)' }}>MC</span>
+          <span style={{ fontSize:13, fontWeight:800, fontFamily:'var(--mono)', color:'var(--gold)' }}>{mcDisplay}</span>
         </div>
-        <div style={{ width:'100%', height:3, background:'var(--bg3)', borderRadius:999, overflow:'hidden' }}>
+        {/* Bonding bar */}
+        <div style={{ width:'100%', height:4, background:'var(--bg3)', borderRadius:999, overflow:'hidden', marginBottom:3 }}>
           <div style={{ height:'100%', background: t.graduated ? 'linear-gradient(90deg,#d97706,#FFAE45)' : 'linear-gradient(90deg,var(--p),var(--cyan))', borderRadius:999, width:`${Math.min(pct,100)}%`, transition:'width .4s ease' }} />
         </div>
+        <div style={{ fontSize:10, color:'var(--t3)', fontFamily:'var(--mono)' }}>{pct.toFixed(1)}% bonded{t.isDemo ? ' · demo' : ''}</div>
       </div>
     </div>
   )
