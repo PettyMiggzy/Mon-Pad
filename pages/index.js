@@ -658,10 +658,7 @@ function TokenRow({ token: t, monPrice, isLive, onClick }) {
       .catch(() => {})
   }, [t.curve])
 
-  const sparkIsUp = sparkPrices && sparkPrices.length >= 2
-    ? sparkPrices[sparkPrices.length - 1] >= sparkPrices[0]
-    : true
-  const sparkColor = sparkIsUp ? '#00e676' : '#ef4444'
+  const sparkColor = '#00e676'
 
   return (
     <div
