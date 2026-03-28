@@ -136,27 +136,28 @@ export default function Home() {
       {/* ═══ HERO BANNER ═══ */}
       <div style={{
         margin: '12px 16px',
-        padding: '20px',
+        padding: '24px 20px',
         background: 'linear-gradient(135deg, rgba(110,84,255,0.15) 0%, rgba(133,230,255,0.06) 100%)',
         border: '1px solid rgba(110,84,255,0.25)',
         borderRadius: 18,
         display: 'flex',
+        flexDirection: 'column',
         alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 12,
-        flexWrap: 'wrap',
+        textAlign: 'center',
+        gap: 0,
       }}>
         <div>
-          <img src="/monpad-logo.png" alt="MonPad" style={{ width: 90, height: 90, borderRadius: 16, objectFit: 'cover', marginBottom: 8 }} />
-          <div style={{ fontSize: 13, color: 'var(--t3)', fontWeight: 500 }}>Fair launch · No presale · Devs earn 1.5% forever · 10 MON to launch</div>
+          <img src="/monpad-logo.png" alt="MonPad" style={{ width: 120, height: 120, borderRadius: 20, objectFit: 'cover', marginBottom: 10, boxShadow: '0 4px 24px rgba(110,84,255,0.4)' }} />
+          <div style={{ fontSize: 20, fontWeight: 900, color: '#fff', marginBottom: 4, letterSpacing: '-0.5px' }}>MonPad</div>
+          <div style={{ fontSize: 12, color: 'var(--t3)', fontWeight: 500, marginBottom: 16 }}>Fair launch · No presale · Devs earn 1.5% forever · 10 MON to launch</div>
         </div>
         <button
           onClick={() => router.push('/create')}
           style={{
-            padding: '12px 24px',
+            padding: '14px 36px',
             background: 'linear-gradient(135deg,#6E54FF,#85E6FF)',
-            border: 'none', borderRadius: 12,
-            color: 'white', fontWeight: 800, fontSize: 14,
+            border: 'none', borderRadius: 14,
+            color: 'white', fontWeight: 800, fontSize: 16,
             cursor: 'pointer', whiteSpace: 'nowrap',
             boxShadow: '0 4px 24px rgba(110,84,255,0.4)',
             transition: 'transform .15s, box-shadow .15s',
@@ -659,26 +660,26 @@ function TokenRow({ token: t, monPrice, isLive, onClick }) {
         )}
       </div>
 
-      {/* ── Name + sub-line ── */}
-      <div style={{ width: 95, flexShrink: 0 }}>
-        <div style={{ fontWeight: 700, fontSize: 20, color: '#ffffff', lineHeight: 1.2, marginBottom: 6 }}>
+      {/* ── Name + sub-line — grows to fill space ── */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: 700, fontSize: 18, color: '#ffffff', lineHeight: 1.25, marginBottom: 5, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
           {name}
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:4, fontSize:13, color:'rgba(255,255,255,0.4)' }}>
-          <span>...</span>
+          <span style={{ fontFamily:'var(--mono)' }}>{tickerShort}</span>
           <span style={{ color:'#22c55e' }}>🌱</span>
           <span>{timeAgo}</span>
         </div>
       </div>
 
-      {/* ── Sparkline — dominant, fills all middle space ── */}
-      <div style={{ flex: 1, minWidth: 0, height: 80 }}>
-        <SparklineFill prices={sparkPrices} color={sparkColor} height={80} />
+      {/* ── Sparkline — fixed 110px ── */}
+      <div style={{ flexShrink: 0, width: 110, height: 56 }}>
+        <SparklineFill prices={sparkPrices} color={sparkColor} height={56} />
       </div>
 
       {/* ── Market Cap — large, bold ── */}
-      <div style={{ flexShrink: 0, textAlign: 'right', paddingLeft: 10 }}>
-        <div style={{ fontSize: 22, fontWeight: 800, color: '#ffffff', whiteSpace: 'nowrap', letterSpacing: '-0.5px' }}>
+      <div style={{ flexShrink: 0, textAlign: 'right', minWidth: 64 }}>
+        <div style={{ fontSize: 20, fontWeight: 800, color: '#ffffff', whiteSpace: 'nowrap', letterSpacing: '-0.5px' }}>
           {mc}
         </div>
         {t.graduated && (
