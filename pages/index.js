@@ -284,7 +284,7 @@ let _demoBases = DEMO_TOKENS_BASE.map(b => ({ ...b }))
         {loading && (
           <div className="token-grid">
             {[...Array(8)].map((_,i) => (
-              <div key={i} style={{ borderRadius:12, background:'var(--bg2)', animation:'pulse 1.5s infinite', aspectRatio:'1/1.3' }} />
+              <div key={i} style={{ borderRadius:12, background:'var(--bg2)', animation:'pulse 1.5s infinite', height:200 }} />
             ))}
           </div>
         )}
