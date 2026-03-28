@@ -171,10 +171,13 @@ export default function TokenDetail() {
       const int = tf==='15m'?900 : tf==='1h'?3600 : tf==='4h'?14400 : 86400
       const price = info?.priceWei ? Number(info.priceWei)/1e18 : 0.00015
 
-      let data = candles?.length ? candles : (() => {
-        const base = now - 60*int
-        return Array.from({length:60},(_,i) => ({ time: base+i*int, open:price, high:price*1.002, low:price*0.998, close:price, volume:0 }))
-      })()
+      // No candles = no chart, show empty state
+      if (!candles?.length && !tm?.length) {
+        setApexSeries([])
+        return
+      }
+
+      const data = candles?.length ? candles : []
 
       if (tm?.length) {
         const vol24 = tm.filter(t=>t.ts>now-86400).reduce((s,t)=>s+t.volume,0)
@@ -183,37 +186,28 @@ export default function TokenDetail() {
         const lastPrice = sorted.length ? sorted[sorted.length-1].price : price
         const price5mAgo = sorted.filter(t=>t.ts <= now-300).slice(-1)[0]?.price || lastPrice
         const price1hAgo = sorted.filter(t=>t.ts <= now-3600).slice(-1)[0]?.price || lastPrice
-        const last = data[data.length-1]
         setStats({
           vol24h:vol24, totalVol, devFees:totalVol*0.015,
-          price: last?.close||price,
+          price: lastPrice,
           pct5m: price5mAgo > 0 ? (lastPrice - price5mAgo) / price5mAgo * 100 : 0,
           pct1h: price1hAgo > 0 ? (lastPrice - price1hAgo) / price1hAgo * 100 : 0,
         })
       }
 
-      setApexSeries([{
-        name: 'Price',
-        data: data.map(c => ({
-          x: new Date(c.time * 1000),
-          y: [parseFloat(c.open), parseFloat(c.high), parseFloat(c.low), parseFloat(c.close)]
-        }))
-      }])
+      if (data.length > 0) {
+        setApexSeries([{
+          name: 'Price',
+          data: data.map(c => ({
+            x: new Date(c.time * 1000),
+            y: [parseFloat(c.open), parseFloat(c.high), parseFloat(c.low), parseFloat(c.close)]
+          }))
+        }])
+      } else {
+        setApexSeries([])
+      }
     } catch(e) {
       console.error('chart error:', e)
-      // show placeholder so chart doesn't stay empty forever
-      const now = Math.floor(Date.now()/1000)
-      const int = tf==='15m'?900 : tf==='1h'?3600 : tf==='4h'?14400 : 86400
-      const price = info?.priceWei ? Number(info.priceWei)/1e18 : 0.00015
-      const base = now - 60*int
-      const placeholder = Array.from({length:60},(_,i) => ({ time: base+i*int, open:price, high:price*1.002, low:price*0.998, close:price, volume:0 }))
-      setApexSeries([{
-        name: 'Price',
-        data: placeholder.map(c => ({
-          x: new Date(c.time * 1000),
-          y: [parseFloat(c.open), parseFloat(c.high), parseFloat(c.low), parseFloat(c.close)]
-        }))
-      }])
+      setApexSeries([])
     }
   }
 
