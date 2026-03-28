@@ -137,8 +137,7 @@ export default function Layout({ children, showBack, title }) {
               </button>
             ) : (
               <Link href="/" className="mobile-logo">
-                <img src="/Pad.png" alt="MonPad" style={{ width:36, height:36, borderRadius:10, objectFit:'cover' }} onError={e => e.target.style.display='none'} />
-                <span className="sidebar-logo-txt">mon<span>pad</span></span>
+                <img src="/monpad-logo.png" alt="MonPad" style={{ width:44, height:44, borderRadius:10, objectFit:'cover' }} onError={e => e.target.style.display='none'} />
               </Link>
             )}
             {title && <div className="topbar-title">{title}</div>}

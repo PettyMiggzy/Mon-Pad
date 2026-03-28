@@ -147,9 +147,7 @@ export default function Home() {
         flexWrap: 'wrap',
       }}>
         <div>
-          <div style={{ fontSize: 42, fontWeight: 900, letterSpacing: '-1.5px', marginBottom: 6, lineHeight: 1 }}>
-            <span style={{ background: 'linear-gradient(135deg,#6E54FF,#85E6FF)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>MonPad</span>
-          </div>
+          <img src="/monpad-logo.png" alt="MonPad" style={{ width: 90, height: 90, borderRadius: 16, objectFit: 'cover', marginBottom: 8 }} />
           <div style={{ fontSize: 13, color: 'var(--t3)', fontWeight: 500 }}>Fair launch · No presale · Devs earn 1.5% forever · 10 MON to launch</div>
         </div>
         <button
