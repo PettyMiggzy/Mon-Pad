@@ -10,10 +10,12 @@ function SplashScreen() {
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 9999,
-      background: '#0b0714',
+      background: 'linear-gradient(180deg, #d6b3ff 0%, #bf86ff 100%)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
+      flexDirection: 'column',
     }}>
-      <img src="/monpad-splash.jpg" alt="MonPad" style={{ width: 220, height: 220, objectFit: 'contain' }} />
+      <img src="/monpad-logo.png" alt="MonPad" style={{ width: 108, height: 108, borderRadius: 24, objectFit: 'cover', boxShadow: '0 10px 34px rgba(0,0,0,0.18)' }} />
+      <img src="/monpad-text-logo.png" alt="MonPad" style={{ width: 200, height: 'auto', objectFit: 'contain', marginTop: 18 }} />
     </div>
   )
 }
