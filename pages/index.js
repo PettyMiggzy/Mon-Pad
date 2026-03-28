@@ -1,54 +1,66 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/router'
-import { usePublicClient } from 'wagmi'
-import { parseAbiItem } from 'viem'
 import Layout from '../components/Layout'
-import { FACTORY_ADDRESS, FACTORY_ABI, CURVE_ABI, TOKEN_ABI, START_BLOCK, fmtMON, fmtUSD, fmtAddr } from '../lib/constants'
-import { monad } from '../lib/wagmi'
+import { fmtUSD, fmtAddr } from '../lib/constants'
 
 const SERVER = process.env.NEXT_PUBLIC_SERVER_URL || ''
+
 function fixUrl(url) {
-  if (!url) return url
+  if (!url) return ''
   if (url.startsWith('http://138.68.248.211:3001')) return url.replace('http://138.68.248.211:3001', SERVER)
   if (url.startsWith('http://api.monpad.net')) return url.replace('http://api.monpad.net', 'https://api.monpad.net')
   return url
 }
 
+function fmtNum(n) {
+  if (!n || n <= 0) return '0'
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M'
+  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K'
+  return n.toFixed(0)
+}
+
 const TABS = [
-  { id: 'movers',    label: '⭐ Movers' },
-  { id: 'live',      label: '🔴 Live', blink: true },
-  { id: 'new',       label: '🌱 New' },
-  { id: 'marketcap', label: '🔥 Market cap' },
-  { id: 'trenches',  label: '⚔️ Trenches' },
-  { id: 'oldest',    label: '🕰 Oldest' },
+  { id: 'new',       label: '🌱 New'       },
+  { id: 'movers',    label: '🔥 Hot'       },
+  { id: 'marketcap', label: '💎 Market Cap' },
+  { id: 'trenches',  label: '⚔️ Trenches'  },
   { id: 'grad',      label: '🎓 Graduated' },
 ]
 
-const GRAD_COLORS = ['#6E54FF','#a78bfa','#85E6FF','#FF8EE4','#FFAE45','#22c55e']
+const COLORS = ['#6E54FF','#a78bfa','#85E6FF','#FF8EE4','#FFAE45','#22c55e','#f472b6','#38bdf8']
 
 export default function Home() {
-  const router    = useRouter()
-  const client    = usePublicClient({ chainId: monad.id })
-  const [tab, setTab]         = useState('movers')
+  const router = useRouter()
+  const [tab, setTab]         = useState('new')
   const [tokens, setTokens]   = useState([])
-  const [metas, setMetas]     = useState({})
   const [liveRooms, setLive]  = useState([])
   const [loading, setLoading] = useState(true)
   const [monPrice, setMonPrice] = useState(0)
+  const [search, setSearch]   = useState('')
   const carouselRef = useRef(null)
 
+  // MON price
   useEffect(() => {
-    fetch(`${SERVER}/api/mon-price`).then(r=>r.json()).then(d=>setMonPrice(d.price||0)).catch(()=>{})
+    fetch(`${SERVER}/api/mon-price`).then(r => r.json()).then(d => setMonPrice(d.price || 0)).catch(() => {})
   }, [])
 
-  useEffect(() => { if (router.query.tab) setTab(router.query.tab) }, [router.query.tab])
+  // load tokens
   useEffect(() => { loadTokens() }, [])
 
-  // websocket for real-time price updates
+  // live rooms
+  useEffect(() => {
+    if (!SERVER) return
+    const poll = () => fetch(`${SERVER}/api/live`).then(r => r.json()).then(d => setLive(d.live || [])).catch(() => {})
+    poll()
+    const iv = setInterval(poll, 15000)
+    return () => clearInterval(iv)
+  }, [])
+
+  // websocket price updates
   useEffect(() => {
     if (!SERVER) return
     const wsUrl = SERVER.replace('https://', 'wss://').replace('http://', 'ws://')
-    let ws, retryTimeout
+    let ws, retry
     function connect() {
       ws = new WebSocket(wsUrl)
       ws.onmessage = e => {
@@ -57,90 +69,41 @@ export default function Home() {
           if (msg.type === 'price_update') {
             setTokens(prev => prev.map(t =>
               t.token?.toLowerCase() === msg.tokenAddress?.toLowerCase()
-                ? { ...t, marketCap: BigInt(msg.marketCap||'0'), monRaisedNet: BigInt(msg.monRaisedNet||'0'), bondedBps: BigInt(msg.bondedBps||'0') }
+                ? { ...t, marketCap: BigInt(msg.marketCap || '0'), monRaisedNet: BigInt(msg.monRaisedNet || '0'), bondedBps: BigInt(msg.bondedBps || '0') }
                 : t
             ))
           }
         } catch {}
       }
-      ws.onclose = () => { retryTimeout = setTimeout(connect, 3000) }
+      ws.onclose = () => { retry = setTimeout(connect, 3000) }
     }
     connect()
-    return () => { if (ws) ws.close(); clearTimeout(retryTimeout) }
+    return () => { ws?.close(); clearTimeout(retry) }
   }, [])
 
-  // poll live rooms every 15s
-  useEffect(() => {
-    if (!SERVER) return
-    const poll = () => fetch(`${SERVER}/api/live`).then(r=>r.json()).then(d=>setLive(d.live||[])).catch(()=>{})
-    poll()
-    const iv = setInterval(poll, 15000)
-    return () => clearInterval(iv)
-  }, [])
-
-
-// Demo tokens shown when platform is new (< 10 real tokens)
-// marketCap stored as plain numbers for easy mutation; displayed via BigInt conversion
-const DEMO_TOKENS_BASE = [
-  { token:'0xdemo1', curve:'0xdemo1c', creator:'0xdemo', name:'MonShiba',  symbol:'MSHIB',  graduated:false, capMon:400000000000000000000000n, colorIdx:10, isDemo:true, _mc:210000,  _bps:2800,  _img:'https://dd.dexscreener.com/ds-data/tokens/ethereum/0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE.png' },
-  { token:'0xdemo2', curve:'0xdemo2c', creator:'0xdemo', name:'PurpleNad', symbol:'PNAD',   graduated:false, capMon:400000000000000000000000n, colorIdx:11, isDemo:true, _mc:650000,  _bps:5500,  _img:'https://dd.dexscreener.com/ds-data/tokens/ethereum/0x4d224452801ACEd8B2F0aebE155379bb5D594381.png' },
-  { token:'0xdemo3', curve:'0xdemo3c', creator:'0xdemo', name:'MonDoge',   symbol:'MDOGE',  graduated:false, capMon:400000000000000000000000n, colorIdx:12, isDemo:true, _mc:95000,   _bps:1200,  _img:'https://dd.dexscreener.com/ds-data/tokens/ethereum/0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2.png' },
-  { token:'0xdemo4', curve:'0xdemo4c', creator:'0xdemo', name:'NadPepe',   symbol:'NPEPE',  graduated:true,  capMon:400000000000000000000000n, colorIdx:13, isDemo:true, _mc:1200000, _bps:10000, _img:'https://dd.dexscreener.com/ds-data/tokens/ethereum/0x6982508145454Ce325dDbE47a25d4ec3d2311933.png' },
-  { token:'0xdemo5', curve:'0xdemo5c', creator:'0xdemo', name:'MonAI',     symbol:'MAI',    graduated:false, capMon:400000000000000000000000n, colorIdx:14, isDemo:true, _mc:890000,  _bps:7800,  _img:'https://dd.dexscreener.com/ds-data/tokens/ethereum/0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984.png' },
-  { token:'0xdemo6', curve:'0xdemo6c', creator:'0xdemo', name:'LaunchPad', symbol:'LPAD',   graduated:false, capMon:400000000000000000000000n, colorIdx:15, isDemo:true, _mc:280000,  _bps:3300,  _img:'https://dd.dexscreener.com/ds-data/tokens/ethereum/0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599.png' },
-  { token:'0xdemo7', curve:'0xdemo7c', creator:'0xdemo', name:'MonCat',    symbol:'MCAT',   graduated:false, capMon:400000000000000000000000n, colorIdx:16, isDemo:true, _mc:72000,   _bps:900,   _img:'https://dd.dexscreener.com/ds-data/tokens/ethereum/0x514910771AF9Ca656af840dff83E8264EcF986CA.png' },
-  { token:'0xdemo8', curve:'0xdemo8c', creator:'0xdemo', name:'NadRocket', symbol:'NRKT',   graduated:false, capMon:400000000000000000000000n, colorIdx:17, isDemo:true, _mc:420000,  _bps:4400,  _img:'https://dd.dexscreener.com/ds-data/tokens/ethereum/0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9.png' },
-]
-function makeDemoTokens(bases) {
-  return bases.map(b => ({
-    ...b,
-    monRaisedNet: BigInt(Math.floor(b._mc * 1e18)),
-    marketCap:    BigInt(Math.floor(b._mc * 1e18)),
-    bondedBps:    BigInt(b._bps),
-    blockNumber:  0n,
-    pfpUrl:       b._img || null,
-  }))
-}
-// mutable state for demo MC simulation (outside component to persist across renders)
-let _demoBases = DEMO_TOKENS_BASE.map(b => ({ ...b }))
   async function loadTokens() {
-    if (!SERVER) return
+    if (!SERVER) { setLoading(false); return }
     try {
       const data = await fetch(`${SERVER}/api/tokens`).then(r => r.json())
-      const map  = {}
-      const list = data.map((t, i) => {
-        map[t.tokenAddress?.toLowerCase()] = t
-        return {
-          token:         t.tokenAddress,
-          curve:         t.curveAddress,
-          creator:       t.creator,
-          name:          t.name,
-          symbol:        t.symbol,
-          graduated:     t.graduated,
-          monRaisedNet:  BigInt(t.monRaisedNet || '0'),
-          capMon:        BigInt(t.capMon || '0'),
-          bondedBps:     BigInt(t.bondedBps || '0'),
-          marketCap:     BigInt(t.marketCap || '0'),
-          blockNumber:   BigInt(t.blockNumber || '0'),
-          colorIdx:      i,
-          // stats from server
-          vol24h:        t.vol24h        || 0,
-          uniqueBuyers:  t.uniqueBuyers  || 0,
-          ath:           t.ath           || 0,
-          change24h:     t.change24h     || 0,
-          // metadata
-          pfpUrl:        t.pfpUrl        || null,
-          bannerUrl:     t.bannerUrl     || null,
-          desc:          t.desc          || t.description || '',
-          twitter:       t.twitter       || '',
-          website:       t.website       || '',
-        }
-      })
-      // fill with demo tokens until 10 real ones exist
-      const demoCount = Math.max(0, 10 - list.length)
-      const combined = demoCount > 0 ? [...list, ...makeDemoTokens(_demoBases).slice(0, demoCount)] : list
-      setTokens(combined)
-      setMetas(map)
+      const list = data.map((t, i) => ({
+        ...t,
+        token:        t.tokenAddress,
+        curve:        t.curveAddress,
+        monRaisedNet: BigInt(t.monRaisedNet || '0'),
+        capMon:       BigInt(t.capMon       || '0'),
+        bondedBps:    BigInt(t.bondedBps    || '0'),
+        marketCap:    BigInt(t.marketCap    || '0'),
+        blockNumber:  BigInt(t.blockNumber  || '0'),
+        colorIdx:     i,
+        vol24h:       t.vol24h       || 0,
+        uniqueBuyers: t.uniqueBuyers || 0,
+        ath:          t.ath          || 0,
+        change24h:    t.change24h    || 0,
+        pfpUrl:       fixUrl(t.pfpUrl    || ''),
+        bannerUrl:    fixUrl(t.bannerUrl || ''),
+        desc:         t.desc || t.description || '',
+      }))
+      setTokens(list)
     } catch (e) {
       console.error('loadTokens:', e)
     } finally {
@@ -148,323 +111,339 @@ let _demoBases = DEMO_TOKENS_BASE.map(b => ({ ...b }))
     }
   }
 
-  // Animate demo token market caps to simulate live buys/sells
-  useEffect(() => {
-    const iv = setInterval(() => {
-      setTokens(prev => {
-        const hasReal = prev.filter(t => !t.isDemo).length
-        const needsDemo = hasReal < 10
-        if (!needsDemo) return prev
-        // pick a random demo token and nudge its MC
-        const demoIdx = Math.floor(Math.random() * _demoBases.length)
-        const base = _demoBases[demoIdx]
-        if (base.graduated) return prev // don't move graduated tokens
-        // random ±0.5% to ±3% move, slight upward bias
-        const changePct = (Math.random() * 3.5 - 1.0) / 100
-        const newMc = Math.max(10000, base._mc * (1 + changePct))
-        // nudge bondedBps proportionally (cap at 9999 for non-graduated)
-        const newBps = Math.min(9999, Math.max(100, Math.round(base._bps * (1 + changePct * 0.5))))
-        _demoBases[demoIdx] = { ...base, _mc: newMc, _bps: newBps }
-        return prev.map(t => {
-          if (!t.isDemo || t.token !== base.token) return t
-          return {
-            ...t,
-            marketCap:    BigInt(Math.floor(newMc * 1e18)),
-            monRaisedNet: BigInt(Math.floor(newMc * 1e18)),
-            bondedBps:    BigInt(newBps),
-          }
-        })
-      })
-    }, 2500)
-    return () => clearInterval(iv)
-  }, [])
+  const liveSet = new Set(liveRooms.map(a => a.toLowerCase()))
 
   function filtered() {
-    const live = new Set(liveRooms.map(a=>a.toLowerCase()))
-    if (tab === 'grad')      return tokens.filter(t => t.graduated)
-    if (tab === 'live')      return tokens.filter(t => live.has(t.token?.toLowerCase()))
-    if (tab === 'new')       return [...tokens]
-    if (tab === 'oldest')    return [...tokens].reverse()
-    if (tab === 'marketcap') return [...tokens].sort((a,b) => Number(b.marketCap||b.monRaisedNet) - Number(a.marketCap||a.monRaisedNet))
-    if (tab === 'trenches')  return tokens.filter(t => !t.graduated && Number(t.bondedBps) >= 5000)
-    // movers default
-    return [...tokens].sort((a,b) => Number(b.marketCap||b.monRaisedNet) - Number(a.marketCap||a.monRaisedNet))
+    let list = [...tokens]
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      list = list.filter(t => t.name?.toLowerCase().includes(q) || t.symbol?.toLowerCase().includes(q))
+    }
+    if (tab === 'grad')      return list.filter(t => t.graduated)
+    if (tab === 'trenches')  return list.filter(t => !t.graduated && Number(t.bondedBps) >= 5000)
+    if (tab === 'movers')    return list.sort((a, b) => (b.change24h || 0) - (a.change24h || 0))
+    if (tab === 'marketcap') return list.sort((a, b) => Number(b.marketCap - a.marketCap))
+    // new (default)
+    return list
   }
 
-  const list     = filtered()
-  const live     = new Set(liveRooms.map(a=>a.toLowerCase()))
-  const trending = [...tokens].sort((a,b) => {
-    const mcA = Number(a.marketCap || a.monRaisedNet || 0n)
-    const mcB = Number(b.marketCap || b.monRaisedNet || 0n)
-    return mcB - mcA
-  }).slice(0,6)
+  const list    = filtered()
+  const trending = [...tokens].sort((a, b) => Number(b.marketCap - a.marketCap)).slice(0, 8)
 
   return (
     <Layout>
-      {/* LAUNCH BANNER */}
-      <div className="launch-banner" style={{ margin:'12px 16px', padding:'16px 18px', background:'linear-gradient(135deg,rgba(110,84,255,0.12),rgba(133,230,255,0.06))', border:'1px solid rgba(110,84,255,0.2)', borderRadius:14, display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, flexWrap:'wrap' }}>
+
+      {/* ═══ HERO BANNER ═══ */}
+      <div style={{
+        margin: '12px 16px',
+        padding: '20px',
+        background: 'linear-gradient(135deg, rgba(110,84,255,0.15) 0%, rgba(133,230,255,0.06) 100%)',
+        border: '1px solid rgba(110,84,255,0.25)',
+        borderRadius: 18,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12,
+        flexWrap: 'wrap',
+      }}>
         <div>
-          <div style={{ fontSize:14, fontWeight:800, marginBottom:3, display:'flex', alignItems:'center', gap:6 }}>
-            <span style={{ background:'linear-gradient(135deg,var(--p),var(--cyan))', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}>MonPad</span>
-            <span style={{ fontSize:12, color:'var(--t2)', fontWeight:600 }}>is live on Monad</span>
+          <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: '-0.5px', marginBottom: 4 }}>
+            <span style={{ background: 'linear-gradient(135deg,#6E54FF,#85E6FF)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>MonPad</span>
+            <span style={{ color: 'var(--t2)', fontWeight: 600, fontSize: 14, marginLeft: 8 }}>on Monad</span>
           </div>
-          <div style={{ fontSize:11, color:'var(--t3)' }}>Fair launch · No presale · Devs earn 1.5% forever</div>
+          <div style={{ fontSize: 12, color: 'var(--t3)' }}>Fair launch · No presale · Devs earn 1.5% forever · 10 MON to launch</div>
         </div>
-        <button onClick={() => router.push('/create')}
-          style={{ padding:'10px 20px', background:'linear-gradient(135deg,var(--p),var(--cyan))', border:'none', borderRadius:10, color:'white', fontWeight:800, fontSize:13, cursor:'pointer', whiteSpace:'nowrap', flexShrink:0, boxShadow:'0 4px 20px rgba(110,84,255,0.3)' }}>
+        <button
+          onClick={() => router.push('/create')}
+          style={{
+            padding: '12px 24px',
+            background: 'linear-gradient(135deg,#6E54FF,#85E6FF)',
+            border: 'none', borderRadius: 12,
+            color: 'white', fontWeight: 800, fontSize: 14,
+            cursor: 'pointer', whiteSpace: 'nowrap',
+            boxShadow: '0 4px 24px rgba(110,84,255,0.4)',
+            transition: 'transform .15s, box-shadow .15s',
+          }}
+          onMouseEnter={e => { e.target.style.transform='translateY(-1px)'; e.target.style.boxShadow='0 6px 30px rgba(110,84,255,0.55)' }}
+          onMouseLeave={e => { e.target.style.transform='translateY(0)';    e.target.style.boxShadow='0 4px 24px rgba(110,84,255,0.4)' }}
+        >
           + Launch Token
         </button>
       </div>
-      {/* TRENDING CAROUSEL */}
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'16px 16px 10px' }}>
-        <div className="trending-title" style={{ fontSize:17, fontWeight:800 }}>Trending coins</div>
-        <div className="trending-arrows" style={{ display:'flex', gap:6 }}>
-          {['‹','›'].map((ch,i) => (
-            <button key={ch}
-              onClick={() => carouselRef.current?.scrollBy({ left: i===0?-240:240, behavior:'smooth' })}
-              style={{ width:30, height:30, borderRadius:'50%', background:'var(--bg2)', border:'1px solid var(--bd2)', color:'var(--t2)', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }}>
+
+      {/* ═══ TRENDING CAROUSEL ═══ */}
+      <div style={{ padding: '4px 16px 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--t2)' }}>🔥 Trending</span>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {['‹','›'].map((ch, i) => (
+            <button key={ch} onClick={() => carouselRef.current?.scrollBy({ left: i === 0 ? -220 : 220, behavior: 'smooth' })}
+              style={{ width:28, height:28, borderRadius:'50%', background:'var(--bg2)', border:'1px solid var(--bd2)', color:'var(--t2)', fontSize:13, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }}>
               {ch}
             </button>
           ))}
         </div>
       </div>
 
-      <div ref={carouselRef} style={{ display:'flex', gap:10, padding:'0 16px 8px', overflowX:'scroll', scrollbarWidth:'none', WebkitOverflowScrolling:'touch', msOverflowStyle:'none' }}>
-        {trending.length === 0 && !loading && (
-          <div style={{ color:'var(--t3)', fontSize:13, padding:'20px 0' }}>No tokens yet — launch the first one!</div>
-        )}
-        {loading && [0,1,2,4].map(i => (
-          <div key={i} style={{ flexShrink:0, width:'min(230px, 60vw)', height:145, borderRadius:12, background:'var(--bg2)', scrollSnapAlign:'start', animation:'pulse 1.5s infinite' }} />
-        ))}
-        {trending.map((t,i) => {
-          const meta = metas[t.token?.toLowerCase()]
-          const isLive = live.has(t.token?.toLowerCase())
-          const color  = GRAD_COLORS[t.colorIdx % GRAD_COLORS.length]
+      <div ref={carouselRef} style={{ display:'flex', gap:10, padding:'0 16px 12px', overflowX:'auto', scrollbarWidth:'none', WebkitOverflowScrolling:'touch' }}>
+        {trending.map((t, i) => {
+          const color = COLORS[t.colorIdx % COLORS.length]
+          const mc    = fmtUSD(t.marketCap || t.monRaisedNet, monPrice)
           return (
             <div key={t.token} onClick={() => router.push(`/token/${t.token}`)}
-              style={{ flexShrink:0, width:'min(230px, 60vw)', borderRadius:12, overflow:'hidden', position:'relative', cursor:'pointer', scrollSnapAlign:'start', background: meta?.bannerUrl ? '#000' : `linear-gradient(135deg,${color}22,${color}08)`, border:`1px solid ${color}22` }}>
-              {meta?.bannerUrl
-                ? <img src={fixUrl(meta.bannerUrl)} alt="" className="trend-carousel-card-img" style={{ width:'100%', height:100, objectFit:'cover', display:'block' }} />
-                : <div className="trend-carousel-card-img" style={{ height:100, display:'flex', alignItems:'center', justifyContent:'center', fontSize:42, fontWeight:900, color:`${color}20` }}>{(t.symbol||'?').slice(0,2)}</div>
+              style={{
+                flexShrink: 0, width: 160, borderRadius: 14, overflow: 'hidden',
+                position: 'relative', cursor: 'pointer',
+                border: `1px solid ${color}33`,
+                background: t.bannerUrl ? '#000' : `linear-gradient(135deg,${color}22,${color}08)`,
+                transition: 'transform .15s, border-color .15s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.transform='translateY(-2px)'}
+              onMouseLeave={e => e.currentTarget.style.transform='translateY(0)'}
+            >
+              {t.bannerUrl
+                ? <img src={t.bannerUrl} alt="" style={{ width:'100%', height:90, objectFit:'cover', display:'block' }} />
+                : <div style={{ height:90, display:'flex', alignItems:'center', justifyContent:'center', fontSize:36, fontWeight:900, color:`${color}40` }}>
+                    {t.pfpUrl
+                      ? <img src={t.pfpUrl} alt="" style={{ width:60, height:60, borderRadius:'50%', objectFit:'cover', border:`2px solid ${color}55` }} />
+                      : (t.symbol||'?').slice(0,2)
+                    }
+                  </div>
               }
-              {isLive && (
-                <div style={{ position:'absolute', top:8, left:8, background:'#ef4444', color:'white', fontSize:10, fontWeight:800, padding:'3px 8px', borderRadius:99, display:'flex', alignItems:'center', gap:4 }}>
-                  <span style={{ width:6, height:6, background:'white', borderRadius:'50%', animation:'blink 1.5s infinite' }} />LIVE
+              <div style={{ position:'absolute', inset:0, background:'linear-gradient(to top, rgba(0,0,0,0.9) 0%, transparent 55%)', pointerEvents:'none' }} />
+              {liveSet.has(t.token?.toLowerCase()) && (
+                <div style={{ position:'absolute', top:6, left:6, background:'#ef4444', color:'white', fontSize:9, fontWeight:800, padding:'2px 6px', borderRadius:4, display:'flex', alignItems:'center', gap:3 }}>
+                  <span style={{ width:5, height:5, background:'white', borderRadius:'50%', animation:'blink 1.5s infinite' }} />LIVE
                 </div>
               )}
-              <div style={{ position:'absolute', inset:0, background:'linear-gradient(to top,rgba(0,0,0,0.85) 0%,transparent 55%)', pointerEvents:'none' }} />
-              <div style={{ position:'absolute', bottom:0, left:0, right:0, padding:'10px 12px', zIndex:2, display:'flex', alignItems:'flex-end', gap:8 }}>
-                {meta?.pfpUrl && (
-                  <div style={{ width:26, height:26, borderRadius:7, overflow:'hidden', border:'1.5px solid rgba(255,255,255,0.2)', flexShrink:0 }}>
-                    <img src={fixUrl(meta.pfpUrl)} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
-                  </div>
-                )}
-                <div>
-                  <div style={{ fontSize:18, fontWeight:800, color:'white', lineHeight:1.1 }}>{fmtUSD(t.marketCap || t.monRaisedNet, monPrice)}</div>
-                  <div style={{ fontSize:12, fontWeight:600, color:'rgba(255,255,255,0.7)' }}>{t.name} · ${t.symbol}</div>
-                </div>
+              <div style={{ position:'absolute', bottom:0, left:0, right:0, padding:'8px 10px', zIndex:2 }}>
+                <div style={{ fontSize:13, fontWeight:800, color:'white', lineHeight:1.1 }}>{mc}</div>
+                <div style={{ fontSize:10, color:'rgba(255,255,255,0.6)', fontWeight:600 }}>${t.symbol}</div>
               </div>
             </div>
           )
         })}
       </div>
 
-      {/* FILTER TABS */}
-      <div className="tab-bar" style={{ overflowX:'auto', scrollbarWidth:'none', flexWrap:'nowrap' }}>
-        {TABS.map(t => (
-          <button key={t.id} className={`tab-pill ${tab===t.id?'on':'off'}`} onClick={() => setTab(t.id)}
-            style={{ flexShrink:0 }}>
-            {t.blink && tab === t.id && (
-              <span style={{ width:7, height:7, background:'white', borderRadius:'50%', animation:'blink 1.5s infinite', display:'inline-block', marginRight:5 }} />
-            )}
-            {t.label}
-            {t.id==='live' && liveRooms.length>0 && (
-              <span style={{ marginLeft:5, background:'#ef4444', color:'white', fontSize:10, fontWeight:800, padding:'1px 5px', borderRadius:99 }}>{liveRooms.length}</span>
-            )}
-          </button>
-        ))}
+      {/* ═══ SEARCH + TABS ═══ */}
+      <div style={{ padding: '0 16px 10px' }}>
+        <div style={{ position:'relative', marginBottom:10 }}>
+          <svg style={{ position:'absolute', left:12, top:'50%', transform:'translateY(-50%)', width:16, height:16, color:'var(--t3)', pointerEvents:'none' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35" strokeLinecap="round"/>
+          </svg>
+          <input
+            placeholder="Search tokens..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            style={{ width:'100%', background:'var(--bg2)', border:'1px solid var(--bd)', borderRadius:12, padding:'10px 12px 10px 36px', fontSize:14, color:'var(--t1)', outline:'none', fontFamily:'var(--sans)' }}
+          />
+        </div>
 
-        {/* Explore / Watchlist toggles like pump.fun */}
-        <div style={{ marginLeft:'auto', display:'flex', gap:0, flexShrink:0, borderBottom:'none' }}>
-          <button className="tab-pill on" style={{ background:'none', border:'none', borderBottom:'2px solid var(--p1)', borderRadius:0, color:'var(--p2)', padding:'10px 14px' }}>Explore</button>
-          <button className="tab-pill off" style={{ background:'none', border:'none', borderRadius:0, padding:'10px 14px' }}>Watchlist</button>
+        <div style={{ display:'flex', gap:6, overflowX:'auto', scrollbarWidth:'none' }}>
+          {TABS.map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)}
+              style={{
+                flexShrink:0, padding:'8px 16px', borderRadius:10, fontSize:13, fontWeight:700, border:'none', cursor:'pointer', whiteSpace:'nowrap', transition:'all .15s',
+                background: tab === t.id ? 'var(--p)' : 'var(--bg2)',
+                color:      tab === t.id ? 'white'    : 'var(--t2)',
+                boxShadow:  tab === t.id ? '0 4px 16px rgba(110,84,255,0.4)' : 'none',
+                outline: tab === t.id ? 'none' : '1px solid var(--bd)',
+              }}>
+              {t.label}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* TOKEN GRID — 3 columns like pump.fun */}
-      <div className="token-grid-wrap" style={{ padding:'12px 16px' }}>
+      {/* ═══ TOKEN GRID ═══ */}
+      <div style={{ padding:'0 16px 100px' }}>
+
         {loading && (
-          <div className="token-grid">
-            {[...Array(8)].map((_,i) => (
-              <div key={i} style={{ borderRadius:12, background:'var(--bg2)', animation:'pulse 1.5s infinite', height:200 }} />
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(320px, 1fr))', gap:10 }}>
+            {[...Array(6)].map((_, i) => (
+              <div key={i} style={{ height:160, borderRadius:16, background:'var(--bg2)', animation:'pulse 1.5s infinite' }} />
             ))}
           </div>
         )}
 
         {!loading && list.length === 0 && (
-          <div style={{ padding:'40px 0', textAlign:'center' }}>
-            <div style={{ fontSize:32, marginBottom:10 }}>
-              {tab==='live'?'📡':tab==='grad'?'🎓':tab==='trenches'?'⚔️':'🚀'}
-            </div>
-            <div style={{ fontSize:15, fontWeight:700, marginBottom:6 }}>
-              {tab==='live'?'Nobody is live right now':tab==='grad'?'No graduated tokens yet':tab==='trenches'?'No tokens in the trenches yet':'No tokens yet'}
-            </div>
-            <div style={{ fontSize:13, color:'var(--t3)' }}>
-              {tab==='live'?'Go live on your token page':tab==='grad'?'Tokens graduate at 400K MON':tab==='trenches'?'Tokens past 50% bonding show here':'Be the first to launch on MonPad'}
-            </div>
+          <div style={{ textAlign:'center', padding:'60px 0' }}>
+            <div style={{ fontSize:48, marginBottom:12 }}>🚀</div>
+            <div style={{ fontSize:18, fontWeight:800, marginBottom:6 }}>No tokens yet</div>
+            <div style={{ fontSize:13, color:'var(--t3)', marginBottom:20 }}>Be the first to launch on MonPad</div>
+            <button onClick={() => router.push('/create')}
+              style={{ padding:'12px 28px', background:'var(--p)', border:'none', borderRadius:12, color:'white', fontWeight:800, fontSize:14, cursor:'pointer' }}>
+              Launch Now
+            </button>
           </div>
         )}
 
         {!loading && list.length > 0 && (
-          <div className="token-grid">
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(320px, 1fr))', gap:10 }}>
             {list.map(t => (
-              <TokenCard key={t.token} token={t} meta={metas[t.token?.toLowerCase()]} isLive={live.has(t.token?.toLowerCase())} monPrice={monPrice} onClick={() => !t.isDemo && router.push(`/token/${t.token}`)} />
-            ))}
-            {list.length < 6 && Array.from({ length: Math.max(0, 4 - list.length) }).map((_, i) => (
-              <div key={`empty-${i}`} className="tcard" style={{ opacity:0.35, cursor:'default' }}>
-                <div className="tcard-img" style={{ background:'var(--bg3)', fontSize:32 }}>
-                  {['🚀','💎','🔥','⚡'][i]}
-                </div>
-                <div className="tcard-body">
-                  <div style={{ fontSize:12, fontWeight:700, color:'var(--t3)', marginBottom:2 }}>Your token here</div>
-                  <div style={{ fontSize:10, color:'var(--p2)', fontWeight:600 }}>+ Launch →</div>
-                </div>
-              </div>
+              <TokenCard
+                key={t.token}
+                token={t}
+                monPrice={monPrice}
+                isLive={liveSet.has(t.token?.toLowerCase())}
+                onClick={() => router.push(`/token/${t.token}`)}
+              />
             ))}
           </div>
         )}
       </div>
+
+      <style>{`
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+        input:focus { border-color: rgba(110,84,255,0.5) !important; }
+      `}</style>
     </Layout>
   )
 }
 
-function shortAddr(a) {
-  if (!a) return ''
-  return a.length > 10 ? `${a.slice(0,6)}…${a.slice(-4)}` : a
-}
+function TokenCard({ token: t, monPrice, isLive, onClick }) {
+  const color   = COLORS[t.colorIdx % COLORS.length]
+  const pct     = Math.min(100, Number(t.bondedBps) / 100)
+  const mc      = fmtUSD(t.marketCap || t.monRaisedNet, monPrice)
+  const change  = t.change24h || 0
+  const isUp    = change >= 0
+  const holders = t.uniqueBuyers || 0
+  const symbol  = t.symbol || '??'
+  const name    = t.name   || 'Unknown'
+  const desc    = t.desc   || ''
+  const imgUrl  = t.pfpUrl || ''
+  const contract = t.token || ''
 
-function fmtMONval(n) {
-  if (!n || n <= 0) return '$0'
-  if (n >= 1_000_000) return `$${(n/1_000_000).toFixed(2)}M`
-  if (n >= 1_000) return `$${(n/1_000).toFixed(1)}K`
-  return `$${n.toFixed(2)}`
-}
-
-function TokenCard({ token: t, meta, isLive, monPrice, onClick }) {
-  const pct       = Number(t.bondedBps) / 100
-  const color     = GRAD_COLORS[t.colorIdx % GRAD_COLORS.length]
-  const mcDisplay = fmtUSD(t.marketCap || t.monRaisedNet, monPrice)
-  const change24h = t.change24h || 0
-  const isUp      = change24h >= 0
-  const imgUrl    = fixUrl(t.pfpUrl || meta?.pfpUrl || '')
-  const symbol    = t.symbol || meta?.symbol || '??'
-  const name      = t.name   || meta?.name   || 'Unknown'
-  const desc      = t.desc   || meta?.desc   || meta?.description || ''
-  const contract  = t.token  || t.tokenAddress || ''
-  const vol       = t.vol24h || 0
-  const holders   = t.uniqueBuyers || 0
-  const athMon    = t.ath > 0 ? t.ath * 1_000_000_000 : 0
-  const athDisplay = athMon > 0 ? fmtUSD(BigInt(Math.floor(athMon * 1e18)), monPrice) : null
+  // ATH market cap
+  const athWei  = t.ath > 0 ? BigInt(Math.floor(t.ath * 1_000_000_000 * 1e18)) : null
+  const athDisp = athWei ? fmtUSD(athWei, monPrice) : null
 
   return (
-    <div onClick={onClick} style={{
-      cursor: t.isDemo ? 'default' : 'pointer',
-      opacity: t.isDemo ? 0.85 : 1,
-      background: 'var(--bg2)',
-      border: '1px solid var(--bd)',
-      borderRadius: 14,
-      overflow: 'hidden',
-      display: 'flex',
-      flexDirection: 'column',
-      transition: 'border-color .15s',
-    }}
-    onMouseEnter={e => e.currentTarget.style.borderColor='rgba(110,84,255,0.35)'}
-    onMouseLeave={e => e.currentTarget.style.borderColor='var(--bd)'}
+    <div
+      onClick={onClick}
+      style={{
+        background: 'var(--bg2)',
+        border: '1px solid var(--bd)',
+        borderRadius: 16,
+        overflow: 'hidden',
+        cursor: 'pointer',
+        transition: 'transform .15s, border-color .15s, box-shadow .15s',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+      onMouseEnter={e => {
+        e.currentTarget.style.transform = 'translateY(-2px)'
+        e.currentTarget.style.borderColor = `${color}55`
+        e.currentTarget.style.boxShadow = `0 8px 30px rgba(0,0,0,0.3)`
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.transform = 'translateY(0)'
+        e.currentTarget.style.borderColor = 'var(--bd)'
+        e.currentTarget.style.boxShadow = 'none'
+      }}
     >
-      {/* ── TOP: image left + info right ── */}
+      {/* ── TOP ROW: image + info ── */}
       <div style={{ display:'flex', flexDirection:'row' }}>
 
         {/* Image */}
         <div style={{
-          width: 120, height: 120, flexShrink: 0,
-          background: imgUrl ? '#000' : `linear-gradient(135deg,${color}55,${color}11)`,
-          display:'flex', alignItems:'center', justifyContent:'center',
-          position:'relative', overflow:'hidden',
+          width: 110, height: 110, flexShrink: 0,
+          background: imgUrl ? '#000' : `linear-gradient(135deg,${color}44,${color}11)`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          position: 'relative', overflow: 'hidden',
         }}>
           {imgUrl
-            ? <img src={imgUrl} alt={name} style={{ width:'100%', height:'100%', objectFit:'cover' }}
-                onError={e => { e.target.style.display='none' }} />
-            : <span style={{ fontSize:28, fontWeight:900, color, textShadow:`0 0 20px ${color}88` }}>{symbol.slice(0,2).toUpperCase()}</span>
+            ? <img src={imgUrl} alt={name} style={{ width:'100%', height:'100%', objectFit:'cover' }} onError={e => { e.target.style.display='none' }} />
+            : <span style={{ fontSize:32, fontWeight:900, color, textShadow:`0 0 24px ${color}` }}>{symbol.slice(0,2).toUpperCase()}</span>
           }
+          {/* badges */}
           {t.graduated && (
-            <div style={{ position:'absolute', top:5, left:5, background:'var(--gold)', color:'#000', fontSize:9, fontWeight:800, padding:'2px 5px', borderRadius:4 }}>🎓</div>
+            <div style={{ position:'absolute', top:5, left:5, background:'#d97706', color:'white', fontSize:9, fontWeight:800, padding:'2px 6px', borderRadius:5 }}>🎓 GRAD</div>
           )}
           {isLive && !t.graduated && (
-            <div style={{ position:'absolute', top:5, left:5, background:'#ef4444', color:'white', fontSize:9, fontWeight:800, padding:'2px 5px', borderRadius:4, display:'flex', alignItems:'center', gap:3 }}>
+            <div style={{ position:'absolute', top:5, left:5, background:'#ef4444', color:'white', fontSize:9, fontWeight:800, padding:'2px 6px', borderRadius:5, display:'flex', alignItems:'center', gap:3 }}>
               <span style={{ width:5, height:5, background:'white', borderRadius:'50%', animation:'blink 1.5s infinite' }} />LIVE
             </div>
           )}
         </div>
 
         {/* Info */}
-        <div style={{ flex:1, padding:'10px 12px', minWidth:0, display:'flex', flexDirection:'column', gap:4 }}>
-          {/* Symbol badge */}
-          <div style={{ display:'inline-block', background:'rgba(110,84,255,0.3)', borderRadius:6, padding:'2px 9px', fontSize:11, fontWeight:800, color:'var(--p2)', fontFamily:'var(--mono)', alignSelf:'flex-start' }}>
-            {symbol}
+        <div style={{ flex:1, padding:'10px 12px', minWidth:0, display:'flex', flexDirection:'column', gap:3 }}>
+
+          {/* Symbol + change */}
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+            <span style={{
+              background: `${color}30`, color, border: `1px solid ${color}55`,
+              borderRadius: 6, padding: '1px 8px', fontSize: 11, fontWeight: 800, fontFamily:'var(--mono)',
+            }}>
+              ${symbol}
+            </span>
+            {change !== 0 && (
+              <span style={{ fontSize:11, fontWeight:700, color: isUp ? '#22c55e' : '#ef4444', fontFamily:'var(--mono)' }}>
+                {isUp ? '▲' : '▼'} {Math.abs(change).toFixed(1)}%
+              </span>
+            )}
           </div>
+
           {/* Name */}
           <div style={{ fontSize:16, fontWeight:800, color:'var(--t1)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
             {name}
           </div>
+
           {/* Description */}
-          {desc && (
+          {desc ? (
             <div style={{ fontSize:11, color:'var(--t3)', lineHeight:1.4, overflow:'hidden', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical' }}>
               {desc}
             </div>
+          ) : (
+            <div style={{ fontSize:11, color:'var(--t3)', fontStyle:'italic' }}>No description</div>
           )}
-          {/* 24h % | Vol | Holders row */}
-          <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
-            <span style={{ fontSize:11, color:'var(--t3)', fontFamily:'var(--mono)' }}>
-              24h <span style={{ color: isUp ? 'var(--g)' : 'var(--r)', fontWeight:700 }}>{isUp?'+':''}{change24h.toFixed(0)}%</span>
+
+          {/* Holders + contract */}
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:'auto' }}>
+            <span style={{ fontSize:10, color:'var(--t3)', display:'flex', alignItems:'center', gap:3 }}>
+              👥 <span style={{ color:'var(--t2)', fontWeight:600 }}>{fmtNum(holders)} holders</span>
             </span>
-            {vol > 0 && (
-              <span style={{ fontSize:11, color:'var(--t3)', fontFamily:'var(--mono)' }}>
-                Vol <span style={{ color:'var(--t1)', fontWeight:700 }}>{fmtUSD(BigInt(Math.floor(vol*1e18)), monPrice)}</span>
-              </span>
-            )}
-            <span style={{ fontSize:11, color:'var(--t3)', display:'flex', alignItems:'center', gap:3 }}>
-              👤 <span style={{ color:'var(--t1)', fontWeight:700 }}>{holders}</span>
+            <span style={{ fontSize:10, color:'var(--t3)', fontFamily:'var(--mono)' }}>
+              {fmtAddr(contract)}
             </span>
           </div>
-          {/* Contract */}
-          <div style={{ fontSize:10, color:'var(--t3)', fontFamily:'var(--mono)' }}>
-            {shortAddr(contract)}
-          </div>
+
         </div>
       </div>
 
-      {/* ── BOTTOM: MC | ATH + progress bar ── */}
-      <div style={{ padding:'8px 12px 10px', borderTop:'1px solid var(--bd)' }}>
+      {/* ── BOTTOM: MC / ATH / progress ── */}
+      <div style={{ padding:'8px 12px 10px', borderTop:'1px solid rgba(255,255,255,0.04)' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
-          <span style={{ fontSize:12, color:'var(--t3)' }}>
-            MC <span style={{ fontWeight:800, color:'var(--t1)', fontFamily:'var(--mono)' }}>{mcDisplay}</span>
-          </span>
-          {athDisplay && (
-            <span style={{ fontSize:12, color:'var(--t3)' }}>
-              ATH <span style={{ fontWeight:800, color:'var(--t1)', fontFamily:'var(--mono)' }}>{athDisplay}</span>
-            </span>
+          <div style={{ fontSize:12 }}>
+            <span style={{ color:'var(--t3)', marginRight:4 }}>MC</span>
+            <span style={{ fontWeight:800, color:'var(--t1)', fontFamily:'var(--mono)' }}>{mc}</span>
+          </div>
+          {athDisp && (
+            <div style={{ fontSize:12 }}>
+              <span style={{ color:'var(--t3)', marginRight:4 }}>ATH</span>
+              <span style={{ fontWeight:800, color:'var(--p2)', fontFamily:'var(--mono)' }}>{athDisp}</span>
+            </div>
           )}
+          <div style={{ fontSize:11, color: t.graduated ? '#22c55e' : 'var(--t3)', fontWeight:700, fontFamily:'var(--mono)' }}>
+            {t.graduated ? '✓ Graduated' : `${pct.toFixed(1)}%`}
+          </div>
         </div>
-        <div style={{ width:'100%', height:4, background:'var(--bg3)', borderRadius:999, overflow:'hidden' }}>
+
+        {/* Progress bar */}
+        <div style={{ height:5, background:'rgba(255,255,255,0.06)', borderRadius:999, overflow:'hidden' }}>
           <div style={{
-            height:'100%',
-            background: t.graduated ? 'linear-gradient(90deg,#d97706,#FFAE45)' : 'linear-gradient(90deg,var(--p),var(--cyan))',
-            borderRadius:999,
-            width:`${Math.min(pct,100)}%`,
-            transition:'width .4s ease',
+            height:'100%', borderRadius:999,
+            width: `${pct}%`,
+            background: t.graduated
+              ? 'linear-gradient(90deg,#d97706,#FFAE45)'
+              : `linear-gradient(90deg,${color},${color}99)`,
+            transition: 'width .4s ease',
+            boxShadow: `0 0 8px ${color}88`,
           }} />
         </div>
       </div>
+
     </div>
   )
 }
