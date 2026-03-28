@@ -141,13 +141,8 @@ export default function Home() {
         background: '#000',
         borderBottom: '1px solid rgba(255,255,255,0.08)',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <span style={{ fontSize: 30, fontWeight: 900, color: '#ffffff', letterSpacing: '-1px', fontFamily: 'var(--sans)' }}>mon</span>
-          <span style={{ fontSize: 30, fontWeight: 900, color: '#7c6fff', letterSpacing: '-1px', fontFamily: 'var(--sans)' }}>pad</span>
-          <svg width="14" height="14" viewBox="0 0 14 14" style={{ marginLeft: 1, marginBottom: 2, flexShrink: 0 }}>
-            <rect x="3" y="3" width="8" height="8" rx="2" transform="rotate(45 7 7)" fill="none" stroke="#7c6fff" strokeWidth="1.8"/>
-          </svg>
-        </div>
+        <img src="/monpad-text-logo.png" alt="MonPad"
+          style={{ height: 36, width: 'auto', objectFit: 'contain' }} />
         <button onClick={() => router.push('/create')} style={{
           padding: '12px 24px', background: 'linear-gradient(135deg,#6E54FF,#85E6FF)',
           border: 'none', borderRadius: 14, color: 'white', fontWeight: 900, fontSize: 17, cursor: 'pointer',
