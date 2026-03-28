@@ -10,11 +10,11 @@ function SplashScreen() {
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 9999,
-      background: 'linear-gradient(180deg, #d6b3ff 0%, #bf86ff 100%)',
+      background: '#000',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       flexDirection: 'column',
     }}>
-      <img src="/monpad-logo.png" alt="MonPad" style={{ width: 108, height: 108, borderRadius: 24, objectFit: 'cover', boxShadow: '0 10px 34px rgba(0,0,0,0.18)' }} />
+      <img src="/monpad-logo.png" alt="MonPad" style={{ width: 108, height: 108, borderRadius: 24, objectFit: 'cover', boxShadow: '0 10px 34px rgba(0,0,0,0.24)' }} />
       <img src="/monpad-text-logo.png" alt="MonPad" style={{ width: 200, height: 'auto', objectFit: 'contain', marginTop: 18 }} />
     </div>
   )
@@ -31,7 +31,7 @@ export default function App({ Component, pageProps }) {
     if (!seen) {
       setShowSplash(true)
       sessionStorage.setItem('monpad_splash_seen', '1')
-      const t = setTimeout(() => setShowSplash(false), 1400)
+      const t = setTimeout(() => setShowSplash(false), 2500)
       return () => clearTimeout(t)
     }
   }, [])
