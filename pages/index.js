@@ -351,102 +351,119 @@ function fmtMONval(n) {
 }
 
 function TokenCard({ token: t, meta, isLive, monPrice, onClick }) {
-  const pct        = Number(t.bondedBps) / 100
-  const color      = GRAD_COLORS[t.colorIdx % GRAD_COLORS.length]
-  const mcDisplay  = fmtUSD(t.marketCap || t.monRaisedNet, monPrice)
-  const change24h  = t.change24h || 0
-  const isUp       = change24h >= 0
-  const imgUrl     = fixUrl(t.pfpUrl || meta?.pfpUrl || '')
-  const symbol     = t.symbol  || meta?.symbol || '??'
-  const name       = t.name    || meta?.name   || 'Unknown'
-  const desc       = t.desc    || meta?.desc   || meta?.description || ''
-  const contract   = t.token   || t.tokenAddress || ''
-
-  // ATH: t.ath is price in MON per token, MC = ath * 1B supply
-  const athMon = t.ath > 0 ? t.ath * 1_000_000_000 : 0
+  const pct       = Number(t.bondedBps) / 100
+  const color     = GRAD_COLORS[t.colorIdx % GRAD_COLORS.length]
+  const mcDisplay = fmtUSD(t.marketCap || t.monRaisedNet, monPrice)
+  const change24h = t.change24h || 0
+  const isUp      = change24h >= 0
+  const imgUrl    = fixUrl(t.pfpUrl || meta?.pfpUrl || '')
+  const symbol    = t.symbol || meta?.symbol || '??'
+  const name      = t.name   || meta?.name   || 'Unknown'
+  const desc      = t.desc   || meta?.desc   || meta?.description || ''
+  const contract  = t.token  || t.tokenAddress || ''
+  const vol       = t.vol24h || 0
+  const holders   = t.uniqueBuyers || 0
+  const athMon    = t.ath > 0 ? t.ath * 1_000_000_000 : 0
   const athDisplay = athMon > 0 ? fmtUSD(BigInt(Math.floor(athMon * 1e18)), monPrice) : null
 
   return (
-    <div className="tcard" onClick={onClick} style={{ cursor: t.isDemo ? 'default' : 'pointer', opacity: t.isDemo ? 0.85 : 1 }}>
+    <div onClick={onClick} style={{
+      cursor: t.isDemo ? 'default' : 'pointer',
+      opacity: t.isDemo ? 0.85 : 1,
+      background: 'var(--bg2)',
+      border: '1px solid var(--bd)',
+      borderRadius: 14,
+      overflow: 'hidden',
+      display: 'flex',
+      flexDirection: 'column',
+      transition: 'border-color .15s',
+    }}
+    onMouseEnter={e => e.currentTarget.style.borderColor='rgba(110,84,255,0.35)'}
+    onMouseLeave={e => e.currentTarget.style.borderColor='var(--bd)'}
+    >
+      {/* ── TOP: image left + info right ── */}
+      <div style={{ display:'flex', flexDirection:'row' }}>
 
-      {/* ── Image left ── */}
-      <div className="tcard-img" style={{ background: imgUrl ? '#000' : `linear-gradient(135deg,${color}55,${color}11)` }}>
-        {imgUrl
-          ? <img src={imgUrl} alt={name} style={{ width:'100%', height:'100%', objectFit:'cover' }}
-              onError={e => { e.target.style.display='none'; e.target.parentNode.style.background=`linear-gradient(135deg,${color}55,${color}11)` }} />
-          : <span style={{ fontSize:30, fontWeight:900, color:color, textShadow:`0 0 20px ${color}88` }}>{symbol.slice(0,2).toUpperCase()}</span>
-        }
-        {t.graduated && <div className="tcard-badge" style={{ background:'var(--gold)', color:'#000' }}>🎓</div>}
-        {isLive && !t.graduated && (
-          <div className="tcard-badge" style={{ display:'flex', alignItems:'center', gap:3, background:'#ef4444' }}>
-            <span style={{ width:5, height:5, background:'white', borderRadius:'50%', animation:'blink 1.5s infinite' }} />LIVE
-          </div>
-        )}
-      </div>
-
-      {/* ── Info right ── */}
-      <div className="tcard-body">
-
-        {/* Top: symbol + 24h change */}
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:3 }}>
-          <div style={{ background:'rgba(110,84,255,0.25)', borderRadius:6, padding:'2px 9px', fontSize:11, fontWeight:800, color:'var(--p2)', fontFamily:'var(--mono)' }}>
-            ${symbol}
-          </div>
-          {change24h !== 0 && (
-            <span style={{ fontSize:11, fontWeight:700, color: isUp ? 'var(--g)' : 'var(--r)', fontFamily:'var(--mono)' }}>
-              {isUp ? '▲' : '▼'}{Math.abs(change24h).toFixed(1)}%
-            </span>
+        {/* Image */}
+        <div style={{
+          width: 120, height: 120, flexShrink: 0,
+          background: imgUrl ? '#000' : `linear-gradient(135deg,${color}55,${color}11)`,
+          display:'flex', alignItems:'center', justifyContent:'center',
+          position:'relative', overflow:'hidden',
+        }}>
+          {imgUrl
+            ? <img src={imgUrl} alt={name} style={{ width:'100%', height:'100%', objectFit:'cover' }}
+                onError={e => { e.target.style.display='none' }} />
+            : <span style={{ fontSize:28, fontWeight:900, color, textShadow:`0 0 20px ${color}88` }}>{symbol.slice(0,2).toUpperCase()}</span>
+          }
+          {t.graduated && (
+            <div style={{ position:'absolute', top:5, left:5, background:'var(--gold)', color:'#000', fontSize:9, fontWeight:800, padding:'2px 5px', borderRadius:4 }}>🎓</div>
           )}
-        </div>
-
-        {/* Name */}
-        <div style={{ fontSize:15, fontWeight:800, color:'var(--t1)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', marginBottom:2 }}>
-          {name}
-        </div>
-
-        {/* Description */}
-        {desc && (
-          <div style={{ fontSize:11, color:'var(--t3)', lineHeight:1.4, overflow:'hidden', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', marginBottom:4 }}>
-            {desc}
-          </div>
-        )}
-
-        {/* Contract address */}
-        <div style={{ fontSize:10, color:'var(--t3)', fontFamily:'var(--mono)', marginBottom:6 }}>
-          {shortAddr(contract)}
-        </div>
-
-        {/* Stats: MC + ATH */}
-        <div style={{ display:'flex', gap:10, marginBottom:6 }}>
-          <div>
-            <span style={{ fontSize:10, color:'var(--t3)' }}>MC </span>
-            <span style={{ fontSize:12, fontWeight:800, fontFamily:'var(--mono)', color:'var(--gold)' }}>{mcDisplay}</span>
-          </div>
-          {athDisplay && (
-            <div>
-              <span style={{ fontSize:10, color:'var(--t3)' }}>ATH </span>
-              <span style={{ fontSize:12, fontWeight:700, fontFamily:'var(--mono)', color:'var(--p2)' }}>{athDisplay}</span>
+          {isLive && !t.graduated && (
+            <div style={{ position:'absolute', top:5, left:5, background:'#ef4444', color:'white', fontSize:9, fontWeight:800, padding:'2px 5px', borderRadius:4, display:'flex', alignItems:'center', gap:3 }}>
+              <span style={{ width:5, height:5, background:'white', borderRadius:'50%', animation:'blink 1.5s infinite' }} />LIVE
             </div>
           )}
         </div>
 
-        {/* Bonding progress bar */}
-        <div style={{ display:'flex', justifyContent:'space-between', fontSize:10, color:'var(--t3)', marginBottom:3 }}>
-          <span>Bonding curve</span>
-          <span style={{ fontWeight:700, color: t.graduated ? 'var(--g)' : 'var(--p3)', fontFamily:'var(--mono)' }}>
-            {t.graduated ? '✓ Grad' : `${pct.toFixed(1)}%`}
-          </span>
+        {/* Info */}
+        <div style={{ flex:1, padding:'10px 12px', minWidth:0, display:'flex', flexDirection:'column', gap:4 }}>
+          {/* Symbol badge */}
+          <div style={{ display:'inline-block', background:'rgba(110,84,255,0.3)', borderRadius:6, padding:'2px 9px', fontSize:11, fontWeight:800, color:'var(--p2)', fontFamily:'var(--mono)', alignSelf:'flex-start' }}>
+            {symbol}
+          </div>
+          {/* Name */}
+          <div style={{ fontSize:16, fontWeight:800, color:'var(--t1)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+            {name}
+          </div>
+          {/* Description */}
+          {desc && (
+            <div style={{ fontSize:11, color:'var(--t3)', lineHeight:1.4, overflow:'hidden', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical' }}>
+              {desc}
+            </div>
+          )}
+          {/* 24h % | Vol | Holders row */}
+          <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+            <span style={{ fontSize:11, color:'var(--t3)', fontFamily:'var(--mono)' }}>
+              24h <span style={{ color: isUp ? 'var(--g)' : 'var(--r)', fontWeight:700 }}>{isUp?'+':''}{change24h.toFixed(0)}%</span>
+            </span>
+            {vol > 0 && (
+              <span style={{ fontSize:11, color:'var(--t3)', fontFamily:'var(--mono)' }}>
+                Vol <span style={{ color:'var(--t1)', fontWeight:700 }}>{fmtUSD(BigInt(Math.floor(vol*1e18)), monPrice)}</span>
+              </span>
+            )}
+            <span style={{ fontSize:11, color:'var(--t3)', display:'flex', alignItems:'center', gap:3 }}>
+              👤 <span style={{ color:'var(--t1)', fontWeight:700 }}>{holders}</span>
+            </span>
+          </div>
+          {/* Contract */}
+          <div style={{ fontSize:10, color:'var(--t3)', fontFamily:'var(--mono)' }}>
+            {shortAddr(contract)}
+          </div>
         </div>
-        <div style={{ width:'100%', height:5, background:'var(--bg3)', borderRadius:999, overflow:'hidden' }}>
+      </div>
+
+      {/* ── BOTTOM: MC | ATH + progress bar ── */}
+      <div style={{ padding:'8px 12px 10px', borderTop:'1px solid var(--bd)' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
+          <span style={{ fontSize:12, color:'var(--t3)' }}>
+            MC <span style={{ fontWeight:800, color:'var(--t1)', fontFamily:'var(--mono)' }}>{mcDisplay}</span>
+          </span>
+          {athDisplay && (
+            <span style={{ fontSize:12, color:'var(--t3)' }}>
+              ATH <span style={{ fontWeight:800, color:'var(--t1)', fontFamily:'var(--mono)' }}>{athDisplay}</span>
+            </span>
+          )}
+        </div>
+        <div style={{ width:'100%', height:4, background:'var(--bg3)', borderRadius:999, overflow:'hidden' }}>
           <div style={{
             height:'100%',
             background: t.graduated ? 'linear-gradient(90deg,#d97706,#FFAE45)' : 'linear-gradient(90deg,var(--p),var(--cyan))',
             borderRadius:999,
             width:`${Math.min(pct,100)}%`,
-            transition:'width .4s ease'
+            transition:'width .4s ease',
           }} />
         </div>
-
       </div>
     </div>
   )
