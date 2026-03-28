@@ -142,7 +142,7 @@ export default function Home() {
         borderBottom: '1px solid rgba(255,255,255,0.08)',
       }}>
         <img src="/monpad-text-logo.png" alt="MonPad"
-          style={{ height: 48, width: 'auto', objectFit: 'contain' }} />
+          style={{ height: 40, width: 140, objectFit: 'contain', objectPosition: 'left' }} />
         <button onClick={() => router.push('/create')} style={{
           padding: '16px 32px', background: 'linear-gradient(135deg,#6E54FF,#85E6FF)',
           border: 'none', borderRadius: 16, color: 'white', fontWeight: 900, fontSize: 20, cursor: 'pointer',
@@ -708,12 +708,12 @@ function TokenRow({ token: t, monPrice, isLive, onClick }) {
       </div>
 
       {/* ── Sparkline ── */}
-      <div style={{ flexShrink: 0, width: 100, height: 60, alignSelf: 'center' }}>
-        <SparklineFill prices={sparkPrices} height={60} />
+      <div style={{ flex: 1, minWidth: 0, maxWidth: 110, height: 56, alignSelf: 'center' }}>
+        <SparklineFill prices={sparkPrices} height={56} />
       </div>
 
       {/* ── Market cap ── */}
-      <div style={{ flexShrink: 0, textAlign: 'right', minWidth: 64 }}>
+      <div style={{ flexShrink: 0, textAlign: 'right', width: 64 }}>
         <div style={{ fontSize: 22, fontWeight: 700, color: '#ffffff', whiteSpace: 'nowrap', letterSpacing: '-0.3px', lineHeight: 1 }}>
           {mc}
         </div>

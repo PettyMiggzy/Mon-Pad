@@ -34,6 +34,8 @@ html, body {
   color: var(--t1);
   font-family: var(--sans);
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  max-width: 100vw;
 }
 
 a { color: inherit; text-decoration: none; }
@@ -414,8 +416,10 @@ input, textarea { font-family: var(--sans); }
   .stats-bar   { display: none !important; }
   .sidebar     { display: none !important; }
 
-  /* Main area: full width, no offset */
+  /* Main area: full width, no offset, NO horizontal scroll */
   .main-area   { margin-left: 0 !important; }
+  .app-root    { overflow-x: hidden !important; max-width: 100vw !important; }
+  .page-content { overflow-x: hidden !important; max-width: 100vw !important; }
 
   /* Page content: fills screen, safe area above bottom nav */
   .page-content {
