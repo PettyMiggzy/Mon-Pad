@@ -267,15 +267,15 @@ export default function Home() {
             </div>
             {/* Mobile skeleton */}
             <div className="mobile-list">
-              {[...Array(6)].map((_, i) => (
-                <div key={i} style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.05)' }}>
-                  <div style={{ width:70, height:70, borderRadius:14, background:'var(--bg2)', animation:'pulse 1.5s infinite', flexShrink:0 }} />
-                  <div style={{ flex:1, display:'flex', flexDirection:'column', gap:8 }}>
-                    <div style={{ width:'70%', height:15, borderRadius:6, background:'var(--bg2)', animation:'pulse 1.5s infinite' }} />
-                    <div style={{ width:'40%', height:11, borderRadius:6, background:'var(--bg2)', animation:'pulse 1.5s infinite' }} />
+              {[...Array(5)].map((_, i) => (
+                <div key={i} style={{ display:'flex', alignItems:'center', gap:14, padding:'14px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
+                  <div style={{ width:80, height:80, borderRadius:16, background:'var(--bg2)', animation:'pulse 1.5s infinite', flexShrink:0 }} />
+                  <div style={{ width:90, flexShrink:0, display:'flex', flexDirection:'column', gap:8 }}>
+                    <div style={{ width:80, height:17, borderRadius:6, background:'var(--bg2)', animation:'pulse 1.5s infinite' }} />
+                    <div style={{ width:55, height:13, borderRadius:6, background:'var(--bg2)', animation:'pulse 1.5s infinite' }} />
                   </div>
-                  <div style={{ width:120, height:52, borderRadius:8, background:'var(--bg2)', animation:'pulse 1.5s infinite' }} />
-                  <div style={{ width:60, height:20, borderRadius:6, background:'var(--bg2)', animation:'pulse 1.5s infinite' }} />
+                  <div style={{ flex:1, height:60, borderRadius:8, background:'var(--bg2)', animation:'pulse 1.5s infinite' }} />
+                  <div style={{ width:65, height:24, borderRadius:6, background:'var(--bg2)', animation:'pulse 1.5s infinite', flexShrink:0 }} />
                 </div>
               ))}
             </div>
@@ -485,12 +485,12 @@ function TokenCard({ token: t, monPrice, isLive, onClick }) {
 }
 
 // ─── Sparkline SVG ───────────────────────────────────────────────────────────
-function Sparkline({ prices, color = '#22c55e', width = 100, height = 40 }) {
+function Sparkline({ prices, color = '#22c55e', width = 100, height = 50 }) {
   if (!prices || prices.length < 2) {
-    // flat line if no data
     return (
       <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-        <line x1={0} y1={height / 2} x2={width} y2={height / 2} stroke={color} strokeWidth={1.5} strokeOpacity={0.4} />
+        <line x1={4} y1={height * 0.65} x2={width - 4} y2={height * 0.65}
+          stroke={color} strokeWidth={2} strokeOpacity={0.35} strokeLinecap="round" />
       </svg>
     )
   }
@@ -498,36 +498,44 @@ function Sparkline({ prices, color = '#22c55e', width = 100, height = 40 }) {
   const min = Math.min(...prices)
   const max = Math.max(...prices)
   const range = max - min || 1
-  const pad = 3
+  const padX = 4, padY = 5
 
   const pts = prices.map((p, i) => {
-    const x = pad + (i / (prices.length - 1)) * (width - pad * 2)
-    const y = pad + (1 - (p - min) / range) * (height - pad * 2)
-    return `${x.toFixed(1)},${y.toFixed(1)}`
+    const x = padX + (i / (prices.length - 1)) * (width - padX * 2)
+    const y = padY + (1 - (p - min) / range) * (height - padY * 2)
+    return [x, y]
   })
 
-  const isUp = prices[prices.length - 1] >= prices[0]
-  const lineColor = isUp ? '#22c55e' : '#ef4444'
+  // Smooth bezier path
+  let d = `M ${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)}`
+  for (let i = 1; i < pts.length; i++) {
+    const cx = (pts[i - 1][0] + pts[i][0]) / 2
+    d += ` C ${cx.toFixed(1)} ${pts[i-1][1].toFixed(1)}, ${cx.toFixed(1)} ${pts[i][1].toFixed(1)}, ${pts[i][0].toFixed(1)} ${pts[i][1].toFixed(1)}`
+  }
 
-  // Build fill path (close down to bottom)
-  const fillD = `M ${pts[0]} L ${pts.join(' L ')} L ${(width - pad).toFixed(1)},${height} L ${pad},${height} Z`
-  const lineD = `M ${pts.join(' L ')}`
+  const isUp = prices[prices.length - 1] >= prices[0]
+  const lineColor = isUp ? '#00ff88' : '#ef4444'
+  const glowId = `glow-${width}-${height}`
 
   return (
     <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ overflow: 'visible' }}>
       <defs>
-        <linearGradient id={`sg-${lineColor.replace('#','')}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={lineColor} stopOpacity="0.25" />
-          <stop offset="100%" stopColor={lineColor} stopOpacity="0" />
-        </linearGradient>
+        <filter id={glowId} x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="1.8" result="blur" />
+          <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+        </filter>
       </defs>
-      <path d={fillD} fill={`url(#sg-${lineColor.replace('#','')})`} />
-      <path d={lineD} fill="none" stroke={lineColor} strokeWidth={1.8} strokeLinejoin="round" strokeLinecap="round" />
+      {/* Glow layer */}
+      <path d={d} fill="none" stroke={lineColor} strokeWidth={3.5} strokeOpacity={0.25}
+        strokeLinejoin="round" strokeLinecap="round" />
+      {/* Sharp line on top */}
+      <path d={d} fill="none" stroke={lineColor} strokeWidth={2}
+        strokeLinejoin="round" strokeLinecap="round" filter={`url(#${glowId})`} />
     </svg>
   )
 }
 
-// ─── Pump.fun mobile row (matches app screenshot exactly) ────────────────────
+// ─── Pump.fun mobile row ─────────────────────────────────────────────────────
 function TokenRow({ token: t, monPrice, isLive, onClick }) {
   const [sparkPrices, setSparkPrices] = useState(null)
 
@@ -537,10 +545,10 @@ function TokenRow({ token: t, monPrice, isLive, onClick }) {
   const name   = t.name   || 'Unknown'
   const imgUrl = t.pfpUrl || ''
 
-  // Ticker truncated like pump.fun: "ABCDE..." → "ABC..."
-  const tickerShort = symbol.length > 4 ? symbol.slice(0, 3) + '...' : symbol
+  // Ticker truncated: first 2 chars + "..."
+  const tickerShort = symbol.length > 3 ? symbol.slice(0, 2) + '...' : symbol
 
-  // Time ago
+  // Time ago (short)
   const timeAgo = t.createdAt
     ? (() => {
         const diff = Math.floor((Date.now() - t.createdAt) / 1000)
@@ -551,7 +559,6 @@ function TokenRow({ token: t, monPrice, isLive, onClick }) {
       })()
     : ''
 
-  // Load sparkline from candles API
   useEffect(() => {
     if (!t.curve || !SERVER) return
     fetch(`${SERVER}/api/candles/${t.curve}?interval=15m`)
@@ -563,10 +570,8 @@ function TokenRow({ token: t, monPrice, isLive, onClick }) {
       .catch(() => {})
   }, [t.curve])
 
-  const sparkIsUp = sparkPrices
-    ? sparkPrices[sparkPrices.length - 1] >= sparkPrices[0]
-    : true
-  const sparkColor = sparkIsUp ? '#22c55e' : '#ef4444'
+  const sparkIsUp = sparkPrices ? sparkPrices[sparkPrices.length - 1] >= sparkPrices[0] : true
+  const sparkColor = sparkIsUp ? '#00ff88' : '#ef4444'
 
   return (
     <div
@@ -575,61 +580,61 @@ function TokenRow({ token: t, monPrice, isLive, onClick }) {
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 12,
-        padding: '12px 16px',
+        gap: 14,
+        padding: '14px 16px',
         cursor: 'pointer',
-        borderBottom: '1px solid rgba(255,255,255,0.05)',
+        borderBottom: '1px solid rgba(255,255,255,0.06)',
         transition: 'background .12s',
       }}
     >
-      {/* ── Square image (large, like pump.fun app) ── */}
+      {/* ── Large square image ── */}
       <div style={{
-        width: 70, height: 70, borderRadius: 14, flexShrink: 0,
+        width: 80, height: 80, borderRadius: 16, flexShrink: 0,
         background: imgUrl ? '#111' : `linear-gradient(135deg,${color}55,${color}11)`,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         overflow: 'hidden', position: 'relative',
       }}>
         {imgUrl
           ? <img src={imgUrl} alt={name} style={{ width:'100%', height:'100%', objectFit:'cover' }}
-              onError={e => { e.target.style.display='none' }} />
-          : <span style={{ fontSize:22, fontWeight:900, color, textShadow:`0 0 14px ${color}` }}>
-              {symbol.slice(0,2).toUpperCase()}
+              onError={e => { e.target.style.display = 'none' }} />
+          : <span style={{ fontSize:26, fontWeight:900, color, textShadow:`0 0 14px ${color}` }}>
+              {symbol.slice(0, 2).toUpperCase()}
             </span>
         }
         {t.graduated && (
-          <div style={{ position:'absolute', bottom:0, left:0, right:0, background:'#d97706dd', color:'white', fontSize:8, fontWeight:800, textAlign:'center', padding:'2px 0' }}>GRAD</div>
+          <div style={{ position:'absolute', bottom:0, left:0, right:0, background:'#d97706dd', color:'white', fontSize:9, fontWeight:800, textAlign:'center', padding:'2px 0' }}>GRAD</div>
         )}
         {isLive && !t.graduated && (
-          <div style={{ position:'absolute', top:4, right:4, width:8, height:8, borderRadius:'50%', background:'#ef4444', boxShadow:'0 0 6px #ef4444', animation:'blink 1.5s infinite' }} />
+          <div style={{ position:'absolute', top:5, right:5, width:9, height:9, borderRadius:'50%', background:'#ef4444', boxShadow:'0 0 7px #ef4444', animation:'blink 1.5s infinite' }} />
         )}
       </div>
 
-      {/* ── Name + ticker + time ── */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        {/* Name — can wrap to 2 lines like pump.fun */}
-        <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--t1)', lineHeight: 1.25, marginBottom: 4 }}>
+      {/* ── Name + sub-line ── */}
+      <div style={{ width: 90, flexShrink: 0 }}>
+        {/* Name — wraps naturally, ~2 lines, large font */}
+        <div style={{ fontWeight: 700, fontSize: 17, color: '#ffffff', lineHeight: 1.2, marginBottom: 6 }}>
           {name}
         </div>
-        {/* Ticker + leaf icon + time */}
-        <div style={{ display:'flex', alignItems:'center', gap:5, fontSize:12, color:'var(--t3)' }}>
-          <span style={{ fontFamily:'var(--mono)' }}>{tickerShort}</span>
-          <span style={{ color:'#22c55e', fontSize:11 }}>🌱</span>
+        {/* Ticker + seedling + time */}
+        <div style={{ display:'flex', alignItems:'center', gap:4, fontSize:13, color:'rgba(255,255,255,0.45)' }}>
+          <span>{tickerShort}</span>
+          <span style={{ color:'#22c55e' }}>🌱</span>
           <span>{timeAgo}</span>
         </div>
       </div>
 
-      {/* ── Sparkline (prominent, like pump.fun app) ── */}
-      <div style={{ flexShrink:0, width:120, height:52 }}>
-        <Sparkline prices={sparkPrices} color={sparkColor} width={120} height={52} />
+      {/* ── Sparkline ── */}
+      <div style={{ flex: 1, minWidth: 0, height: 60, display:'flex', alignItems:'center' }}>
+        <Sparkline prices={sparkPrices} color={sparkColor} width={130} height={60} />
       </div>
 
-      {/* ── Market Cap (large, right-aligned) ── */}
-      <div style={{ flexShrink:0, minWidth:68, textAlign:'right' }}>
-        <div style={{ fontSize:17, fontWeight:800, color:'var(--t1)', fontFamily:'var(--mono)', whiteSpace:'nowrap' }}>
+      {/* ── Market Cap — large, bold ── */}
+      <div style={{ flexShrink: 0, textAlign: 'right' }}>
+        <div style={{ fontSize: 20, fontWeight: 800, color: '#ffffff', whiteSpace: 'nowrap', letterSpacing: '-0.3px' }}>
           {mc}
         </div>
         {t.graduated && (
-          <div style={{ fontSize:9, color:'#22c55e', fontWeight:700, marginTop:2 }}>✓ Grad</div>
+          <div style={{ fontSize: 10, color: '#22c55e', fontWeight: 700, marginTop: 2 }}>✓ Grad</div>
         )}
       </div>
     </div>
