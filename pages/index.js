@@ -214,7 +214,7 @@ let _demoBases = DEMO_TOKENS_BASE.map(b => ({ ...b }))
         </div>
       </div>
 
-      <div ref={carouselRef} style={{ display:'flex', gap:10, padding:'0 16px 8px', overflowX:'auto', scrollbarWidth:'none', WebkitOverflowScrolling:'touch', msOverflowStyle:'none', touchAction:'pan-x' }}>
+      <div ref={carouselRef} style={{ display:'flex', gap:10, padding:'0 16px 8px', overflowX:'auto', scrollbarWidth:'none', WebkitOverflowScrolling:'touch', msOverflowStyle:'none' }}>
         {trending.length === 0 && !loading && (
           <div style={{ color:'var(--t3)', fontSize:13, padding:'20px 0' }}>No tokens yet — launch the first one!</div>
         )}

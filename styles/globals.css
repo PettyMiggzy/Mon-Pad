@@ -295,8 +295,10 @@ input, textarea { font-family: var(--sans); }
 ═══════════════════════════════════════ */
 .page-content {
   flex: 1;
-  overflow-y: auto;
+  overflow-y: scroll;
+  overflow-x: hidden;
   padding-bottom: 70px; /* mobile nav */
+  -webkit-overflow-scrolling: touch;
 }
 .page-content::-webkit-scrollbar { display: none; }
 
