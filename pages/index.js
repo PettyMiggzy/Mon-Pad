@@ -349,31 +349,24 @@ function TokenCard({ token: t, meta, isLive, monPrice, onClick }) {
         )}
       </div>
 
-      {/* Info right side */}
+      {/* Info below image */}
       <div className="tcard-body">
-        <div>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
-            <div className="tcard-name" style={{ fontWeight:800, fontSize:12, lineHeight:1.2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1, marginRight:4 }}>{meta?.name || t.name}</div>
-            <div className="tcard-mc" style={{ fontSize:11, fontWeight:800, fontFamily:'var(--mono)', color:'var(--gold)', flexShrink:0 }}>{mcDisplay}</div>
-          </div>
-          <div className="tcard-sym" style={{ fontSize:10, color:'var(--t3)', fontFamily:'var(--mono)', marginTop:1 }}>${meta?.symbol || t.symbol}</div>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:3 }}>
+          <div style={{ fontWeight:800, fontSize:13, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1, marginRight:6 }}>{meta?.name || t.name}</div>
+          <div style={{ fontSize:12, fontWeight:800, fontFamily:'var(--mono)', color:'var(--gold)', flexShrink:0 }}>{mcDisplay}</div>
         </div>
-        <div>
-          <div style={{ width:'100%', height:3, background:'var(--bg3)', borderRadius:999, overflow:'hidden', marginBottom:3 }}>
-            <div style={{ height:'100%', background: t.graduated ? 'linear-gradient(90deg,#d97706,#FFAE45)' : `linear-gradient(90deg,${color},${color}88)`, borderRadius:999, width:`${Math.min(pct,100)}%`, transition:'width .4s ease' }} />
-          </div>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-            <div style={{ fontSize:9, color:'var(--t3)', fontFamily:'var(--mono)' }}>{pct.toFixed(1)}%</div>
-            {!t.isDemo && (
-              <div
-                style={{ fontSize:9, color:'var(--t3)', fontFamily:'var(--mono)', cursor:'pointer', userSelect:'none', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'60%' }}
-                onClick={e => { e.stopPropagation(); navigator.clipboard?.writeText(t.token); e.currentTarget.textContent='✓'; setTimeout(()=>{ if(e.currentTarget) e.currentTarget.textContent = t.token.slice(0,5)+'…'+t.token.slice(-3) },1200) }}
-                title={t.token}
-              >
-                {t.token.slice(0,5)}…{t.token.slice(-3)}
-              </div>
-            )}
-          </div>
+        <div style={{ fontSize:11, color:'var(--t3)', fontFamily:'var(--mono)', marginBottom:6 }}>${meta?.symbol || t.symbol}</div>
+        <div style={{ width:'100%', height:3, background:'var(--bg3)', borderRadius:999, overflow:'hidden', marginBottom:3 }}>
+          <div style={{ height:'100%', background: t.graduated ? 'linear-gradient(90deg,#d97706,#FFAE45)' : `linear-gradient(90deg,${color},${color}88)`, borderRadius:999, width:`${Math.min(pct,100)}%`, transition:'width .4s ease' }} />
+        </div>
+        <div style={{ display:'flex', justifyContent:'space-between' }}>
+          <div style={{ fontSize:10, color:'var(--t3)', fontFamily:'var(--mono)' }}>{pct.toFixed(1)}% bonded</div>
+          {!t.isDemo && (
+            <div style={{ fontSize:10, color:'var(--t3)', fontFamily:'var(--mono)', cursor:'pointer' }}
+              onClick={e => { e.stopPropagation(); navigator.clipboard?.writeText(t.token); e.currentTarget.textContent='✓ copied'; setTimeout(()=>{ if(e.currentTarget) e.currentTarget.textContent=t.token.slice(0,5)+'…'+t.token.slice(-3) },1200) }}>
+              {t.token.slice(0,5)}…{t.token.slice(-3)}
+            </div>
+          )}
         </div>
       </div>
     </div>

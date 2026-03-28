@@ -502,43 +502,36 @@ input, textarea { font-family: var(--sans); }
   .token-grid { grid-template-columns: repeat(3, 1fr); gap: 10px; }
 }
 
-/* Card: pump.fun style — image left, info right */
+/* Card: image on top, info below — clean and simple */
 .tcard {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   border: 1px solid var(--bd);
-  border-radius: 10px;
+  border-radius: 12px;
   cursor: pointer;
   transition: border-color .15s, background .15s;
   background: var(--bg2);
   overflow: hidden;
-  min-height: 72px;
-  min-width: 0;
   width: 100%;
 }
 .tcard:hover { border-color: rgba(110,84,255,0.35); background: rgba(110,84,255,0.04); }
 
 .tcard-img {
-  width: 72px;
-  height: 72px;
-  flex-shrink: 0;
+  width: 100%;
+  height: 120px;
   overflow: hidden;
   display: flex; align-items: center; justify-content: center;
   position: relative;
   background: var(--bg3);
-  font-size: 22px;
+  font-size: 36px;
   font-weight: 900;
 }
 .tcard-img img { width: 100%; height: 100%; object-fit: cover; }
 
 .tcard-body {
-  padding: 8px 10px;
+  padding: 8px 10px 10px;
   flex: 1;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  overflow: hidden;
 }
 
 .tcard-badge {
