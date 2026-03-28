@@ -147,11 +147,10 @@ export default function Home() {
         flexWrap: 'wrap',
       }}>
         <div>
-          <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: '-0.5px', marginBottom: 4 }}>
+          <div style={{ fontSize: 42, fontWeight: 900, letterSpacing: '-1.5px', marginBottom: 6, lineHeight: 1 }}>
             <span style={{ background: 'linear-gradient(135deg,#6E54FF,#85E6FF)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>MonPad</span>
-            <span style={{ color: 'var(--t2)', fontWeight: 600, fontSize: 14, marginLeft: 8 }}>on Monad</span>
           </div>
-          <div style={{ fontSize: 12, color: 'var(--t3)' }}>Fair launch · No presale · Devs earn 1.5% forever · 10 MON to launch</div>
+          <div style={{ fontSize: 13, color: 'var(--t3)', fontWeight: 500 }}>Fair launch · No presale · Devs earn 1.5% forever · 10 MON to launch</div>
         </div>
         <button
           onClick={() => router.push('/create')}
@@ -191,7 +190,7 @@ export default function Home() {
           return (
             <div key={t.token} onClick={() => router.push(`/token/${t.token}`)}
               style={{
-                flexShrink: 0, width: 160, borderRadius: 14, overflow: 'hidden',
+                flexShrink: 0, width: 200, borderRadius: 16, overflow: 'hidden',
                 position: 'relative', cursor: 'pointer',
                 border: `1px solid ${color}33`,
                 background: t.bannerUrl ? '#000' : `linear-gradient(135deg,${color}22,${color}08)`,
@@ -201,10 +200,10 @@ export default function Home() {
               onMouseLeave={e => e.currentTarget.style.transform='translateY(0)'}
             >
               {t.bannerUrl
-                ? <img src={t.bannerUrl} alt="" style={{ width:'100%', height:90, objectFit:'cover', display:'block' }} />
-                : <div style={{ height:90, display:'flex', alignItems:'center', justifyContent:'center', fontSize:36, fontWeight:900, color:`${color}40` }}>
+                ? <img src={t.bannerUrl} alt="" style={{ width:'100%', height:130, objectFit:'cover', display:'block' }} />
+                : <div style={{ height:130, display:'flex', alignItems:'center', justifyContent:'center', fontSize:48, fontWeight:900, color:`${color}40` }}>
                     {t.pfpUrl
-                      ? <img src={t.pfpUrl} alt="" style={{ width:60, height:60, borderRadius:'50%', objectFit:'cover', border:`2px solid ${color}55` }} />
+                      ? <img src={t.pfpUrl} alt="" style={{ width:85, height:85, borderRadius:'50%', objectFit:'cover', border:`2px solid ${color}55` }} />
                       : (t.symbol||'?').slice(0,2)
                     }
                   </div>
@@ -215,9 +214,9 @@ export default function Home() {
                   <span style={{ width:5, height:5, background:'white', borderRadius:'50%', animation:'blink 1.5s infinite' }} />LIVE
                 </div>
               )}
-              <div style={{ position:'absolute', bottom:0, left:0, right:0, padding:'8px 10px', zIndex:2 }}>
-                <div style={{ fontSize:13, fontWeight:800, color:'white', lineHeight:1.1 }}>{mc}</div>
-                <div style={{ fontSize:10, color:'rgba(255,255,255,0.6)', fontWeight:600 }}>${t.symbol}</div>
+              <div style={{ position:'absolute', bottom:0, left:0, right:0, padding:'10px 12px', zIndex:2 }}>
+                <div style={{ fontSize:16, fontWeight:900, color:'white', lineHeight:1.1 }}>{mc}</div>
+                <div style={{ fontSize:12, color:'rgba(255,255,255,0.65)', fontWeight:700 }}>${t.symbol}</div>
               </div>
             </div>
           )
