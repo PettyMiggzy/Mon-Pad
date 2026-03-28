@@ -1,6 +1,6 @@
 export const config = { api: { bodyParser: false, responseLimit: false } }
 
-const SERVER = 'http://138.68.248.211:3001'
+const SERVER = process.env.NEXT_PUBLIC_SERVER_URL || 'https://api.monpad.net'
 
 export default async function handler(req, res) {
   const path = req.url.replace('/api/proxy', '')
