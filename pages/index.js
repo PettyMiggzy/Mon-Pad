@@ -602,7 +602,7 @@ function Sparkline({ prices, color = '#22c55e', width = 100, height = 50 }) {
   }
 
   const isUp = prices[prices.length - 1] >= prices[0]
-  const lineColor = '#a855f7'
+  const lineColor = color || '#00e676'
   const glowId = `glow-${width}-${height}`
 
   return (
@@ -658,7 +658,10 @@ function TokenRow({ token: t, monPrice, isLive, onClick }) {
       .catch(() => {})
   }, [t.curve])
 
-  const sparkColor = '#a855f7'  // bright purple — MonPad brand color
+  const sparkIsUp = sparkPrices && sparkPrices.length >= 2
+    ? sparkPrices[sparkPrices.length - 1] >= sparkPrices[0]
+    : true
+  const sparkColor = sparkIsUp ? '#00e676' : '#ef4444'
 
   return (
     <div
@@ -716,13 +719,10 @@ function TokenRow({ token: t, monPrice, isLive, onClick }) {
 
       {/* ── Right side: sparkline + MC stacked ── */}
       <div style={{ flexShrink: 0, display:'flex', flexDirection:'column', alignItems:'flex-end', gap: 4 }}>
-        {/* Sparkline only if data */}
-        {sparkPrices && sparkPrices.length >= 2
-          ? <div style={{ width: 100, height: 56 }}>
-              <SparklineFill prices={sparkPrices} height={56} />
-            </div>
-          : <div style={{ height: 20 }} />
-        }
+        {/* Sparkline — flat line if no data, chart if data */}
+        <div style={{ width: 100, height: 56 }}>
+          <SparklineFill prices={sparkPrices && sparkPrices.length >= 2 ? sparkPrices : null} color={sparkColor} height={56} />
+        </div>
         {/* MC */}
         <div style={{ fontSize: 22, fontWeight: 700, color: '#fff', whiteSpace: 'nowrap', letterSpacing: '-0.3px' }}>
           {mc}
