@@ -282,7 +282,7 @@ let _demoBases = DEMO_TOKENS_BASE.map(b => ({ ...b }))
       {/* TOKEN GRID — 3 columns like pump.fun */}
       <div className="token-grid-wrap" style={{ padding:'12px 16px' }}>
         {loading && (
-          <div className="token-grid">
+          <div className="token-grid" style={{ gridTemplateColumns:"repeat(2,1fr)", gap:8 }}>
             {[...Array(8)].map((_,i) => (
               <div key={i} style={{ borderRadius:12, background:'var(--bg2)', animation:'pulse 1.5s infinite', height:200 }} />
             ))}
@@ -304,7 +304,7 @@ let _demoBases = DEMO_TOKENS_BASE.map(b => ({ ...b }))
         )}
 
         {!loading && list.length > 0 && (
-          <div className="token-grid">
+          <div className="token-grid" style={{ gridTemplateColumns:"repeat(2,1fr)", gap:8 }}>
             {list.map(t => (
               <TokenCard key={t.token} token={t} meta={metas[t.token?.toLowerCase()]} isLive={live.has(t.token?.toLowerCase())} monPrice={monPrice} onClick={() => !t.isDemo && router.push(`/token/${t.token}`)} />
             ))}
