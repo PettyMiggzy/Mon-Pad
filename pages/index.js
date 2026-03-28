@@ -483,6 +483,59 @@ function TokenCard({ token: t, monPrice, isLive, onClick }) {
   )
 }
 
+// ─── Full-width responsive sparkline (stretches to fill container) ───────────
+function SparklineFill({ prices, color = '#00ff88', height = 80 }) {
+  const isUp = prices && prices.length >= 2
+    ? prices[prices.length - 1] >= prices[0]
+    : true
+  const lineColor = isUp ? '#00ff88' : '#ef4444'
+
+  if (!prices || prices.length < 2) {
+    return (
+      <svg width="100%" height={height} viewBox="0 0 100 100" preserveAspectRatio="none">
+        <line x1={2} y1={65} x2={98} y2={65} stroke={lineColor} strokeWidth={3} strokeOpacity={0.35} strokeLinecap="round" />
+      </svg>
+    )
+  }
+
+  const W = 100, H = 100
+  const min = Math.min(...prices)
+  const max = Math.max(...prices)
+  const range = max - min || 1
+  const padX = 2, padY = 8
+
+  const pts = prices.map((p, i) => [
+    padX + (i / (prices.length - 1)) * (W - padX * 2),
+    padY + (1 - (p - min) / range) * (H - padY * 2),
+  ])
+
+  // Smooth bezier
+  let d = `M ${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)}`
+  for (let i = 1; i < pts.length; i++) {
+    const cx = (pts[i-1][0] + pts[i][0]) / 2
+    d += ` C ${cx.toFixed(1)} ${pts[i-1][1].toFixed(1)}, ${cx.toFixed(1)} ${pts[i][1].toFixed(1)}, ${pts[i][0].toFixed(1)} ${pts[i][1].toFixed(1)}`
+  }
+
+  const uid = `glow-${lineColor.replace('#','')}`
+
+  return (
+    <svg width="100%" height={height} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+      <defs>
+        <filter id={uid}>
+          <feGaussianBlur stdDeviation="1.5" result="blur" />
+          <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+        </filter>
+      </defs>
+      {/* soft glow underneath */}
+      <path d={d} fill="none" stroke={lineColor} strokeWidth={5} strokeOpacity={0.18}
+        strokeLinejoin="round" strokeLinecap="round" />
+      {/* sharp bright line */}
+      <path d={d} fill="none" stroke={lineColor} strokeWidth={2.5}
+        strokeLinejoin="round" strokeLinecap="round" filter={`url(#${uid})`} />
+    </svg>
+  )
+}
+
 // ─── Sparkline SVG ───────────────────────────────────────────────────────────
 function Sparkline({ prices, color = '#22c55e', width = 100, height = 50 }) {
   if (!prices || prices.length < 2) {
@@ -588,7 +641,7 @@ function TokenRow({ token: t, monPrice, isLive, onClick }) {
     >
       {/* ── Large square image ── */}
       <div style={{
-        width: 96, height: 96, borderRadius: 18, flexShrink: 0,
+        width: 88, height: 88, borderRadius: 16, flexShrink: 0,
         background: imgUrl ? '#111' : `linear-gradient(135deg,${color}55,${color}11)`,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         overflow: 'hidden', position: 'relative',
@@ -609,26 +662,24 @@ function TokenRow({ token: t, monPrice, isLive, onClick }) {
       </div>
 
       {/* ── Name + sub-line ── */}
-      <div style={{ width: 110, flexShrink: 0 }}>
-        {/* Name — wraps naturally, ~2 lines, large font */}
-        <div style={{ fontWeight: 700, fontSize: 19, color: '#ffffff', lineHeight: 1.2, marginBottom: 7 }}>
+      <div style={{ width: 95, flexShrink: 0 }}>
+        <div style={{ fontWeight: 700, fontSize: 20, color: '#ffffff', lineHeight: 1.2, marginBottom: 6 }}>
           {name}
         </div>
-        {/* Ticker + seedling + time */}
-        <div style={{ display:'flex', alignItems:'center', gap:4, fontSize:14, color:'rgba(255,255,255,0.45)' }}>
-          <span>{tickerShort}</span>
+        <div style={{ display:'flex', alignItems:'center', gap:4, fontSize:13, color:'rgba(255,255,255,0.4)' }}>
+          <span>...</span>
           <span style={{ color:'#22c55e' }}>🌱</span>
           <span>{timeAgo}</span>
         </div>
       </div>
 
-      {/* ── Sparkline ── */}
-      <div style={{ flex: 1, minWidth: 0, height: 70, display:'flex', alignItems:'center' }}>
-        <Sparkline prices={sparkPrices} color={sparkColor} width={140} height={70} />
+      {/* ── Sparkline — dominant, fills all middle space ── */}
+      <div style={{ flex: 1, minWidth: 0, height: 80 }}>
+        <SparklineFill prices={sparkPrices} color={sparkColor} height={80} />
       </div>
 
       {/* ── Market Cap — large, bold ── */}
-      <div style={{ flexShrink: 0, textAlign: 'right' }}>
+      <div style={{ flexShrink: 0, textAlign: 'right', paddingLeft: 10 }}>
         <div style={{ fontSize: 22, fontWeight: 800, color: '#ffffff', whiteSpace: 'nowrap', letterSpacing: '-0.5px' }}>
           {mc}
         </div>
