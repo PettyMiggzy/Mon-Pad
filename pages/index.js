@@ -333,38 +333,32 @@ function TokenCard({ token: t, meta, isLive, monPrice, onClick }) {
 
   return (
     <div className="tcard" onClick={onClick} style={{ cursor: t.isDemo ? 'default' : 'pointer', opacity: t.isDemo ? 0.75 : 1 }}>
-      {/* Image */}
-      <div className="tcard-img" style={{ background: meta?.pfpUrl ? '#000' : `linear-gradient(135deg,${color}25,#0c0c12)` }}>
+      {/* Image — square like nad.fun */}
+      <div className="tcard-img" style={{ background: meta?.pfpUrl ? '#000' : `linear-gradient(135deg,${color}30,#0c0c12)` }}>
         {meta?.pfpUrl
           ? <img src={fixUrl(meta.pfpUrl)} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
-          : <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:4 }}>
-              <span style={{ fontSize:32, fontWeight:900, color:`${color}` }}>{(t.symbol||'?').slice(0,2)}</span>
-              <span style={{ fontSize:9, color:`${color}80`, fontFamily:'var(--mono)', fontWeight:600 }}>${t.symbol || '?'}</span>
-            </div>
+          : <span style={{ fontSize:'40px', fontWeight:900, color:`${color}` }}>{(t.symbol||'?').slice(0,2)}</span>
         }
-        {/* Subtle gradient overlay */}
-        <div style={{ position:'absolute', inset:0, background:'linear-gradient(to bottom, transparent 50%, rgba(12,12,18,0.6) 100%)', pointerEvents:'none' }} />
-        {t.graduated && (
-          <div className="tcard-badge" style={{ background:'var(--gold)', color:'#000', zIndex:2 }}>🎓 GRAD</div>
-        )}
+        <div style={{ position:'absolute', inset:0, background:'linear-gradient(to bottom, transparent 40%, rgba(12,12,18,0.75) 100%)', pointerEvents:'none' }} />
+        {t.graduated && <div className="tcard-badge" style={{ background:'var(--gold)', color:'#000', zIndex:2 }}>🎓</div>}
         {isLive && !t.graduated && (
           <div className="tcard-badge" style={{ display:'flex', alignItems:'center', gap:3, background:'#ef4444', zIndex:2 }}>
             <span style={{ width:5, height:5, background:'white', borderRadius:'50%', animation:'blink 1.5s infinite' }} />LIVE
           </div>
         )}
-        {t.isDemo && (
-          <div style={{ position:'absolute', bottom:6, right:6, fontSize:9, background:'rgba(110,84,255,0.3)', color:'var(--p2)', padding:'2px 6px', borderRadius:4, fontWeight:700, zIndex:2, border:'1px solid rgba(110,84,255,0.3)' }}>DEMO</div>
-        )}
+        {/* Name overlay at bottom of image like nad.fun */}
+        <div style={{ position:'absolute', bottom:0, left:0, right:0, padding:'6px 8px', zIndex:2 }}>
+          <div style={{ fontSize:12, fontWeight:800, color:'white', textShadow:'0 1px 4px rgba(0,0,0,0.8)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{meta?.name || t.name}</div>
+        </div>
       </div>
 
       {/* Info below image */}
       <div className="tcard-body">
-        <div style={{ fontWeight:800, fontSize:14, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', color:'var(--t1)', marginBottom:3 }}>{meta?.name || t.name}</div>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
           <div style={{ fontSize:11, color:'var(--p2)', fontFamily:'var(--mono)', fontWeight:700 }}>${meta?.symbol || t.symbol}</div>
-          <div style={{ fontSize:13, fontWeight:800, fontFamily:'var(--mono)', color:'var(--gold)' }}>{mcDisplay}</div>
+          <div style={{ fontSize:12, fontWeight:800, fontFamily:'var(--mono)', color:'var(--gold)' }}>{mcDisplay}</div>
         </div>
-        <div style={{ width:'100%', height:4, background:'var(--bg3)', borderRadius:999, overflow:'hidden' }}>
+        <div style={{ width:'100%', height:3, background:'var(--bg3)', borderRadius:999, overflow:'hidden' }}>
           <div style={{ height:'100%', background: t.graduated ? 'linear-gradient(90deg,#d97706,#FFAE45)' : 'linear-gradient(90deg,var(--p),var(--cyan))', borderRadius:999, width:`${Math.min(pct,100)}%`, transition:'width .4s ease' }} />
         </div>
       </div>
