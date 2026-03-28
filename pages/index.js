@@ -141,11 +141,8 @@ export default function Home() {
         background: '#000',
         borderBottom: '1px solid rgba(255,255,255,0.08)',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <img src="/monpad-logo.png" alt="MonPad"
-            style={{ width: 42, height: 42, borderRadius: 12, objectFit: 'cover' }} />
-          <span style={{ fontSize: 26, fontWeight: 900, color: '#fff', letterSpacing: '-0.5px' }}>MonPad</span>
-        </div>
+        <img src="/monpad-logo.png" alt="MonPad"
+          style={{ width: 48, height: 48, borderRadius: 14, objectFit: 'cover' }} />
         <button onClick={() => router.push('/create')} style={{
           padding: '12px 24px', background: 'linear-gradient(135deg,#6E54FF,#85E6FF)',
           border: 'none', borderRadius: 14, color: 'white', fontWeight: 900, fontSize: 17, cursor: 'pointer',
