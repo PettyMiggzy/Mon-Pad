@@ -667,10 +667,10 @@ function TokenRow({ token: t, monPrice, isLive, onClick }) {
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 12,
-        padding: '12px 14px',
+        gap: 14,
+        padding: '14px 16px',
         cursor: 'pointer',
-        borderBottom: '1px solid rgba(255,255,255,0.08)',
+        borderBottom: '1px solid rgba(255,255,255,0.07)',
         background: '#000',
         width: '100%',
         boxSizing: 'border-box',
@@ -678,7 +678,7 @@ function TokenRow({ token: t, monPrice, isLive, onClick }) {
     >
       {/* ── Image: large square, barely rounded like pump.fun ── */}
       <div style={{
-        width: 80, height: 80, borderRadius: 10, flexShrink: 0,
+        width: 86, height: 86, borderRadius: 10, flexShrink: 0,
         background: imgUrl ? '#111' : `linear-gradient(135deg,${color}44,${color}11)`,
         overflow: 'hidden', position: 'relative',
       }}>
@@ -701,33 +701,34 @@ function TokenRow({ token: t, monPrice, isLive, onClick }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
           fontWeight: 600,
-          fontSize: 18,
+          fontSize: 19,
           color: '#ffffff',
-          lineHeight: 1.3,
+          lineHeight: 1.25,
           marginBottom: 5,
+          display: '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
           overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
         }}>
           {name}
         </div>
-        <div style={{ display:'flex', alignItems:'center', gap:5, fontSize:14, color:'rgba(255,255,255,0.4)' }}>
-          <span>{symbol.slice(0,1)}...</span>
-          <span style={{ color:'#22c55e', fontSize:13 }}>♥</span>
+        <div style={{ display:'flex', alignItems:'center', gap:5, fontSize:15, color:'rgba(255,255,255,0.45)' }}>
+          <span style={{ fontWeight: 500 }}>{symbol.slice(0,1)}...</span>
+          <span style={{ color:'#22c55e' }}>♥</span>
           <span>{timeAgo}</span>
         </div>
       </div>
 
       {/* ── Sparkline: only if data exists ── */}
       {sparkPrices && sparkPrices.length >= 2 && (
-        <div style={{ flexShrink: 0, width: 100, height: 64, alignSelf: 'center' }}>
-          <SparklineFill prices={sparkPrices} height={64} />
+        <div style={{ flexShrink: 0, width: 120, height: 72, alignSelf: 'center' }}>
+          <SparklineFill prices={sparkPrices} height={72} />
         </div>
       )}
 
       {/* ── Market cap ── */}
-      <div style={{ flexShrink: 0, textAlign: 'right', minWidth: 60, marginLeft: 'auto' }}>
-        <div style={{ fontSize: 22, fontWeight: 600, color: '#ffffff', whiteSpace: 'nowrap', letterSpacing: '-0.3px', lineHeight: 1 }}>
+      <div style={{ flexShrink: 0, textAlign: 'right', minWidth: 64, marginLeft: sparkPrices && sparkPrices.length >= 2 ? 0 : 'auto' }}>
+        <div style={{ fontSize: 24, fontWeight: 600, color: '#ffffff', whiteSpace: 'nowrap', letterSpacing: '-0.3px', lineHeight: 1 }}>
           {mc}
         </div>
         {t.graduated && (
