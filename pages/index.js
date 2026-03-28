@@ -344,8 +344,8 @@ export default function Home() {
           .mobile-list  { display: flex !important; flex-direction: column; gap: 2px; }
         }
 
-        .token-card:hover  { background: rgba(255,255,255,0.05) !important; }
-        .token-row:hover   { background: rgba(110,84,255,0.06) !important; }
+        .token-card:hover  { background: rgba(255,255,255,0.04) !important; }
+        .token-row:hover   { background: #0a0a0a !important; }
       `}</style>
     </Layout>
   )
@@ -631,59 +631,67 @@ function TokenRow({ token: t, monPrice, isLive, onClick }) {
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 14,
-        padding: '16px 16px',
+        gap: 12,
+        padding: '14px 16px',
         cursor: 'pointer',
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
-        transition: 'background .12s',
+        borderBottom: '1px solid rgba(255,255,255,0.07)',
+        background: '#000',
       }}
     >
-      {/* ── Large square image ── */}
+      {/* ── Image: 72px, slightly rounded like pump.fun ── */}
       <div style={{
-        width: 88, height: 88, borderRadius: 16, flexShrink: 0,
-        background: imgUrl ? '#111' : `linear-gradient(135deg,${color}55,${color}11)`,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        width: 72, height: 72, borderRadius: 10, flexShrink: 0,
+        background: imgUrl ? '#111' : `linear-gradient(135deg,${color}44,${color}11)`,
         overflow: 'hidden', position: 'relative',
       }}>
         {imgUrl
           ? <img src={imgUrl} alt={name} style={{ width:'100%', height:'100%', objectFit:'cover' }}
               onError={e => { e.target.style.display = 'none' }} />
-          : <span style={{ fontSize:30, fontWeight:900, color, textShadow:`0 0 14px ${color}` }}>
-              {symbol.slice(0, 2).toUpperCase()}
-            </span>
+          : <div style={{ width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:24, fontWeight:900, color }}>
+              {symbol.slice(0,2).toUpperCase()}
+            </div>
         }
-        {t.graduated && (
-          <div style={{ position:'absolute', bottom:0, left:0, right:0, background:'#d97706dd', color:'white', fontSize:9, fontWeight:800, textAlign:'center', padding:'2px 0' }}>GRAD</div>
-        )}
-        {isLive && !t.graduated && (
-          <div style={{ position:'absolute', top:5, right:5, width:9, height:9, borderRadius:'50%', background:'#ef4444', boxShadow:'0 0 7px #ef4444', animation:'blink 1.5s infinite' }} />
+        {isLive && (
+          <div style={{ position:'absolute', top:3, right:3, width:8, height:8, borderRadius:'50%', background:'#ef4444', boxShadow:'0 0 6px #ef4444', animation:'blink 1.5s infinite' }} />
         )}
       </div>
 
-      {/* ── Name + sub-line — grows to fill space ── */}
+      {/* ── Name + sub-line ── */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 700, fontSize: 18, color: '#ffffff', lineHeight: 1.25, marginBottom: 5, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+        {/* Name: large, wraps to 2 lines */}
+        <div style={{
+          fontWeight: 700,
+          fontSize: 19,
+          color: '#ffffff',
+          lineHeight: 1.2,
+          marginBottom: 6,
+          display: '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+          overflow: 'hidden',
+        }}>
           {name}
         </div>
-        <div style={{ display:'flex', alignItems:'center', gap:4, fontSize:13, color:'rgba(255,255,255,0.4)' }}>
-          <span style={{ fontFamily:'var(--mono)' }}>{tickerShort}</span>
-          <span style={{ color:'#22c55e' }}>🌱</span>
+        {/* Sub-line: "G... 🌱 28m" */}
+        <div style={{ display:'flex', alignItems:'center', gap:5, fontSize:14, color:'rgba(255,255,255,0.4)' }}>
+          <span>{symbol.slice(0,1)}...</span>
+          <span style={{ color:'#3ecf6b', fontSize:13 }}>🌱</span>
           <span>{timeAgo}</span>
         </div>
       </div>
 
-      {/* ── Sparkline — fixed 110px ── */}
-      <div style={{ flexShrink: 0, width: 110, height: 56 }}>
-        <SparklineFill prices={sparkPrices} color={sparkColor} height={56} />
+      {/* ── Sparkline: fixed 120px, neon green line ── */}
+      <div style={{ flexShrink: 0, width: 120, height: 60 }}>
+        <SparklineFill prices={sparkPrices} color={sparkColor} height={60} />
       </div>
 
-      {/* ── Market Cap — large, bold ── */}
-      <div style={{ flexShrink: 0, textAlign: 'right', minWidth: 64 }}>
-        <div style={{ fontSize: 20, fontWeight: 800, color: '#ffffff', whiteSpace: 'nowrap', letterSpacing: '-0.5px' }}>
+      {/* ── Market cap: large, right-aligned ── */}
+      <div style={{ flexShrink: 0, textAlign: 'right', minWidth: 68 }}>
+        <div style={{ fontSize: 21, fontWeight: 800, color: '#ffffff', whiteSpace: 'nowrap', letterSpacing: '-0.3px' }}>
           {mc}
         </div>
         {t.graduated && (
-          <div style={{ fontSize: 10, color: '#22c55e', fontWeight: 700, marginTop: 2 }}>✓ Grad</div>
+          <div style={{ fontSize: 10, color: '#3ecf6b', fontWeight: 700, marginTop: 1 }}>✓ Grad</div>
         )}
       </div>
     </div>
