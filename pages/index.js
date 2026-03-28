@@ -190,7 +190,7 @@ let _demoBases = DEMO_TOKENS_BASE.map(b => ({ ...b }))
   return (
     <Layout>
       {/* LAUNCH BANNER */}
-      <div className="launch-banner" style={{ margin:'12px 16px', padding:'14px 18px', background:'linear-gradient(135deg,rgba(110,84,255,0.15),rgba(133,230,255,0.08))', border:'1px solid rgba(110,84,255,0.25)', borderRadius:14, display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
+      <div className="launch-banner" style={{ margin:'12px 16px', padding:'14px 18px', background:'linear-gradient(135deg,rgba(110,84,255,0.15),rgba(133,230,255,0.08))', border:'1px solid rgba(110,84,255,0.25)', borderRadius:14, display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, flexWrap:'wrap' }}>
         <div>
           <div style={{ fontSize:15, fontWeight:800, marginBottom:2 }}>🚀 MonPad is live on Monad Mainnet</div>
           <div style={{ fontSize:12, color:'var(--t3)' }}>Launch your token in seconds. Fair launch, no presale, no rug.</div>
