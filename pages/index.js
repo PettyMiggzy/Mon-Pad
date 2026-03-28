@@ -198,7 +198,7 @@ export default function Home() {
         </div>
       </div>
 
-      <div className="desktop-only" ref={carouselRef} style={{ display:'flex', gap:12, padding:'0 16px 16px', overflowX:'auto', scrollbarWidth:'none', WebkitOverflowScrolling:'touch' }}>
+      <div className="desktop-only"><div ref={carouselRef} style={{ display:'flex', gap:12, padding:'0 16px 16px', overflowX:'auto', scrollbarWidth:'none', WebkitOverflowScrolling:'touch' }}>
         {trending.map((t, i) => {
           const color = COLORS[t.colorIdx % COLORS.length]
           const mc    = fmtUSD(t.marketCap || t.monRaisedNet, monPrice)
@@ -236,7 +236,7 @@ export default function Home() {
             </div>
           )
         })}
-      </div>
+      </div></div>
 
       {/* ═══ SEARCH + TABS ═══ */}
       <div style={{ padding: '0 16px 12px' }}>
@@ -367,10 +367,9 @@ export default function Home() {
           .desktop-only    { display: none !important; }
           .mobile-only-bar { display: flex !important; }
         }
-        /* Desktop: hide mobile bar */
+        /* Desktop: hide mobile bar only — desktop-only elements keep their own inline display */
         @media (min-width: 768px) {
           .mobile-only-bar { display: none !important; }
-          .desktop-only    { display: revert !important; }
         }
       `}</style>
     </Layout>
