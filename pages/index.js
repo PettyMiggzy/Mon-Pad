@@ -111,18 +111,29 @@ let _demoBases = DEMO_TOKENS_BASE.map(b => ({ ...b }))
       const list = data.map((t, i) => {
         map[t.tokenAddress?.toLowerCase()] = t
         return {
-          token:        t.tokenAddress,
-          curve:        t.curveAddress,
-          creator:      t.creator,
-          name:         t.name,
-          symbol:       t.symbol,
-          graduated:    t.graduated,
-          monRaisedNet: BigInt(t.monRaisedNet || '0'),
-          capMon:       BigInt(t.capMon || '0'),
-          bondedBps:    BigInt(t.bondedBps || '0'),
-          marketCap:    BigInt(t.marketCap || '0'),
-          blockNumber:  BigInt(t.blockNumber || '0'),
-          colorIdx:     i,
+          token:         t.tokenAddress,
+          curve:         t.curveAddress,
+          creator:       t.creator,
+          name:          t.name,
+          symbol:        t.symbol,
+          graduated:     t.graduated,
+          monRaisedNet:  BigInt(t.monRaisedNet || '0'),
+          capMon:        BigInt(t.capMon || '0'),
+          bondedBps:     BigInt(t.bondedBps || '0'),
+          marketCap:     BigInt(t.marketCap || '0'),
+          blockNumber:   BigInt(t.blockNumber || '0'),
+          colorIdx:      i,
+          // stats from server
+          vol24h:        t.vol24h        || 0,
+          uniqueBuyers:  t.uniqueBuyers  || 0,
+          ath:           t.ath           || 0,
+          change24h:     t.change24h     || 0,
+          // metadata
+          pfpUrl:        t.pfpUrl        || null,
+          bannerUrl:     t.bannerUrl     || null,
+          desc:          t.desc          || t.description || '',
+          twitter:       t.twitter       || '',
+          website:       t.website       || '',
         }
       })
       // fill with demo tokens until 10 real ones exist
@@ -345,11 +356,11 @@ function TokenCard({ token: t, meta, isLive, monPrice, onClick }) {
   const mcDisplay  = fmtUSD(t.marketCap || t.monRaisedNet, monPrice)
   const change24h  = t.change24h || 0
   const isUp       = change24h >= 0
-  const imgUrl     = fixUrl(meta?.pfpUrl || t.pfpUrl || '')
-  const symbol     = meta?.symbol || t.symbol || '??'
-  const name       = meta?.name   || t.name   || 'Unknown'
-  const desc       = meta?.desc   || meta?.description || ''
-  const contract   = t.token || t.tokenAddress || ''
+  const imgUrl     = fixUrl(t.pfpUrl || meta?.pfpUrl || '')
+  const symbol     = t.symbol  || meta?.symbol || '??'
+  const name       = t.name    || meta?.name   || 'Unknown'
+  const desc       = t.desc    || meta?.desc   || meta?.description || ''
+  const contract   = t.token   || t.tokenAddress || ''
 
   // ATH: t.ath is price in MON per token, MC = ath * 1B supply
   const athMon = t.ath > 0 ? t.ath * 1_000_000_000 : 0
