@@ -299,7 +299,7 @@ let _demoBases = DEMO_TOKENS_BASE.map(b => ({ ...b }))
         {!loading && list.length > 0 && (
           <div className="token-grid">
             {list.map(t => (
-              <TokenCard key={t.token} token={t} meta={metas[t.token?.toLowerCase()]} isLive={live.has(t.token?.toLowerCase())} monPrice={monPrice} onClick={() => router.push(`/token/${t.token}`)} />
+              <TokenCard key={t.token} token={t} meta={metas[t.token?.toLowerCase()]} isLive={live.has(t.token?.toLowerCase())} monPrice={monPrice} onClick={() => !t.isDemo && router.push(`/token/${t.token}`)} />
             ))}
             {list.length < 6 && Array.from({ length: Math.max(0, 4 - list.length) }).map((_, i) => (
               <div key={`empty-${i}`} className="tcard" style={{ opacity:0.35, cursor:'default' }}>
@@ -325,7 +325,7 @@ function TokenCard({ token: t, meta, isLive, monPrice, onClick }) {
   const mcDisplay = fmtUSD(t.marketCap || t.monRaisedNet, monPrice)
 
   return (
-    <div className="tcard" onClick={onClick}>
+    <div className="tcard" onClick={onClick} style={{ cursor: t.isDemo ? 'default' : 'pointer', opacity: t.isDemo ? 0.75 : 1 }}>
       {/* Square image */}
       <div className="tcard-img" style={{ background: meta?.pfpUrl ? '#000' : `linear-gradient(135deg,${color}30,${color}10)` }}>
         {meta?.pfpUrl

@@ -281,6 +281,17 @@ export default function TokenDetail() {
     }
   }, [txError])
 
+  const isDemo = tokenAddr?.startsWith('0xdemo')
+  if (isDemo) return (
+    <Layout showBack title="Demo Token">
+      <div style={{ padding:'80px 14px', textAlign:'center' }}>
+        <div style={{ fontSize:48, marginBottom:16 }}>🚀</div>
+        <div style={{ fontSize:18, fontWeight:800, marginBottom:8 }}>Demo Token</div>
+        <div style={{ fontSize:13, color:'var(--t3)', marginBottom:24 }}>This is a placeholder — launch a real token to trade!</div>
+        <button className="btn-primary" style={{ padding:'12px 28px' }} onClick={() => router.push('/create')}>Launch Token</button>
+      </div>
+    </Layout>
+  )
   if (!info) return <Layout showBack><div style={{ padding:'60px 14px', textAlign:'center', color:'var(--t3)' }}>Loading…</div></Layout>
 
   const pct         = Number(info.bondedBps) / 100
