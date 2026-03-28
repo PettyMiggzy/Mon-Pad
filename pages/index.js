@@ -602,7 +602,7 @@ function Sparkline({ prices, color = '#22c55e', width = 100, height = 50 }) {
   }
 
   const isUp = prices[prices.length - 1] >= prices[0]
-  const lineColor = color || '#00e676'
+  const lineColor = color || '#a855f7'
   const glowId = `glow-${width}-${height}`
 
   return (
@@ -658,7 +658,7 @@ function TokenRow({ token: t, monPrice, isLive, onClick }) {
       .catch(() => {})
   }, [t.curve])
 
-  const sparkColor = '#00e676'
+  const sparkColor = '#a855f7'
 
   return (
     <div
