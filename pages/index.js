@@ -697,42 +697,38 @@ function TokenRow({ token: t, monPrice, isLive, onClick }) {
         )}
       </div>
 
-      {/* ── Name + sub-line ── */}
-      <div style={{ flex: 1, minWidth: 0 }}>
+      {/* ── Middle: name + sub-line (flex grows) ── */}
+      <div style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
         <div style={{
-          fontWeight: 600,
-          fontSize: 19,
-          color: '#ffffff',
-          lineHeight: 1.25,
-          marginBottom: 5,
-          display: '-webkit-box',
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: 'vertical',
-          overflow: 'hidden',
+          fontWeight: 600, fontSize: 18, color: '#fff',
+          lineHeight: 1.3, marginBottom: 6,
+          display: '-webkit-box', WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical', overflow: 'hidden',
         }}>
           {name}
         </div>
-        <div style={{ display:'flex', alignItems:'center', gap:5, fontSize:15, color:'rgba(255,255,255,0.45)' }}>
-          <span style={{ fontWeight: 500 }}>{symbol.slice(0,1)}...</span>
+        <div style={{ display:'flex', alignItems:'center', gap:4, fontSize:14, color:'rgba(255,255,255,0.45)' }}>
+          <span>{symbol.slice(0,1).toUpperCase()}...</span>
           <span style={{ color:'#22c55e' }}>♥</span>
           <span>{timeAgo}</span>
         </div>
       </div>
 
-      {/* ── Sparkline: only if data exists ── */}
-      {sparkPrices && sparkPrices.length >= 2 && (
-        <div style={{ flexShrink: 0, width: 120, height: 72, alignSelf: 'center' }}>
-          <SparklineFill prices={sparkPrices} height={72} />
-        </div>
-      )}
-
-      {/* ── Market cap ── */}
-      <div style={{ flexShrink: 0, textAlign: 'right', minWidth: 64, marginLeft: sparkPrices && sparkPrices.length >= 2 ? 0 : 'auto' }}>
-        <div style={{ fontSize: 24, fontWeight: 600, color: '#ffffff', whiteSpace: 'nowrap', letterSpacing: '-0.3px', lineHeight: 1 }}>
+      {/* ── Right side: sparkline + MC stacked ── */}
+      <div style={{ flexShrink: 0, display:'flex', flexDirection:'column', alignItems:'flex-end', gap: 4 }}>
+        {/* Sparkline only if data */}
+        {sparkPrices && sparkPrices.length >= 2
+          ? <div style={{ width: 100, height: 56 }}>
+              <SparklineFill prices={sparkPrices} height={56} />
+            </div>
+          : <div style={{ height: 20 }} />
+        }
+        {/* MC */}
+        <div style={{ fontSize: 22, fontWeight: 700, color: '#fff', whiteSpace: 'nowrap', letterSpacing: '-0.3px' }}>
           {mc}
         </div>
         {t.graduated && (
-          <div style={{ fontSize: 10, color: '#00ff7f', fontWeight: 700, marginTop: 3 }}>✓ Grad</div>
+          <div style={{ fontSize: 10, color: '#00ff7f', fontWeight: 700 }}>✓ Grad</div>
         )}
       </div>
     </div>
