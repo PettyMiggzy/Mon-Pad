@@ -409,12 +409,12 @@ export default function Home() {
           .desktop-only          { display: none !important; }
           .mobile-only-bar       { display: flex !important; }
           .mobile-sticky-filters {
-            position: fixed;
+            position: sticky;
             top: 61px;
-            left: 0;
-            right: 0;
+            left: auto;
+            right: auto;
           }
-          .mobile-list-offset    { padding-top: 142px !important; }
+          .mobile-list-offset    { padding-top: 10px !important; }
         }
         /* Desktop: hide mobile bar only — desktop-only elements keep their own inline display */
         @media (min-width: 768px) {
