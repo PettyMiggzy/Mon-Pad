@@ -277,7 +277,7 @@ export default function Home() {
       </div></div>
 
       {/* ═══ SEARCH + TABS ═══ */}
-      <div style={{ padding: '10px 14px 12px' }}>
+      <div className="mobile-sticky-filters" style={{ padding: '10px 14px 12px', background:'#000', zIndex:99 }}>
         <div style={{ position:'relative', marginBottom:10 }}>
           <svg style={{ position:'absolute', left:14, top:'50%', transform:'translateY(-50%)', width:18, height:18, color:'rgba(255,255,255,0.35)', pointerEvents:'none' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35" strokeLinecap="round"/>
@@ -406,12 +406,14 @@ export default function Home() {
 
         /* Mobile: hide hero/carousel, show minimal bar */
         @media (max-width: 767px) {
-          .desktop-only    { display: none !important; }
-          .mobile-only-bar { display: flex !important; }
+          .desktop-only          { display: none !important; }
+          .mobile-only-bar       { display: flex !important; }
+          .mobile-sticky-filters { position: sticky; top: 84px; }
         }
         /* Desktop: hide mobile bar only — desktop-only elements keep their own inline display */
         @media (min-width: 768px) {
-          .mobile-only-bar { display: none !important; }
+          .mobile-only-bar       { display: none !important; }
+          .mobile-sticky-filters { position: static; }
         }
       `}</style>
     </Layout>
