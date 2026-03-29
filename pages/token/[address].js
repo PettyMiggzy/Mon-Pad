@@ -302,17 +302,22 @@ export default function TokenDetail() {
 
   const fallbackPrice = Number(info?.priceWei || 0n) / 1e18 || 0.0001
   const now = Date.now()
-  const lineSeries = [{
-    name: 'Price',
-    data: [
-      { x: now - 60 * 60 * 1000, y: fallbackPrice },
-      { x: now, y: fallbackPrice },
-    ]
-  }]
 
-  const candleCloses = hasCandles
-    ? candleSeries[0].data.map(d => Array.isArray(d.y) ? d.y[3] : d.y)
-    : [fallbackPrice, fallbackPrice]
+  // Always build a connected line series from candle closes.
+  // If there are no candles, show a flat connected line so it still looks like one chart.
+  const connectedLineData = hasCandles
+    ? candleSeries[0].data.map(d => ({ x: d.x, y: Array.isArray(d.y) ? d.y[3] : d.y }))
+    : [
+        { x: now - 60 * 60 * 1000, y: fallbackPrice },
+        { x: now - 45 * 60 * 1000, y: fallbackPrice },
+        { x: now - 30 * 60 * 1000, y: fallbackPrice },
+        { x: now - 15 * 60 * 1000, y: fallbackPrice },
+        { x: now, y: fallbackPrice },
+      ]
+
+  const lineSeries = [{ name: 'Price', data: connectedLineData }]
+
+  const candleCloses = connectedLineData.map(d => d.y)
   const currentPrice = candleCloses[candleCloses.length - 1] ?? fallbackPrice
 
   const fmtAxisMc = (price) => {
@@ -327,23 +332,25 @@ export default function TokenDetail() {
 
   const apexOptions = {
     chart: {
-      type: hasCandles ? 'candlestick' : 'line',
+      type: 'line',
       background: '#0b0f19',
       toolbar: { show: false },
       zoom: { enabled: false },
       animations: { enabled: false },
       fontFamily: 'inherit',
-    },
-    theme: { mode: 'dark' },
-    plotOptions: {
-      candlestick: {
-        colors: { upward: '#14b8a6', downward: '#f43f5e' },
-        wick: { useFillColor: true },
+      dropShadow: {
+        enabled: true,
+        color: '#a855f7',
+        top: 0,
+        left: 0,
+        blur: 6,
+        opacity: 0.45,
       },
     },
+    theme: { mode: 'dark' },
     stroke: {
       curve: 'straight',
-      width: hasCandles ? 1.4 : 2.5,
+      width: 2,
       colors: ['#a855f7'],
     },
     fill: { type: 'solid', opacity: 0 },
@@ -378,7 +385,7 @@ export default function TokenDetail() {
     annotations: currentPrice > 0 ? {
       yaxis: [{
         y: currentPrice,
-        borderColor: hasCandles ? '#14b8a6' : '#a855f7',
+        borderColor: '#a855f7',
         borderWidth: 1,
         strokeDashArray: 3,
         label: {
@@ -386,7 +393,7 @@ export default function TokenDetail() {
           position: 'right',
           offsetX: 10,
           style: {
-            background: hasCandles ? '#14b8a6' : '#a855f7',
+            background: '#a855f7',
             color: '#ffffff',
             fontSize: '11px',
             fontWeight: 700,
@@ -478,9 +485,9 @@ export default function TokenDetail() {
 
                 <div style={{ height:360, width:'100%', background:'#000', overflow:'hidden', position:'relative' }}>
                   <ApexChart
-                    type={hasCandles ? 'candlestick' : 'line'}
+                    type="line"
                     height={360}
-                    series={hasCandles ? candleSeries : lineSeries}
+                    series={lineSeries}
                     options={apexOptions}
                   />
                 </div>
