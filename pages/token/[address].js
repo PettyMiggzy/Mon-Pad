@@ -297,72 +297,59 @@ export default function TokenDetail() {
   const dName       = meta?.name    || info.name
   const dSym        = meta?.symbol  || info.symbol
 
-  // Convert candlestick series → line (close price)
-  const rawLineData = apexSeries.length > 0 ? apexSeries[0].data.map(d => ({
-    x: d.x,
-    y: Array.isArray(d.y) ? d.y[3] : d.y
-  })) : []
+  const candleSeries = apexSeries
+  const hasCandles = candleSeries.length > 0 && (candleSeries[0]?.data?.length || 0) > 0
 
-  const fallbackPrice = Number(info?.priceWei || 0n) / 1e18
+  const fallbackPrice = Number(info?.priceWei || 0n) / 1e18 || 0.0001
   const now = Date.now()
-  const lineData = rawLineData.length > 0
-    ? rawLineData
-    : [
-        { x: now - 60 * 60 * 1000, y: fallbackPrice || 0.0001 },
-        { x: now, y: fallbackPrice || 0.0001 },
-      ]
+  const lineSeries = [{
+    name: 'Price',
+    data: [
+      { x: now - 60 * 60 * 1000, y: fallbackPrice },
+      { x: now, y: fallbackPrice },
+    ]
+  }]
 
-  const lineSeries = [{ name: 'Price', data: lineData }]
-  const chartPrices = lineData.map(d => Number(d.y) || 0)
-  const currentPrice = chartPrices[chartPrices.length - 1] ?? 0
-  const hasRealVolume = rawLineData.length > 0
-  const chartColor  = '#a855f7'
-  const minPrice = Math.min(...chartPrices)
-  const maxPrice = Math.max(...chartPrices)
-  const range = maxPrice - minPrice
-  const pad = range > 0 ? range * 0.25 : Math.max(currentPrice * 0.25, 0.00001)
-  const yMin = Math.max(0, minPrice - pad)
-  const yMax = maxPrice + pad
+  const candleCloses = hasCandles
+    ? candleSeries[0].data.map(d => Array.isArray(d.y) ? d.y[3] : d.y)
+    : [fallbackPrice, fallbackPrice]
+  const currentPrice = candleCloses[candleCloses.length - 1] ?? fallbackPrice
 
   const apexOptions = {
     chart: {
-      type: 'line',
+      type: hasCandles ? 'candlestick' : 'line',
       background: '#000',
       toolbar: { show: false },
       zoom: { enabled: false },
       animations: { enabled: false },
       fontFamily: 'inherit',
-      dropShadow: {
-        enabled: true,
-        color: chartColor,
-        top: 0,
-        left: 0,
-        blur: 6,
-        opacity: 0.55,
-      },
     },
     theme: { mode: 'dark' },
+    plotOptions: {
+      candlestick: {
+        colors: { upward: '#14b8a6', downward: '#f43f5e' },
+        wick: { useFillColor: true },
+      },
+    },
     stroke: {
       curve: 'straight',
-      width: 2.5,
-      colors: [chartColor],
+      width: hasCandles ? 1.5 : 2.5,
+      colors: ['#a855f7'],
     },
     fill: { type: 'solid', opacity: 0 },
-    colors: [chartColor],
+    colors: ['#a855f7'],
     xaxis: {
       type: 'datetime',
-      labels: { style: { colors: '#4b5563', fontSize: '11px' } },
+      labels: { style: { colors: '#6b7280', fontSize: '11px' } },
       axisBorder: { show: false },
       axisTicks: { show: false },
       tooltip: { enabled: false },
     },
     yaxis: {
       opposite: true,
-      min: yMin,
-      max: yMax,
       tickAmount: 4,
       labels: {
-        style: { colors: '#6b7280', fontSize: '11px' },
+        style: { colors: '#9ca3af', fontSize: '11px' },
         formatter: v => {
           const n = Number(v || 0)
           if (n < 0.001) return n.toExponential(2)
@@ -371,7 +358,7 @@ export default function TokenDetail() {
       },
     },
     grid: {
-      borderColor: 'rgba(255,255,255,0.05)',
+      borderColor: 'rgba(255,255,255,0.06)',
       strokeDashArray: 0,
       xaxis: { lines: { show: false } },
       yaxis: { lines: { show: true } },
@@ -380,7 +367,7 @@ export default function TokenDetail() {
     annotations: currentPrice > 0 ? {
       yaxis: [{
         y: currentPrice,
-        borderColor: 'rgba(255,255,255,0.45)',
+        borderColor: 'rgba(255,255,255,0.35)',
         borderWidth: 1,
         strokeDashArray: 4,
         label: {
@@ -388,7 +375,7 @@ export default function TokenDetail() {
           position: 'right',
           offsetX: 0,
           style: {
-            background: chartColor,
+            background: hasCandles ? '#14b8a6' : '#a855f7',
             color: '#fff',
             fontSize: '11px',
             fontWeight: 700,
@@ -403,7 +390,6 @@ export default function TokenDetail() {
     tooltip: {
       theme: 'dark',
       x: { format: 'HH:mm:ss' },
-      y: { formatter: v => v < 0.001 ? v.toExponential(4) : v.toFixed(8) + ' MON' },
     },
   }
 
@@ -473,14 +459,12 @@ export default function TokenDetail() {
                 </div>
 
                 <div style={{ height:360, width:'100%', background:'#000', overflow:'hidden', position:'relative' }}>
-                  {lineSeries.length === 0 || lineSeries[0]?.data?.length === 0
-                    ? <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100%', gap:12 }}>
-                        <div style={{ color:'#555', fontSize:14 }}>No trades yet</div>
-                        <div style={{ color:'#6E54FF', fontSize:12, fontWeight:600, animation:'pulse 2s ease-in-out infinite', opacity:0.8 }}>⏳ Waiting for first trade…</div>
-                        <div style={{ width:120, height:2, background:'linear-gradient(90deg,transparent,rgba(110,84,255,0.5),transparent)', borderRadius:999, animation:'pulse 2s ease-in-out infinite' }} />
-                      </div>
-                    : <ApexChart type="line" height={360} series={lineSeries} options={apexOptions} />
-                  }
+                  <ApexChart
+                    type={hasCandles ? 'candlestick' : 'line'}
+                    height={360}
+                    series={hasCandles ? candleSeries : lineSeries}
+                    options={apexOptions}
+                  />
                 </div>
 
                 <div className="stats-4col" style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', borderTop:'1px solid var(--bd)', borderBottom:'1px solid var(--bd)' }}>
