@@ -414,7 +414,7 @@ export default function Home() {
             left: 0;
             right: 0;
           }
-          .mobile-list-offset    { padding-top: 118px !important; }
+          .mobile-list-offset    { padding-top: 142px !important; }
         }
         /* Desktop: hide mobile bar only — desktop-only elements keep their own inline display */
         @media (min-width: 768px) {
