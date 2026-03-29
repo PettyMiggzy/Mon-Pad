@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useRouter } from 'next/router'
 import Layout from '../components/Layout'
 import { fmtUSD, fmtAddr } from '../lib/constants'
@@ -37,7 +37,9 @@ export default function Home() {
   const [loading, setLoading] = useState(true)
   const [monPrice, setMonPrice] = useState(0)
   const [search, setSearch]   = useState('')
+  const [visibleCount, setVisibleCount] = useState(16)
   const carouselRef = useRef(null)
+  const loadMoreRef = useRef(null)
 
   // MON price
   useEffect(() => {
@@ -129,6 +131,27 @@ export default function Home() {
 
   const list    = filtered()
   const trending = [...tokens].sort((a, b) => Number(b.marketCap - a.marketCap)).slice(0, 8)
+
+  useEffect(() => {
+    setVisibleCount(16)
+  }, [tab, search, tokens.length])
+
+  useEffect(() => {
+    if (!loadMoreRef.current || loading) return
+    const el = loadMoreRef.current
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setVisibleCount((prev) => Math.min(prev + 12, list.length || prev + 12))
+        }
+      },
+      { rootMargin: '400px 0px' }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [list.length, loading])
+
+  const visibleList = useMemo(() => list.slice(0, visibleCount), [list, visibleCount])
 
   return (
     <Layout>
@@ -326,7 +349,7 @@ export default function Home() {
           <>
             {/* ── DESKTOP: 4-col pump.fun card grid ── */}
             <div className="desktop-grid" style={{ display:'none' }}>
-              {list.map(t => (
+              {visibleList.map(t => (
                 <TokenCard
                   key={t.token}
                   token={t}
@@ -339,7 +362,7 @@ export default function Home() {
 
             {/* ── MOBILE: single-row list with sparkline ── */}
             <div className="mobile-list" style={{ display:'flex', flexDirection:'column', gap:2 }}>
-              {list.map(t => (
+              {visibleList.map(t => (
                 <TokenRow
                   key={t.token}
                   token={t}
@@ -349,6 +372,10 @@ export default function Home() {
                 />
               ))}
             </div>
+
+            {visibleCount < list.length && (
+              <div ref={loadMoreRef} style={{ height: 24, width: '100%' }} />
+            )}
           </>
         )}
       </div>
