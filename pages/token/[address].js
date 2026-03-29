@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/router'
-import { usePublicClient, useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
+import { usePublicClient, useAccount, useWriteContract, useWaitForTransactionReceipt, useConnect } from 'wagmi'
 import { parseEther } from 'viem'
 import Head from 'next/head'
 import Layout from '../../components/Layout'
@@ -28,6 +28,7 @@ export default function TokenDetail() {
   const { address: tokenAddr } = router.query
   const client = usePublicClient({ chainId: monad.id })
   const { address: userAddr } = useAccount()
+  const { connect, connectors } = useConnect()
 
   const [meta, setMeta]         = useState(null)
   const [info, setInfo]         = useState(null)
@@ -35,13 +36,14 @@ export default function TokenDetail() {
   const [monPrice, setMonPrice] = useState(0)
   const [trades, setTrades]     = useState([])
   const [holders, setHolders]   = useState([])
-  const [tab, setTab]           = useState('Comments')
+  const [tab, setTab]           = useState('Trades')
   const [mode, setMode]         = useState('buy')
   const [amt, setAmt]           = useState('')
   const [customAmt, setCustomAmt] = useState(false)
   const customInputRef            = useRef(null)
   const [tokenBalance, setTokenBalance] = useState(0n)
   const [showPanel, setShow]    = useState(false)
+  const [showConnect, setShowConnect] = useState(false)
   const [tf, setTf]             = useState('1h')
   const [chartStats, setStats]  = useState({ vol24h: 0, totalVol: 0, devFees: 0, price: 0, pct5m: 0, pct1h: 0 })
   const [newComment, setNewComment] = useState('')
@@ -692,7 +694,7 @@ export default function TokenDetail() {
                   style={{ width:'100%', padding:15, borderRadius:10, border:'none', fontWeight:800, fontSize:16, cursor:'pointer', marginBottom:6,
                     background: mode==='buy' ? 'var(--p)' : 'var(--r)', color:'white',
                     opacity: (info.delisted||(info.pauseSells&&mode==='sell')||(info.pauseBuys&&mode==='buy')) ? 0.4 : 1 }}
-                  onClick={() => { if (!userAddr) { document.querySelector('.wallet-btn')?.click(); return; } mode==='buy' ? handleBuy() : handleSell() }}
+                  onClick={() => { if (!userAddr) { setShowConnect(true); return; } mode==='buy' ? handleBuy() : handleSell() }}
                   disabled={isPending||isConfirming||sellStep!=='idle'||!!info.delisted||(!!info.pauseSells&&mode==='sell')||(!!info.pauseBuys&&mode==='buy')}>
                   {sellStep==='approving' ? 'Approving…' : sellStep==='selling' ? 'Confirm sell…' : isPending ? 'Confirm in wallet…' : isConfirming ? 'Confirming tx…' : userAddr ? `${mode==='buy'?'Buy':'Sell'} ${dSym}` : 'Connect Wallet'}
                 </button>
@@ -813,11 +815,30 @@ export default function TokenDetail() {
             style={{ width:'100%', padding:'14px 0', borderRadius:10, border:'none', fontWeight:800, fontSize:16, cursor:'pointer',
               background: mode==='buy' ? 'var(--p)' : 'var(--r)', color:'white',
               opacity: (info.delisted||(info.pauseSells&&mode==='sell')||(info.pauseBuys&&mode==='buy')) ? 0.4 : 1 }}
-            onClick={() => { if (!userAddr) { document.querySelector('.wallet-btn')?.click(); return; } mode==='buy' ? handleBuy() : handleSell() }}
+            onClick={() => { if (!userAddr) { setShowConnect(true); return; } mode==='buy' ? handleBuy() : handleSell() }}
             disabled={isPending||isConfirming||sellStep!=='idle'||!!info.delisted||(!!info.pauseSells&&mode==='sell')||(!!info.pauseBuys&&mode==='buy')}>
             {sellStep==='approving' ? 'Approving…' : sellStep==='selling' ? 'Confirm sell…' : isPending ? 'Confirm in wallet…' : isConfirming ? 'Confirming…' : userAddr ? `${mode==='buy'?'Buy':'Sell'} ${dSym}` : 'Connect Wallet'}
           </button>
         </div>
+        {showConnect && (
+          <>
+            <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:399 }} onClick={() => setShowConnect(false)} />
+            <div style={{ position:'fixed', left:'50%', top:'50%', transform:'translate(-50%,-50%)', width:'min(92vw,360px)', background:'var(--bg2)', border:'1px solid var(--bd2)', borderRadius:16, padding:12, zIndex:400, boxShadow:'0 10px 40px rgba(0,0,0,0.55)' }}>
+              <div style={{ fontSize:16, fontWeight:800, marginBottom:4 }}>Connect Wallet</div>
+              <div style={{ fontSize:12, color:'var(--t3)', marginBottom:10 }}>Choose your wallet</div>
+              {connectors.map(c => (
+                <button key={c.id} onClick={() => { connect({ connector: c }); setShowConnect(false) }}
+                  style={{ width:'100%', padding:'12px 14px', marginBottom:8, background:'var(--bg3)', border:'1px solid var(--bd)', borderRadius:12, color:'var(--t1)', fontSize:14, fontWeight:600, textAlign:'left', cursor:'pointer', display:'flex', alignItems:'center', gap:10, fontFamily:'var(--sans)' }}>
+                  <span style={{ fontSize:20 }}>{c.id==='metaMask'?'🦊':c.id==='walletConnect'?'🔗':c.id==='injected'?'💼':'🔌'}</span>
+                  <div>
+                    <div>{c.name}</div>
+                    <div style={{ fontSize:11, color:'var(--t3)', fontWeight:400 }}>{c.id==='walletConnect'?'Scan QR with any wallet':c.id==='injected'?'Browser extension':'Mobile & extension'}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
       </Layout>
     </>
   )
