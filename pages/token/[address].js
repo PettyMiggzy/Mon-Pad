@@ -315,10 +315,20 @@ export default function TokenDetail() {
     : [fallbackPrice, fallbackPrice]
   const currentPrice = candleCloses[candleCloses.length - 1] ?? fallbackPrice
 
+  const fmtAxisMc = (price) => {
+    const n = Number(price || 0)
+    if (!n || !monPrice) return n < 0.001 ? n.toFixed(8) : n.toFixed(6)
+    try {
+      return fmtUSD(BigInt(Math.floor(n * 1_000_000_000 * 1e18)), monPrice)
+    } catch {
+      return n < 0.001 ? n.toFixed(8) : n.toFixed(6)
+    }
+  }
+
   const apexOptions = {
     chart: {
       type: hasCandles ? 'candlestick' : 'line',
-      background: '#000',
+      background: '#0b0f19',
       toolbar: { show: false },
       zoom: { enabled: false },
       animations: { enabled: false },
@@ -333,54 +343,55 @@ export default function TokenDetail() {
     },
     stroke: {
       curve: 'straight',
-      width: hasCandles ? 1.5 : 2.5,
+      width: hasCandles ? 1.4 : 2.5,
       colors: ['#a855f7'],
     },
     fill: { type: 'solid', opacity: 0 },
     colors: ['#a855f7'],
     xaxis: {
       type: 'datetime',
-      labels: { style: { colors: '#6b7280', fontSize: '11px' } },
+      labels: { style: { colors: '#8b95a7', fontSize: '11px' } },
       axisBorder: { show: false },
       axisTicks: { show: false },
       tooltip: { enabled: false },
+      crosshairs: { show: false },
     },
     yaxis: {
       opposite: true,
       tickAmount: 4,
       labels: {
-        style: { colors: '#9ca3af', fontSize: '11px' },
-        formatter: v => {
-          const n = Number(v || 0)
-          if (n < 0.001) return n.toExponential(2)
-          return n.toFixed(6)
-        },
+        align: 'right',
+        minWidth: 96,
+        maxWidth: 96,
+        offsetX: 8,
+        style: { colors: '#e5e7eb', fontSize: '11px', fontWeight: 500 },
+        formatter: v => fmtAxisMc(v),
       },
     },
     grid: {
-      borderColor: 'rgba(255,255,255,0.06)',
+      borderColor: 'rgba(255,255,255,0.08)',
       strokeDashArray: 0,
-      xaxis: { lines: { show: false } },
+      xaxis: { lines: { show: true } },
       yaxis: { lines: { show: true } },
-      padding: { left: 8, right: 0, top: 8, bottom: 0 },
+      padding: { left: 0, right: 18, top: 8, bottom: 0 },
     },
     annotations: currentPrice > 0 ? {
       yaxis: [{
         y: currentPrice,
-        borderColor: 'rgba(255,255,255,0.35)',
+        borderColor: hasCandles ? '#14b8a6' : '#a855f7',
         borderWidth: 1,
-        strokeDashArray: 4,
+        strokeDashArray: 3,
         label: {
-          text: currentPrice < 0.001 ? currentPrice.toExponential(4) : currentPrice.toFixed(6),
+          text: fmtAxisMc(currentPrice),
           position: 'right',
-          offsetX: 0,
+          offsetX: 10,
           style: {
             background: hasCandles ? '#14b8a6' : '#a855f7',
-            color: '#fff',
+            color: '#ffffff',
             fontSize: '11px',
             fontWeight: 700,
-            padding: { top: 3, bottom: 3, left: 6, right: 6 },
-            borderRadius: 4,
+            padding: { top: 4, bottom: 4, left: 8, right: 8 },
+            borderRadius: 3,
           },
         },
       }]
@@ -390,6 +401,13 @@ export default function TokenDetail() {
     tooltip: {
       theme: 'dark',
       x: { format: 'HH:mm:ss' },
+      y: {
+        formatter: v => {
+          const n = Number(v || 0)
+          if (n < 0.001) return n.toFixed(8)
+          return n.toFixed(6)
+        }
+      }
     },
   }
 
