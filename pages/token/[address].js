@@ -298,18 +298,31 @@ export default function TokenDetail() {
   const dSym        = meta?.symbol  || info.symbol
 
   // Convert candlestick series → line (close price)
-  const lineSeries = apexSeries.length > 0 ? [{
-    name: 'Price',
-    data: apexSeries[0].data.map(d => ({
-      x: d.x,
-      y: Array.isArray(d.y) ? d.y[3] : d.y
-    }))
-  }] : []
+  const rawLineData = apexSeries.length > 0 ? apexSeries[0].data.map(d => ({
+    x: d.x,
+    y: Array.isArray(d.y) ? d.y[3] : d.y
+  })) : []
 
-  const chartPrices = lineSeries[0]?.data?.map(d => d.y) ?? []
-  const chartIsUp   = chartPrices.length < 2 || chartPrices[chartPrices.length-1] >= chartPrices[0]
-  const chartColor  = chartIsUp ? '#00ff7f' : '#ef4444'
+  const fallbackPrice = Number(info?.priceWei || 0n) / 1e18
+  const now = Date.now()
+  const lineData = rawLineData.length > 0
+    ? rawLineData
+    : [
+        { x: now - 60 * 60 * 1000, y: fallbackPrice || 0.0001 },
+        { x: now, y: fallbackPrice || 0.0001 },
+      ]
+
+  const lineSeries = [{ name: 'Price', data: lineData }]
+  const chartPrices = lineData.map(d => Number(d.y) || 0)
   const currentPrice = chartPrices[chartPrices.length - 1] ?? 0
+  const hasRealVolume = rawLineData.length > 0
+  const chartColor  = '#a855f7'
+  const minPrice = Math.min(...chartPrices)
+  const maxPrice = Math.max(...chartPrices)
+  const range = maxPrice - minPrice
+  const pad = range > 0 ? range * 0.25 : Math.max(currentPrice * 0.25, 0.00001)
+  const yMin = Math.max(0, minPrice - pad)
+  const yMax = maxPrice + pad
 
   const apexOptions = {
     chart: {
@@ -319,84 +332,78 @@ export default function TokenDetail() {
       zoom: { enabled: false },
       animations: { enabled: false },
       fontFamily: 'inherit',
-    },
-    theme: { mode: 'dark' },
-    stroke: {
-      curve: 'straight',   // jagged, not smooth — matches pump.fun
-      width: 2,
-      colors: [chartColor],
-    },
-    fill: { type: 'solid', opacity: 0 },  // no fill, line only
-    colors: [chartColor],
-    xaxis: {
-      type: 'datetime',
-      labels: { style: { colors: '#444', fontSize: '11px' } },
-      axisBorder: { show: false },
-      axisTicks: { show: false },
-    },
-    yaxis: {
-      opposite: true,  // price labels on RIGHT like pump.fun
-      labels: {
-        style: { colors: '#555', fontSize: '11px' },
-        formatter: v => {
-          if (!v) return ''
-          const mon = Number(v)
-          if (mon >= 1000) return (mon/1000).toFixed(0) + 'K'
-          if (mon < 0.001) return mon.toExponential(2)
-          return mon.toFixed(6)
-        },
-      },
-    },
-    grid: {
-      borderColor: 'rgba(255,255,255,0.06)',
-      strokeDashArray: 0,
-      xaxis: { lines: { show: false } },
-      yaxis: { lines: { show: true } },
-      padding: { left: 0, right: 0, top: 10, bottom: 0 },
-    },
-    annotations: {
-      yaxis: currentPrice > 0 ? [{
-        y: currentPrice,
-        borderColor: 'rgba(255,255,255,0.5)',
-        borderWidth: 1,
-        strokeDashArray: 4,
-        label: {
-          text: currentPrice < 0.001 ? currentPrice.toExponential(4) : currentPrice.toFixed(8),
-          position: 'right',
-          offsetX: 0,
-          style: {
-            background: chartColor,
-            color: '#000',
-            fontSize: '11px',
-            fontWeight: 700,
-            padding: { top: 3, bottom: 3, left: 6, right: 6 },
-            borderRadius: 4,
-          },
-        },
-      }] : [],
-    },
-    dataLabels: { enabled: false },
-    markers: { size: 0 },
-    tooltip: {
-      theme: 'dark',
-      x: { format: 'HH:mm:ss' },
-      y: { formatter: v => v < 0.001 ? v.toExponential(4) : v.toFixed(8) + ' MON' },
-    },
-    // neon glow via drop-shadow filter
-    chart: {
-      type: 'line',
-      background: '#000',
-      toolbar: { show: false },
-      zoom: { enabled: false },
-      animations: { enabled: false },
       dropShadow: {
         enabled: true,
         color: chartColor,
         top: 0,
         left: 0,
         blur: 6,
-        opacity: 0.6,
+        opacity: 0.55,
       },
+    },
+    theme: { mode: 'dark' },
+    stroke: {
+      curve: 'straight',
+      width: 2.5,
+      colors: [chartColor],
+    },
+    fill: { type: 'solid', opacity: 0 },
+    colors: [chartColor],
+    xaxis: {
+      type: 'datetime',
+      labels: { style: { colors: '#4b5563', fontSize: '11px' } },
+      axisBorder: { show: false },
+      axisTicks: { show: false },
+      tooltip: { enabled: false },
+    },
+    yaxis: {
+      opposite: true,
+      min: yMin,
+      max: yMax,
+      tickAmount: 4,
+      labels: {
+        style: { colors: '#6b7280', fontSize: '11px' },
+        formatter: v => {
+          const n = Number(v || 0)
+          if (n < 0.001) return n.toExponential(2)
+          return n.toFixed(6)
+        },
+      },
+    },
+    grid: {
+      borderColor: 'rgba(255,255,255,0.05)',
+      strokeDashArray: 0,
+      xaxis: { lines: { show: false } },
+      yaxis: { lines: { show: true } },
+      padding: { left: 8, right: 0, top: 8, bottom: 0 },
+    },
+    annotations: currentPrice > 0 ? {
+      yaxis: [{
+        y: currentPrice,
+        borderColor: 'rgba(255,255,255,0.45)',
+        borderWidth: 1,
+        strokeDashArray: 4,
+        label: {
+          text: currentPrice < 0.001 ? currentPrice.toExponential(4) : currentPrice.toFixed(6),
+          position: 'right',
+          offsetX: 0,
+          style: {
+            background: chartColor,
+            color: '#fff',
+            fontSize: '11px',
+            fontWeight: 700,
+            padding: { top: 3, bottom: 3, left: 6, right: 6 },
+            borderRadius: 4,
+          },
+        },
+      }]
+    } : {},
+    dataLabels: { enabled: false },
+    markers: { size: 0 },
+    tooltip: {
+      theme: 'dark',
+      x: { format: 'HH:mm:ss' },
+      y: { formatter: v => v < 0.001 ? v.toExponential(4) : v.toFixed(8) + ' MON' },
     },
   }
 
