@@ -160,7 +160,7 @@ export default function Home() {
       <div className="mobile-only-bar" style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '20px 20px 18px',
-        position: 'sticky', top: 0, zIndex: 100,
+        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 110,
         background: '#000',
         borderBottom: '1px solid rgba(255,255,255,0.08)',
       }}>
@@ -306,7 +306,7 @@ export default function Home() {
       </div>
 
       {/* ═══ TOKEN GRID ═══ */}
-      <div style={{ padding:'0 16px 100px' }}>
+      <div className="mobile-list-offset" style={{ padding:'0 16px 100px' }}>
 
         {loading && (
           <>
@@ -408,7 +408,13 @@ export default function Home() {
         @media (max-width: 767px) {
           .desktop-only          { display: none !important; }
           .mobile-only-bar       { display: flex !important; }
-          .mobile-sticky-filters { position: sticky; top: 84px; }
+          .mobile-sticky-filters {
+            position: fixed;
+            top: 79px;
+            left: 0;
+            right: 0;
+          }
+          .mobile-list-offset    { padding-top: 146px !important; }
         }
         /* Desktop: hide mobile bar only — desktop-only elements keep their own inline display */
         @media (min-width: 768px) {
