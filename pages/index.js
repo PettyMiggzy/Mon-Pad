@@ -159,29 +159,29 @@ export default function Home() {
       {/* ═══ MOBILE-ONLY TOPBAR ═══ */}
       <div className="mobile-only-bar" style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '20px 20px 18px',
+        padding: '14px 16px 12px',
         position: 'fixed', top: 0, left: 0, right: 0, zIndex: 110,
         background: '#000',
         borderBottom: '1px solid rgba(255,255,255,0.08)',
       }}>
         <img src="/monpad-text-logo.png" alt="MonPad"
-          style={{ height: 40, width: 140, objectFit: 'contain', objectPosition: 'left' }} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          style={{ height: 32, width: 120, objectFit: 'contain', objectPosition: 'left' }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           {/* Telegram */}
           <a href="https://t.me/Monpadlounge" target="_blank" rel="noreferrer" style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            width: 36, height: 36, background: 'transparent', flexShrink: 0,
+            width: 32, height: 32, background: 'transparent', flexShrink: 0,
           }}>
-            <svg viewBox="0 0 24 24" fill="white" width="26" height="26">
+            <svg viewBox="0 0 24 24" fill="white" width="22" height="22">
               <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/>
             </svg>
           </a>
           {/* Wallet */}
           <button onClick={() => router.push('/portfolio')} style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            width: 36, height: 36, background: 'transparent', border: 'none', cursor: 'pointer', flexShrink: 0,
+            width: 32, height: 32, background: 'transparent', border: 'none', cursor: 'pointer', flexShrink: 0,
           }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="26" height="26">
+            <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="22" height="22">
               <path d="M20 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/>
               <path d="M16 3H8a2 2 0 0 0-2 2v2h12V5a2 2 0 0 0-2-2z"/>
               <circle cx="17" cy="13" r="1.5" fill="white" stroke="none"/>
@@ -277,24 +277,24 @@ export default function Home() {
       </div></div>
 
       {/* ═══ SEARCH + TABS ═══ */}
-      <div className="mobile-sticky-filters" style={{ padding: '10px 14px 12px', background:'#000', zIndex:99 }}>
-        <div style={{ position:'relative', marginBottom:10 }}>
-          <svg style={{ position:'absolute', left:14, top:'50%', transform:'translateY(-50%)', width:18, height:18, color:'rgba(255,255,255,0.35)', pointerEvents:'none' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <div className="mobile-sticky-filters" style={{ padding: '8px 12px 10px', background:'#000', zIndex:99 }}>
+        <div style={{ position:'relative', marginBottom:8 }}>
+          <svg style={{ position:'absolute', left:13, top:'50%', transform:'translateY(-50%)', width:16, height:16, color:'rgba(255,255,255,0.35)', pointerEvents:'none' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35" strokeLinecap="round"/>
           </svg>
           <input
             placeholder="Search tokens..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            style={{ width:'100%', background:'rgba(255,255,255,0.08)', border:'1px solid rgba(255,255,255,0.12)', borderRadius:14, padding:'13px 14px 13px 42px', fontSize:17, color:'#fff', outline:'none', fontFamily:'var(--sans)' }}
+            style={{ width:'100%', background:'rgba(255,255,255,0.08)', border:'1px solid rgba(255,255,255,0.12)', borderRadius:12, padding:'11px 12px 11px 38px', fontSize:16, color:'#fff', outline:'none', fontFamily:'var(--sans)' }}
           />
         </div>
 
-        <div style={{ display:'flex', gap:8, overflowX:'auto', scrollbarWidth:'none' }}>
+        <div style={{ display:'flex', gap:6, overflowX:'auto', scrollbarWidth:'none' }}>
           {TABS.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               style={{
-                flexShrink:0, padding:'10px 18px', borderRadius:12, fontSize:16, fontWeight:700, border:'none', cursor:'pointer', whiteSpace:'nowrap', transition:'all .15s',
+                flexShrink:0, padding:'8px 14px', borderRadius:10, fontSize:15, fontWeight:700, border:'none', cursor:'pointer', whiteSpace:'nowrap', transition:'all .15s',
                 background: tab === t.id ? 'var(--p)' : 'rgba(255,255,255,0.09)',
                 color:      tab === t.id ? 'white'    : 'rgba(255,255,255,0.75)',
                 boxShadow:  tab === t.id ? '0 4px 16px rgba(110,84,255,0.4)' : 'none',
@@ -410,11 +410,11 @@ export default function Home() {
           .mobile-only-bar       { display: flex !important; }
           .mobile-sticky-filters {
             position: fixed;
-            top: 79px;
+            top: 61px;
             left: 0;
             right: 0;
           }
-          .mobile-list-offset    { padding-top: 146px !important; }
+          .mobile-list-offset    { padding-top: 118px !important; }
         }
         /* Desktop: hide mobile bar only — desktop-only elements keep their own inline display */
         @media (min-width: 768px) {
@@ -702,8 +702,8 @@ function TokenRow({ token: t, monPrice, isLive, onClick }) {
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 14,
-        padding: '14px 16px',
+        gap: 12,
+        padding: '10px 14px',
         cursor: 'pointer',
         borderBottom: '1px solid rgba(255,255,255,0.07)',
         background: '#000',
@@ -713,7 +713,7 @@ function TokenRow({ token: t, monPrice, isLive, onClick }) {
     >
       {/* ── Image: large square, barely rounded like pump.fun ── */}
       <div style={{
-        width: 86, height: 86, borderRadius: 10, flexShrink: 0,
+        width: 72, height: 72, borderRadius: 10, flexShrink: 0,
         background: imgUrl ? '#111' : `linear-gradient(135deg,${color}44,${color}11)`,
         overflow: 'hidden', position: 'relative',
       }}>
@@ -735,14 +735,14 @@ function TokenRow({ token: t, monPrice, isLive, onClick }) {
       {/* ── Middle: name + sub-line (flex grows) ── */}
       <div style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
         <div style={{
-          fontWeight: 600, fontSize: 18, color: '#fff',
-          lineHeight: 1.3, marginBottom: 6,
+          fontWeight: 600, fontSize: 17, color: '#fff',
+          lineHeight: 1.25, marginBottom: 4,
           display: '-webkit-box', WebkitLineClamp: 2,
           WebkitBoxOrient: 'vertical', overflow: 'hidden',
         }}>
           {name}
         </div>
-        <div style={{ display:'flex', alignItems:'center', gap:4, fontSize:14, color:'rgba(255,255,255,0.45)' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:4, fontSize:13, color:'rgba(255,255,255,0.45)' }}>
           <span>{symbol.slice(0,1).toUpperCase()}...</span>
           <span style={{ color:'#22c55e' }}>♥</span>
           <span>{timeAgo}</span>
@@ -752,11 +752,11 @@ function TokenRow({ token: t, monPrice, isLive, onClick }) {
       {/* ── Right side: sparkline + MC stacked ── */}
       <div style={{ flexShrink: 0, display:'flex', flexDirection:'column', alignItems:'flex-end', gap: 4 }}>
         {/* Sparkline — flat line if no data, chart if data */}
-        <div style={{ width: 100, height: 56 }}>
-          <SparklineFill prices={sparkPrices && sparkPrices.length >= 2 ? sparkPrices : null} color={sparkColor} height={56} />
+        <div style={{ width: 90, height: 48 }}>
+          <SparklineFill prices={sparkPrices && sparkPrices.length >= 2 ? sparkPrices : null} color={sparkColor} height={48} />
         </div>
         {/* MC */}
-        <div style={{ fontSize: 22, fontWeight: 700, color: '#fff', whiteSpace: 'nowrap', letterSpacing: '-0.3px' }}>
+        <div style={{ fontSize: 20, fontWeight: 700, color: '#fff', whiteSpace: 'nowrap', letterSpacing: '-0.3px' }}>
           {mc}
         </div>
         {t.graduated && (

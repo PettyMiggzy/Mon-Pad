@@ -423,12 +423,13 @@ input, textarea { font-family: var(--sans); }
 
   /* Page content: fills screen, safe area above bottom nav */
   .page-content {
-    padding-bottom: 96px !important;
+    padding-bottom: 88px !important;
     padding-top: 0 !important;
   }
 
   /* Bottom nav stays */
   .bottom-nav { display: flex !important; }
+  .desktop-footer { display: none !important; }
 
   /* Token page trade panel */
   .trade-panel {
