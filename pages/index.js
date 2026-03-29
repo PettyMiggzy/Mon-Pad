@@ -277,7 +277,7 @@ export default function Home() {
       </div></div>
 
       {/* ═══ SEARCH + TABS ═══ */}
-      <div className="mobile-sticky-filters" style={{ padding: '8px 12px 10px', background:'#000', zIndex:99 }}>
+      <div className="mobile-sticky-filters" style={{ padding: '8px 12px 10px', background:'#000', zIndex:99, marginTop: 64 }}>
         <div style={{ position:'relative', marginBottom:8 }}>
           <svg style={{ position:'absolute', left:13, top:'50%', transform:'translateY(-50%)', width:16, height:16, color:'rgba(255,255,255,0.35)', pointerEvents:'none' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35" strokeLinecap="round"/>
