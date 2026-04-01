@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/router'
-import { usePublicClient, useAccount, useWriteContract, useWaitForTransactionReceipt, useConnect } from 'wagmi'
+import { usePublicClient, useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { parseEther } from 'viem'
 import Head from 'next/head'
 import Layout from '../../components/Layout'
@@ -12,7 +12,7 @@ import { monad } from '../../lib/wagmi'
 const ApexChart = dynamic(() => import('react-apexcharts'), { ssr: false })
 
 const SERVER = process.env.NEXT_PUBLIC_SERVER_URL || ''
-// v2.2
+// v3.0 — testnet + new contract
 
 function fixUrl(url) {
   if (!url) return url
@@ -20,15 +20,15 @@ function fixUrl(url) {
   if (url.startsWith('http://api.monpad.net')) return url.replace('http://api.monpad.net', 'https://api.monpad.net')
   return url
 }
+
 const DETAIL_TABS = ['Comments', 'Trades', 'Holders']
-const TF_OPTIONS  = ['1m', '5m', '15m', '1h', 'all']
+const TF_OPTIONS  = ['15m', '1h', '4h', '1d']
 
 export default function TokenDetail() {
   const router = useRouter()
   const { address: tokenAddr } = router.query
   const client = usePublicClient({ chainId: monad.id })
   const { address: userAddr } = useAccount()
-  const { connect, connectors } = useConnect()
 
   const [meta, setMeta]         = useState(null)
   const [info, setInfo]         = useState(null)
@@ -36,20 +36,18 @@ export default function TokenDetail() {
   const [monPrice, setMonPrice] = useState(0)
   const [trades, setTrades]     = useState([])
   const [holders, setHolders]   = useState([])
-  const [tab, setTab]           = useState('Trades')
+  const [tab, setTab]           = useState('Comments')
   const [mode, setMode]         = useState('buy')
   const [amt, setAmt]           = useState('')
   const [customAmt, setCustomAmt] = useState(false)
   const customInputRef            = useRef(null)
   const [tokenBalance, setTokenBalance] = useState(0n)
-  const [showPanel, setShow]    = useState(false)
-  const [showConnect, setShowConnect] = useState(false)
   const [tf, setTf]             = useState('1h')
+  const [apexSeries, setApexSeries] = useState([])
   const [chartStats, setStats]  = useState({ vol24h: 0, totalVol: 0, devFees: 0, price: 0, pct5m: 0, pct1h: 0 })
   const [newComment, setNewComment] = useState('')
   const [sellStep, setSellStep] = useState('idle')
   const [txErrMsg, setTxErrMsg] = useState('')
-  const [apexSeries, setApexSeries] = useState([])
   const [comments, setComments] = useState([
     { id: 1, user: 'monad_degen', text: 'MonPad gonna be the pump.fun of Monad 👀', time: '2h', likes: 1 },
     { id: 2, user: 'Dev', text: 'Welcome! Dev fees hit your wallet every trade 💜', time: '1h', likes: 2, dev: true },
@@ -90,13 +88,14 @@ export default function TokenDetail() {
 
   useEffect(() => { if (tokenAddr && client) loadChain() }, [tokenAddr, client])
 
+  // poll price every 10s — uses new contract fn names
   useEffect(() => {
     if (!tokenAddr || !client) return
     const iv = setInterval(async () => {
       try {
         const curve = curveAddr || await client.readContract({ address: tokenAddr, abi: TOKEN_ABI, functionName: 'curve' })
         const [priceWei, monRaisedNet, bondedBps, graduated] = await Promise.all([
-          client.readContract({ address: curve, abi: CURVE_ABI, functionName: 'priceWeiPerToken' }),
+          client.readContract({ address: curve, abi: CURVE_ABI, functionName: 'price' }),
           client.readContract({ address: curve, abi: CURVE_ABI, functionName: 'monRaisedNet' }),
           client.readContract({ address: curve, abi: CURVE_ABI, functionName: 'bondedBps' }),
           client.readContract({ address: curve, abi: CURVE_ABI, functionName: 'graduated' }),
@@ -118,7 +117,7 @@ export default function TokenDetail() {
         client.readContract({ address: curve,     abi: CURVE_ABI, functionName: 'monRaisedNet' }),
         client.readContract({ address: curve,     abi: CURVE_ABI, functionName: 'capMon' }),
         client.readContract({ address: curve,     abi: CURVE_ABI, functionName: 'bondedBps' }),
-        client.readContract({ address: curve,     abi: CURVE_ABI, functionName: 'priceWeiPerToken' }),
+        client.readContract({ address: curve,     abi: CURVE_ABI, functionName: 'price' }),
         client.readContract({ address: curve,     abi: CURVE_ABI, functionName: 'creator' }),
         client.readContract({ address: curve,     abi: CURVE_ABI, functionName: 'pauseBuys' }),
         client.readContract({ address: curve,     abi: CURVE_ABI, functionName: 'pauseSells' }),
@@ -135,7 +134,6 @@ export default function TokenDetail() {
   }
 
   async function loadTradesAndHolders(curveAddr) {
-    if (!SERVER) return
     try {
       const res = await fetch(`${SERVER}/api/candles/${curveAddr}?interval=15m`)
       if (!res.ok) return
@@ -165,7 +163,6 @@ export default function TokenDetail() {
   }, [curveAddr, tf])
 
   async function buildChart() {
-    setApexSeries([])
     try {
       const res = await fetch(`${SERVER}/api/candles/${curveAddr}?interval=${tf}`)
       const { candles, trades: tm } = await res.json()
@@ -173,44 +170,33 @@ export default function TokenDetail() {
       const int = tf==='15m'?900 : tf==='1h'?3600 : tf==='4h'?14400 : 86400
       const price = info?.priceWei ? Number(info.priceWei)/1e18 : 0.00015
 
-      // No candles = no chart, show empty state
-      if (!candles?.length && !tm?.length) {
-        setApexSeries([])
-        return
-      }
-
-      const data = candles?.length ? candles : []
+      let data = candles?.length ? candles : (() => {
+        const base = now - 60*int
+        return Array.from({length:60},(_,i) => ({ time: base+i*int, open:price, high:price*1.002, low:price*0.998, close:price, volume:0 }))
+      })()
 
       if (tm?.length) {
         const vol24 = tm.filter(t=>t.ts>now-86400).reduce((s,t)=>s+t.volume,0)
         const totalVol = tm.reduce((s,t)=>s+t.volume,0)
-        const sorted = [...tm].sort((a,b) => a.ts - b.ts)
-        const lastPrice = sorted.length ? sorted[sorted.length-1].price : price
-        const price5mAgo = sorted.filter(t=>t.ts <= now-300).slice(-1)[0]?.price || lastPrice
-        const price1hAgo = sorted.filter(t=>t.ts <= now-3600).slice(-1)[0]?.price || lastPrice
+        const c5m = data.filter(c=>c.time>now-300)
+        const c1h = data.filter(c=>c.time>now-3600)
+        const last = data[data.length-1]
         setStats({
           vol24h:vol24, totalVol, devFees:totalVol*0.015,
-          price: lastPrice,
-          pct5m: price5mAgo > 0 ? (lastPrice - price5mAgo) / price5mAgo * 100 : 0,
-          pct1h: price1hAgo > 0 ? (lastPrice - price1hAgo) / price1hAgo * 100 : 0,
+          price: last?.close||price,
+          pct5m: c5m.length>=2?(c5m[c5m.length-1].close-c5m[0].open)/c5m[0].open*100:0,
+          pct1h: c1h.length>=2?(c1h[c1h.length-1].close-c1h[0].open)/c1h[0].open*100:0,
         })
       }
 
-      if (data.length > 0) {
-        setApexSeries([{
-          name: 'Price',
-          data: data.map(c => ({
-            x: new Date(c.time * 1000),
-            y: [parseFloat(c.open), parseFloat(c.high), parseFloat(c.low), parseFloat(c.close)]
-          }))
-        }])
-      } else {
-        setApexSeries([])
-      }
-    } catch(e) {
-      console.error('chart error:', e)
-      setApexSeries([])
-    }
+      setApexSeries([{
+        name: 'Price',
+        data: data.map(c => ({
+          x: new Date(c.time * 1000),
+          y: [parseFloat(c.open), parseFloat(c.high), parseFloat(c.low), parseFloat(c.close)]
+        }))
+      }])
+    } catch(e) { console.error('chart error:', e) }
   }
 
   function handleBuy() {
@@ -261,7 +247,14 @@ export default function TokenDetail() {
     if (!sellErr && !approveErr && !buyErr) return
     sellStepRef.current = 'idle'
     setSellStep('idle')
-    const msg = sellWriteErr?.shortMessage || approveWriteErr?.shortMessage || buyWriteErr?.shortMessage || 'Transaction failed'
+    const raw = sellWriteErr?.shortMessage || approveWriteErr?.shortMessage || buyWriteErr?.shortMessage || 'Transaction failed'
+    const msg = raw.includes('DEV_FREEZE') ? '🚨 Dev sell blocked — wallet frozen 48hrs'
+              : raw.includes('DEV_FROZEN') ? '🔒 Dev wallet is frozen'
+              : raw.includes('DEV_LOCKED') ? '🔒 Tokens locked until graduation'
+              : raw.includes('SLIP')       ? '⚠️ Slippage too high — try smaller amount'
+              : raw.includes('SOLD_OUT')   ? '⚠️ Not enough tokens available'
+              : raw.includes('NO_LIQ')     ? '⚠️ No liquidity in curve'
+              : raw
     setTxErrMsg(msg)
     setTimeout(() => setTxErrMsg(''), 6000)
   }, [sellErr, approveErr, buyErr, sellWriteErr, approveWriteErr, buyWriteErr])
@@ -277,145 +270,23 @@ export default function TokenDetail() {
     }
   }, [txError])
 
-  const isDemo = tokenAddr?.startsWith('0xdemo')
-  if (isDemo) return (
-    <Layout showBack title="Demo Token">
-      <div style={{ padding:'80px 14px', textAlign:'center' }}>
-        <div style={{ fontSize:48, marginBottom:16 }}>🚀</div>
-        <div style={{ fontSize:18, fontWeight:800, marginBottom:8 }}>Demo Token</div>
-        <div style={{ fontSize:13, color:'var(--t3)', marginBottom:24 }}>This is a placeholder — launch a real token to trade!</div>
-        <button className="btn-primary" style={{ padding:'12px 28px' }} onClick={() => router.push('/create')}>Launch Token</button>
-      </div>
-    </Layout>
-  )
   if (!info) return <Layout showBack><div style={{ padding:'60px 14px', textAlign:'center', color:'var(--t3)' }}>Loading…</div></Layout>
 
   const pct         = Number(info.bondedBps) / 100
   const priceNum    = Number(info.priceWei) / 1e18
   const tokensEst   = (amt && priceNum > 0) ? Math.floor(parseFloat(amt) / priceNum / 1.02).toLocaleString() : '0'
   const isCreator   = userAddr?.toLowerCase() === info.creator?.toLowerCase()
-  const dName       = meta?.name    || info.name
-  const dSym        = meta?.symbol  || info.symbol
-
-  const candleSeries = apexSeries
-  const hasCandles = candleSeries.length > 0 && (candleSeries[0]?.data?.length || 0) > 0
-
-  const fallbackPrice = Number(info?.priceWei || 0n) / 1e18 || 0.0001
-  const now = Date.now()
-
-  // Always build a connected line series from candle closes.
-  // If there are no candles, show a flat connected line so it still looks like one chart.
-  const connectedLineData = hasCandles
-    ? candleSeries[0].data.map(d => ({ x: d.x, y: Array.isArray(d.y) ? d.y[3] : d.y }))
-    : [
-        { x: now - 60 * 60 * 1000, y: fallbackPrice },
-        { x: now - 45 * 60 * 1000, y: fallbackPrice },
-        { x: now - 30 * 60 * 1000, y: fallbackPrice },
-        { x: now - 15 * 60 * 1000, y: fallbackPrice },
-        { x: now, y: fallbackPrice },
-      ]
-
-  const lineSeries = [{ name: 'Price', data: connectedLineData }]
-
-  const candleCloses = connectedLineData.map(d => d.y)
-  const currentPrice = candleCloses[candleCloses.length - 1] ?? fallbackPrice
-
-  const fmtAxisMc = (price) => {
-    const n = Number(price || 0)
-    if (!n || !monPrice) return n < 0.001 ? n.toFixed(8) : n.toFixed(6)
-    try {
-      return fmtUSD(BigInt(Math.floor(n * 1_000_000_000 * 1e18)), monPrice)
-    } catch {
-      return n < 0.001 ? n.toFixed(8) : n.toFixed(6)
-    }
-  }
+  const dName       = meta?.name   || info.name
+  const dSym        = meta?.symbol || info.symbol
 
   const apexOptions = {
-    chart: {
-      type: 'line',
-      background: '#0b0f19',
-      toolbar: { show: false },
-      zoom: { enabled: false },
-      animations: { enabled: false },
-      fontFamily: 'inherit',
-      dropShadow: {
-        enabled: true,
-        color: '#a855f7',
-        top: 0,
-        left: 0,
-        blur: 6,
-        opacity: 0.45,
-      },
-    },
-    theme: { mode: 'dark' },
-    stroke: {
-      curve: 'straight',
-      width: 2,
-      colors: ['#a855f7'],
-    },
-    fill: { type: 'solid', opacity: 0 },
-    colors: ['#a855f7'],
-    xaxis: {
-      type: 'datetime',
-      labels: { style: { colors: '#8b95a7', fontSize: '11px' } },
-      axisBorder: { show: false },
-      axisTicks: { show: false },
-      tooltip: { enabled: false },
-      crosshairs: { show: false },
-    },
-    yaxis: {
-      opposite: true,
-      tickAmount: 4,
-      labels: {
-        align: 'right',
-        minWidth: 96,
-        maxWidth: 96,
-        offsetX: 8,
-        style: { colors: '#e5e7eb', fontSize: '11px', fontWeight: 500 },
-        formatter: v => fmtAxisMc(v),
-      },
-    },
-    grid: {
-      borderColor: 'rgba(255,255,255,0.08)',
-      strokeDashArray: 0,
-      xaxis: { lines: { show: true } },
-      yaxis: { lines: { show: true } },
-      padding: { left: 0, right: 18, top: 8, bottom: 0 },
-    },
-    annotations: currentPrice > 0 ? {
-      yaxis: [{
-        y: currentPrice,
-        borderColor: '#a855f7',
-        borderWidth: 1,
-        strokeDashArray: 3,
-        label: {
-          text: fmtAxisMc(currentPrice),
-          position: 'right',
-          offsetX: 10,
-          style: {
-            background: '#a855f7',
-            color: '#ffffff',
-            fontSize: '11px',
-            fontWeight: 700,
-            padding: { top: 4, bottom: 4, left: 8, right: 8 },
-            borderRadius: 3,
-          },
-        },
-      }]
-    } : {},
-    dataLabels: { enabled: false },
-    markers: { size: 0 },
-    tooltip: {
-      theme: 'dark',
-      x: { format: 'HH:mm:ss' },
-      y: {
-        formatter: v => {
-          const n = Number(v || 0)
-          if (n < 0.001) return n.toFixed(8)
-          return n.toFixed(6)
-        }
-      }
-    },
+    chart: { type:'candlestick', background:'#0E091C', toolbar:{ show:false }, animations:{ enabled:false } },
+    theme: { mode:'dark' },
+    xaxis: { type:'datetime', labels:{ style:{ colors:'#666', fontSize:'11px' } }, axisBorder:{ color:'#1e1535' }, axisTicks:{ color:'#1e1535' } },
+    yaxis: { tooltip:{ enabled:true }, labels:{ style:{ colors:'#666', fontSize:'11px' }, formatter: v => v < 0.001 ? v.toExponential(4) : v.toFixed(8) } },
+    grid: { borderColor:'#1e1535', strokeDashArray:3 },
+    plotOptions: { candlestick: { colors:{ upward:'#22c55e', downward:'#ef4444' }, wick:{ useFillColor:true } } },
+    tooltip: { theme:'dark', x:{ format:'dd MMM HH:mm' } },
   }
 
   return (
@@ -424,6 +295,7 @@ export default function TokenDetail() {
       <Layout showBack title={`${dName}`}>
         <div style={{ maxWidth:1400, margin:'0 auto', padding:'0 0 80px' }}>
 
+          {/* HEADER */}
           <div style={{ padding:'12px 16px 10px', display:'flex', alignItems:'center', gap:12, borderBottom:'1px solid var(--bd)' }}>
             <div style={{ width:42, height:42, borderRadius:10, flexShrink:0, overflow:'hidden', background:'var(--bg3)', border:'1px solid var(--bd2)' }}>
               {meta?.pfpUrl
@@ -445,22 +317,24 @@ export default function TokenDetail() {
               </div>
             </div>
             <div style={{ display:'flex', gap:6, flexShrink:0 }}>
-              <button className="token-header-copy-btn" onClick={() => navigator.clipboard.writeText(tokenAddr||'')}
+              <button onClick={() => navigator.clipboard.writeText(tokenAddr||'')}
                 style={{ padding:'7px 12px', background:'var(--bg2)', border:'1px solid var(--bd2)', borderRadius:8, fontSize:12, color:'var(--t2)', cursor:'pointer', fontFamily:'var(--mono)', whiteSpace:'nowrap' }}>
-                <span className="addr-copy-text">{fmtAddr(tokenAddr)} </span>⎘
+                {fmtAddr(tokenAddr)} ⎘
               </button>
-              <button className="token-header-share-btn" onClick={() => navigator.share?.({ url: window.location.href }) || navigator.clipboard.writeText(window.location.href)}
+              <button onClick={() => navigator.share?.({ url: window.location.href }) || navigator.clipboard.writeText(window.location.href)}
                 style={{ padding:'7px 12px', background:'var(--bg2)', border:'1px solid var(--bd2)', borderRadius:8, fontSize:12, color:'var(--t2)', cursor:'pointer' }}>
-                <span className="share-text">Share </span>↗
+                Share ↗
               </button>
             </div>
           </div>
 
           <div className="token-2col" style={{ display:'flex', gap:0, alignItems:'flex-start' }}>
 
+            {/* LEFT COLUMN */}
             <div style={{ flex:1, minWidth:0, borderRight:'1px solid var(--bd)' }}>
 
-              <div style={{ padding:'0' }}>
+              {/* CHART */}
+              <div>
                 <div style={{ padding:'10px 14px 6px', display:'flex', alignItems:'center', gap:10 }}>
                   <span style={{ fontSize:13, fontWeight:700, color:'var(--t2)' }}>{dSym}/MON Market Cap</span>
                   <span style={{ fontSize:20, fontWeight:800, color:'var(--p2)', fontFamily:'var(--mono)' }}>{fmtUSD((info.priceWei||0n)*1_000_000_000n, monPrice)}</span>
@@ -469,30 +343,26 @@ export default function TokenDetail() {
                   </span>
                 </div>
 
-                <div className="tf-btn-row" style={{ padding:'8px 14px', display:'flex', gap:6, alignItems:'center', background:'#000' }}>
+                <div style={{ padding:'0 14px 8px', display:'flex', gap:6 }}>
                   {TF_OPTIONS.map(t => (
-                    <button key={t} className="tf-btn" onClick={() => setTf(t)}
-                      style={{
-                        padding:'6px 14px', borderRadius:20, border:'none', fontSize:13, fontWeight:700, cursor:'pointer',
-                        background: tf===t ? 'rgba(255,255,255,0.15)' : 'transparent',
-                        color: tf===t ? '#ffffff' : '#555',
-                        textTransform: 'capitalize',
-                      }}>
-                      {t === 'all' ? 'All' : t}
+                    <button key={t} onClick={() => setTf(t)}
+                      style={{ padding:'4px 10px', borderRadius:6, border:'none', fontSize:12, fontWeight:700, cursor:'pointer',
+                        background: tf===t ? 'rgba(110,84,255,0.2)' : 'transparent',
+                        color: tf===t ? 'var(--p2)' : 'var(--t3)' }}>
+                      {t}
                     </button>
                   ))}
                 </div>
 
-                <div style={{ height:360, width:'100%', background:'#000', overflow:'hidden', position:'relative' }}>
-                  <ApexChart
-                    type="line"
-                    height={360}
-                    series={lineSeries}
-                    options={apexOptions}
-                  />
+                {/* APEX CHART — key={tf} forces remount on timeframe change */}
+                <div style={{ height:340, width:'100%', background:'#0E091C', overflow:'hidden' }}>
+                  {apexSeries.length === 0
+                    ? <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100%', color:'#555', fontSize:14 }}>Loading chart…</div>
+                    : <ApexChart key={tf} type="candlestick" height={340} series={apexSeries} options={apexOptions} />
+                  }
                 </div>
 
-                <div className="stats-4col" style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', borderTop:'1px solid var(--bd)', borderBottom:'1px solid var(--bd)' }}>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', borderTop:'1px solid var(--bd)', borderBottom:'1px solid var(--bd)' }}>
                   {[
                     ['VOL 24H', chartStats.vol24h > 0 ? fmtMON(BigInt(Math.floor(chartStats.vol24h*1e18))) + ' MON' : '—'],
                     ['PRICE',   `${(Number(info.priceWei)/1e18).toFixed(8)} MON`],
@@ -515,21 +385,22 @@ export default function TokenDetail() {
               </div>
 
               <div style={{ padding:'12px 14px', borderBottom:'1px solid var(--bd)', display:'flex', gap:10, alignItems:'center', flexWrap:'wrap' }}>
-                {meta?.twitter && <a href={meta.twitter} target="_blank" rel="noreferrer" style={{ fontSize:12, color:'var(--t3)', display:'flex', alignItems:'center', gap:4, textDecoration:'none' }}>𝕏 {meta.twitter.replace('https://twitter.com/','').replace('https://x.com/','')}</a>}
-                {meta?.telegram && <a href={meta.telegram} target="_blank" rel="noreferrer" style={{ fontSize:12, color:'var(--t3)', display:'flex', alignItems:'center', gap:4, textDecoration:'none' }}>✈️ Telegram</a>}
-                {meta?.website && <a href={meta.website} target="_blank" rel="noreferrer" style={{ fontSize:12, color:'var(--t3)', display:'flex', alignItems:'center', gap:4, textDecoration:'none' }}>🌐 Website</a>}
-                <a href={`https://monadexplorer.com/address/${tokenAddr}`} target="_blank" rel="noreferrer" style={{ fontSize:12, color:'var(--t3)', textDecoration:'none' }}>Contract ↗</a>
-                <a href={`https://monadexplorer.com/address/${curveAddr}`} target="_blank" rel="noreferrer" style={{ fontSize:12, color:'var(--t3)', textDecoration:'none' }}>Curve ↗</a>
+                {meta?.twitter  && <a href={meta.twitter}  target="_blank" rel="noreferrer" style={{ fontSize:12, color:'var(--t3)', textDecoration:'none' }}>𝕏 Twitter</a>}
+                {meta?.telegram && <a href={meta.telegram} target="_blank" rel="noreferrer" style={{ fontSize:12, color:'var(--t3)', textDecoration:'none' }}>✈️ Telegram</a>}
+                {meta?.website  && <a href={meta.website}  target="_blank" rel="noreferrer" style={{ fontSize:12, color:'var(--t3)', textDecoration:'none' }}>🌐 Website</a>}
+                <a href={`${MONADSCAN}/address/${tokenAddr}`} target="_blank" rel="noreferrer" style={{ fontSize:12, color:'var(--t3)', textDecoration:'none' }}>Contract ↗</a>
+                <a href={`${MONADSCAN}/address/${curveAddr}`} target="_blank" rel="noreferrer" style={{ fontSize:12, color:'var(--t3)', textDecoration:'none' }}>Curve ↗</a>
                 {meta?.description && <span style={{ fontSize:12, color:'var(--t2)', width:'100%' }}>{meta.description}</span>}
                 {!meta?.description && <span style={{ fontSize:12, color:'var(--t3)', fontStyle:'italic' }}>No description</span>}
               </div>
 
+              {/* TABS */}
               <div>
-                <div style={{ display:'flex', borderBottom:'1px solid var(--bd)', overflowX:'auto' }}>
+                <div style={{ display:'flex', borderBottom:'1px solid var(--bd)' }}>
                   {DETAIL_TABS.map(t => (
-                    <button key={t} className="detail-tab" onClick={() => setTab(t)}
-                      style={{ flex:1, padding:'12px 6px', border:'none', borderBottom: tab===t ? '2px solid var(--p)' : '2px solid transparent',
-                        background:'transparent', color: tab===t ? 'var(--t1)' : 'var(--t3)', fontSize:13, fontWeight:700, cursor:'pointer', marginBottom:-1, whiteSpace:'nowrap' }}>
+                    <button key={t} onClick={() => setTab(t)}
+                      style={{ flex:1, padding:'12px 0', border:'none', borderBottom: tab===t ? '2px solid var(--p)' : '2px solid transparent',
+                        background:'transparent', color: tab===t ? 'var(--t1)' : 'var(--t3)', fontSize:13, fontWeight:700, cursor:'pointer', marginBottom:-1 }}>
                       {t}
                     </button>
                   ))}
@@ -550,11 +421,6 @@ export default function TokenDetail() {
                         </div>
                       </div>
                     )}
-                    <div style={{ display:'flex', gap:6, marginBottom:10 }}>
-                      {['Newest','Likes'].map(s => (
-                        <button key={s} style={{ padding:'4px 10px', borderRadius:6, border:'1px solid var(--bd)', background:'transparent', fontSize:11, color:'var(--t3)', cursor:'pointer' }}>{s}</button>
-                      ))}
-                    </div>
                     {comments.map(c => (
                       <div key={c.id} style={{ display:'flex', gap:10, padding:'10px 0', borderBottom:'1px solid var(--bd)' }}>
                         <div style={{ width:32, height:32, borderRadius:'50%', background: c.dev ? 'linear-gradient(135deg,var(--p),var(--cyan))' : 'var(--bg3)', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:800, color:'white', border: c.dev ? 'none' : '1px solid var(--bd2)' }}>
@@ -615,11 +481,12 @@ export default function TokenDetail() {
               </div>
             </div>
 
+            {/* RIGHT COLUMN */}
             <div className="token-2col-right" style={{ width:320, flexShrink:0, position:'sticky', top:56, maxHeight:'calc(100vh - 56px)', overflowY:'auto' }}>
               <div style={{ padding:'12px 14px 0' }}>
                 <div style={{ display:'flex', background:'var(--bg3)', borderRadius:10, padding:3, marginBottom:12 }}>
                   {['buy','sell'].map(m => (
-                    <button key={m} className="buy-sell-mode-btn" onClick={() => setMode(m)}
+                    <button key={m} onClick={() => setMode(m)}
                       style={{ flex:1, padding:'9px 0', borderRadius:8, border:'none', fontWeight:800, fontSize:14, cursor:'pointer', transition:'all .15s',
                         background: mode===m ? (m==='buy'?'var(--p)':'var(--r)') : 'transparent',
                         color: mode===m ? 'white' : 'var(--t3)' }}>
@@ -637,7 +504,7 @@ export default function TokenDetail() {
 
                 {!customAmt && (
                   <div style={{ position:'relative', marginBottom:8 }}>
-                    <input type="number" className="buy-sell-input" placeholder={`0.0 ${mode==='buy'?'MON':dSym}`} value={amt} onChange={e => setAmt(e.target.value)}
+                    <input type="number" placeholder={`0.0 ${mode==='buy'?'MON':dSym}`} value={amt} onChange={e => setAmt(e.target.value)}
                       style={{ width:'100%', padding:'14px 60px 14px 14px', fontSize:20, fontWeight:800, fontFamily:'var(--mono)',
                         background:'var(--bg2)', border:'1px solid var(--bd2)', borderRadius:10, color:'var(--t1)', outline:'none', boxSizing:'border-box' }} />
                     <button onClick={() => { mode==='sell' ? setAmt((Number(tokenBalance)/1e18).toFixed(0)) : setAmt('') }}
@@ -698,19 +565,19 @@ export default function TokenDetail() {
 
                 {txErrMsg && (
                   <div style={{ background:'rgba(239,68,68,0.12)', border:'1px solid rgba(239,68,68,0.3)', borderRadius:8, padding:'10px 12px', marginBottom:10, fontSize:13, color:'var(--r)', fontWeight:600 }}>
-                    ❌ {txErrMsg}
+                    {txErrMsg}
                   </div>
                 )}
 
                 {info.delisted && <div style={{ background:'rgba(239,68,68,0.1)', border:'1px solid rgba(239,68,68,0.25)', borderRadius:8, padding:'9px 12px', marginBottom:8, fontSize:12, color:'var(--r)', fontWeight:600 }}>⚠️ Token delisted — trading disabled</div>}
                 {!info.delisted && info.pauseSells && mode==='sell' && <div style={{ background:'rgba(255,174,69,0.1)', border:'1px solid rgba(255,174,69,0.25)', borderRadius:8, padding:'9px 12px', marginBottom:8, fontSize:12, color:'#FFAE45', fontWeight:600 }}>⚠️ Sells currently paused</div>}
-                {!info.delisted && info.pauseBuys && mode==='buy' && <div style={{ background:'rgba(255,174,69,0.1)', border:'1px solid rgba(255,174,69,0.25)', borderRadius:8, padding:'9px 12px', marginBottom:8, fontSize:12, color:'#FFAE45', fontWeight:600 }}>⚠️ Buys currently paused</div>}
+                {!info.delisted && info.pauseBuys  && mode==='buy'  && <div style={{ background:'rgba(255,174,69,0.1)', border:'1px solid rgba(255,174,69,0.25)', borderRadius:8, padding:'9px 12px', marginBottom:8, fontSize:12, color:'#FFAE45', fontWeight:600 }}>⚠️ Buys currently paused</div>}
 
                 <button
                   style={{ width:'100%', padding:15, borderRadius:10, border:'none', fontWeight:800, fontSize:16, cursor:'pointer', marginBottom:6,
                     background: mode==='buy' ? 'var(--p)' : 'var(--r)', color:'white',
                     opacity: (info.delisted||(info.pauseSells&&mode==='sell')||(info.pauseBuys&&mode==='buy')) ? 0.4 : 1 }}
-                  onClick={() => { if (!userAddr) { setShowConnect(true); return; } mode==='buy' ? handleBuy() : handleSell() }}
+                  onClick={() => { if (!userAddr) { document.querySelector('.wallet-btn')?.click(); return; } mode==='buy' ? handleBuy() : handleSell() }}
                   disabled={isPending||isConfirming||sellStep!=='idle'||!!info.delisted||(!!info.pauseSells&&mode==='sell')||(!!info.pauseBuys&&mode==='buy')}>
                   {sellStep==='approving' ? 'Approving…' : sellStep==='selling' ? 'Confirm sell…' : isPending ? 'Confirm in wallet…' : isConfirming ? 'Confirming tx…' : userAddr ? `${mode==='buy'?'Buy':'Sell'} ${dSym}` : 'Connect Wallet'}
                 </button>
@@ -731,16 +598,17 @@ export default function TokenDetail() {
 
               <div style={{ height:1, background:'var(--bd)' }} />
 
+              {/* BONDING CURVE — % only, no MON amounts */}
               <div style={{ padding:'14px' }}>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
                   <div style={{ fontSize:12, fontWeight:800, color:'var(--t3)', letterSpacing:'.5px', textTransform:'uppercase' }}>Bonding Curve</div>
-                  <div style={{ fontSize:13, fontWeight:800, color:'var(--p2)' }}>{Math.min(pct,100).toFixed(1)}%</div>
+                  <div style={{ fontSize:18, fontWeight:900, color:'var(--p2)' }}>{Math.min(pct,100).toFixed(1)}%</div>
                 </div>
-                <div style={{ height:8, background:'var(--bg3)', borderRadius:999, overflow:'hidden', marginBottom:6 }}>
+                <div style={{ height:10, background:'var(--bg3)', borderRadius:999, overflow:'hidden', marginBottom:8 }}>
                   <div style={{ height:'100%', background:'linear-gradient(90deg,var(--p),var(--cyan))', borderRadius:999, width:`${Math.min(pct,100)}%`, transition:'width .5s' }} />
                 </div>
                 <div style={{ fontSize:11, color:'var(--t3)' }}>
-                  {info.graduated ? '🎓 Coin has graduated! LP burned on Uniswap V3' : `${fmtMON(info.monRaisedNet)} / ${fmtMON(info.capMon)} MON → Uniswap V3`}
+                  {info.graduated ? '🎓 Graduated! LP burned on Uniswap V3' : `${(100-pct).toFixed(1)}% remaining to graduation`}
                 </div>
               </div>
 
@@ -749,10 +617,10 @@ export default function TokenDetail() {
               <div style={{ padding:'14px' }}>
                 <div style={{ fontSize:12, fontWeight:800, color:'var(--t3)', letterSpacing:'.5px', marginBottom:10, textTransform:'uppercase' }}>Stats</div>
                 {[
-                  ['Market Cap', fmtUSD((info.priceWei||0n)*1_000_000_000n, monPrice)],
+                  ['Market Cap',   fmtUSD((info.priceWei||0n)*1_000_000_000n, monPrice)],
                   ['Total Volume', fmtMON(BigInt(Math.floor(chartStats.totalVol*1e18))) + ' MON'],
-                  ['Dev Fees', fmtMON(BigInt(Math.floor(chartStats.devFees*1e18))) + ' MON'],
-                  ['MON Raised', fmtMON(info.monRaisedNet) + ' MON'],
+                  ['Dev Fees',     fmtMON(BigInt(Math.floor(chartStats.devFees*1e18))) + ' MON'],
+                  ['Contract',     fmtAddr(tokenAddr)],
                 ].map(([l,v]) => (
                   <div key={l} style={{ display:'flex', justifyContent:'space-between', fontSize:13, marginBottom:8 }}>
                     <span style={{ color:'var(--t3)' }}>{l}</span>
@@ -791,70 +659,6 @@ export default function TokenDetail() {
             </div>
           </div>
         </div>
-
-        {/* Mobile sticky buy/sell button — always visible on mobile without scrolling */}
-        <div className="mobile-buy-sticky">
-          {/* Mode toggle */}
-          <div style={{ display:'flex', background:'var(--bg3)', borderRadius:10, padding:3, marginBottom:8 }}>
-            {['buy','sell'].map(m => (
-              <button key={m} className="buy-sell-mode-btn" onClick={() => setMode(m)}
-                style={{ flex:1, padding:'9px 0', borderRadius:8, border:'none', fontWeight:800, fontSize:13, cursor:'pointer',
-                  background: mode===m ? (m==='buy'?'var(--p)':'var(--r)') : 'transparent',
-                  color: mode===m ? 'white' : 'var(--t3)' }}>
-                {m.charAt(0).toUpperCase()+m.slice(1)}
-              </button>
-            ))}
-          </div>
-          {/* Quick amounts + input row */}
-          <div style={{ display:'flex', gap:6, marginBottom:8 }}>
-            {mode==='buy'
-              ? ['100','500','1000'].map(n => (
-                  <button key={n} onClick={() => setAmt(n)}
-                    style={{ flex:1, padding:'7px 0', textAlign:'center', background: amt===n?'rgba(110,84,255,0.25)':'rgba(110,84,255,0.08)', border: amt===n?'1px solid var(--p)':'1px solid rgba(110,84,255,0.15)', borderRadius:7, fontSize:11, fontWeight:700, color:'var(--p2)', cursor:'pointer' }}>
-                    {n}
-                  </button>
-                ))
-              : ['25%','50%','100%'].map(p => (
-                  <button key={p} onClick={() => setAmt((Number(tokenBalance)/1e18*(parseInt(p)/100)).toFixed(0))}
-                    style={{ flex:1, padding:'7px 0', textAlign:'center', background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.15)', borderRadius:7, fontSize:11, fontWeight:700, color:'var(--r)', cursor:'pointer' }}>
-                    {p}
-                  </button>
-                ))
-            }
-            <input type="number" placeholder="Amt" value={amt} onChange={e => setAmt(e.target.value)}
-              className="buy-sell-input"
-              style={{ flex:1.5, padding:'7px 10px', fontSize:13, fontWeight:700, fontFamily:'var(--mono)',
-                background:'var(--bg2)', border:'1px solid var(--bd2)', borderRadius:7, color:'var(--t1)', outline:'none' }} />
-          </div>
-          {/* Buy/Sell button */}
-          <button
-            style={{ width:'100%', padding:'14px 0', borderRadius:10, border:'none', fontWeight:800, fontSize:16, cursor:'pointer',
-              background: mode==='buy' ? 'var(--p)' : 'var(--r)', color:'white',
-              opacity: (info.delisted||(info.pauseSells&&mode==='sell')||(info.pauseBuys&&mode==='buy')) ? 0.4 : 1 }}
-            onClick={() => { if (!userAddr) { setShowConnect(true); return; } mode==='buy' ? handleBuy() : handleSell() }}
-            disabled={isPending||isConfirming||sellStep!=='idle'||!!info.delisted||(!!info.pauseSells&&mode==='sell')||(!!info.pauseBuys&&mode==='buy')}>
-            {sellStep==='approving' ? 'Approving…' : sellStep==='selling' ? 'Confirm sell…' : isPending ? 'Confirm in wallet…' : isConfirming ? 'Confirming…' : userAddr ? `${mode==='buy'?'Buy':'Sell'} ${dSym}` : 'Connect Wallet'}
-          </button>
-        </div>
-        {showConnect && (
-          <>
-            <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:399 }} onClick={() => setShowConnect(false)} />
-            <div style={{ position:'fixed', left:'50%', top:'50%', transform:'translate(-50%,-50%)', width:'min(92vw,360px)', background:'var(--bg2)', border:'1px solid var(--bd2)', borderRadius:16, padding:12, zIndex:400, boxShadow:'0 10px 40px rgba(0,0,0,0.55)' }}>
-              <div style={{ fontSize:16, fontWeight:800, marginBottom:4 }}>Connect Wallet</div>
-              <div style={{ fontSize:12, color:'var(--t3)', marginBottom:10 }}>Choose your wallet</div>
-              {connectors.map(c => (
-                <button key={c.id} onClick={() => { connect({ connector: c }); setShowConnect(false) }}
-                  style={{ width:'100%', padding:'12px 14px', marginBottom:8, background:'var(--bg3)', border:'1px solid var(--bd)', borderRadius:12, color:'var(--t1)', fontSize:14, fontWeight:600, textAlign:'left', cursor:'pointer', display:'flex', alignItems:'center', gap:10, fontFamily:'var(--sans)' }}>
-                  <span style={{ fontSize:20 }}>{c.id==='metaMask'?'🦊':c.id==='walletConnect'?'🔗':c.id==='injected'?'💼':'🔌'}</span>
-                  <div>
-                    <div>{c.name}</div>
-                    <div style={{ fontSize:11, color:'var(--t3)', fontWeight:400 }}>{c.id==='walletConnect'?'Scan QR with any wallet':c.id==='injected'?'Browser extension':'Mobile & extension'}</div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </>
-        )}
       </Layout>
     </>
   )
