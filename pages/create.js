@@ -20,7 +20,7 @@ export default function Create() {
   const [bannerPreview, setBannerP] = useState(null)
   const [pfp, setPfp]               = useState(null)
   const [pfpPreview, setPfpP]       = useState(null)
-  const [devBuyAmt, setDevBuyAmt]   = useState('100')
+  const [devBuyAmt, setDevBuyAmt]   = useState('1')
   const [error, setError]           = useState('')
   const [uploading, setUploading]   = useState(false)
   const [step, setStep]             = useState('')
@@ -33,8 +33,8 @@ export default function Create() {
 
   const referrer = query?.ref && query.ref.startsWith('0x') ? query.ref : ZERO_ADDR
   const devBuyWei = (() => { try { return parseEther(devBuyAmt || '0') } catch { return 0n } })()
-  const minDevBuy = MIN_DEV_BUY || 100n * 10n ** 18n
-  const totalCost = CREATION_FEE + (devBuyWei > minDevBuy ? devBuyWei : minDevBuy)
+  const minDevBuy = CREATION_FEE ? 1n * 10n ** 18n : 1n * 10n ** 18n
+  const totalCost = (CREATION_FEE || 1n * 10n ** 18n) + (devBuyWei > minDevBuy ? devBuyWei : minDevBuy)
   const totalMON = Number(totalCost) / 1e18
 
   function handleBanner(e) {
@@ -51,7 +51,7 @@ export default function Create() {
     if (!form.symbol.trim())     return 'Ticker symbol is required'
     if (form.symbol.length > 10) return 'Symbol max 10 chars'
     if (!isConnected)            return 'Connect your wallet first'
-    if (devBuyWei < minDevBuy)   return 'Min dev buy is 100 MON'
+    if (devBuyWei < minDevBuy)   return 'Min dev buy is 1 MON'
     return ''
   }
 
@@ -109,7 +109,7 @@ export default function Create() {
           <div style={{ fontSize:18, fontWeight:800, marginBottom:6 }}>Launch on MonPad</div>
           <div style={{ fontSize:13, color:'var(--t2)' }}><span style={{ color:'var(--p2)', fontWeight:700 }}>Earn 1.5% of every trade</span> — buys and sells, forever.</div>
           <div style={{ display:'flex', justifyContent:'center', gap:24, marginTop:16 }}>
-            {[['100 MON','Launch fee'],['1B','Total supply'],['Fair launch','No presale']].map(([v,l]) => (
+            {[['1 MON','Launch fee'],['1B','Total supply'],['Fair launch','No presale']].map(([v,l]) => (
               <div key={l}><div style={{ fontSize:15, fontWeight:800, color:'var(--p2)' }}>{v}</div><div style={{ fontSize:10, color:'var(--t3)', marginTop:2 }}>{l}</div></div>
             ))}
           </div>
@@ -144,12 +144,12 @@ export default function Create() {
         <div style={{ marginBottom:24 }}><div className="input-label">Website</div><input className="input-field" placeholder="https://yourtoken.xyz" value={form.website} onChange={e=>set('website',e.target.value)} /></div>
 
         <div style={{ marginBottom:20 }}>
-          <div className="input-label">Dev Buy Amount <span style={{ color:'var(--p2)', fontWeight:700 }}>(min 100 MON)</span></div>
+          <div className="input-label">Dev Buy Amount <span style={{ color:'var(--p2)', fontWeight:700 }}>(min 1 MON)</span></div>
           <div style={{ position:'relative' }}>
-            <input className="input-field" type="number" placeholder="100" value={devBuyAmt} onChange={e=>setDevBuyAmt(e.target.value)} min="100" style={{ paddingRight:52 }} />
+            <input className="input-field" type="number" placeholder="1" value={devBuyAmt} onChange={e=>setDevBuyAmt(e.target.value)} min="1" style={{ paddingRight:52 }} />
             <span style={{ position:'absolute', right:14, top:'50%', transform:'translateY(-50%)', fontSize:12, color:'var(--t3)', fontWeight:600 }}>MON</span>
           </div>
-          <div style={{ fontSize:11, color:'var(--t3)', marginTop:5 }}>Atomic buy at launch — no frontrunning. Your tokens are locked until graduation.</div>
+          <div style={{ fontSize:11, color:'var(--t3)', marginTop:5 }}>Atomic buy at launch — no frontrunning. Tokens locked until graduation.</div>
         </div>
 
         <div style={{ background:'rgba(110,84,255,0.08)', border:'1px solid rgba(110,84,255,0.2)', borderRadius:12, padding:'14px 16px', marginBottom:20 }}>
@@ -161,7 +161,7 @@ export default function Create() {
         </div>
 
         <div className="card" style={{ marginBottom:20 }}>
-          {[['Launch fee','100 MON'],['Dev buy (min 100 MON)',devBuyAmt+' MON'],['Total supply','1,000,000,000'],['LP after graduation','Burned forever 🔥']].map(([l,v]) => (
+          {[['Launch fee','1 MON'],['Dev buy (min 1 MON)',devBuyAmt+' MON'],['Total supply','1,000,000,000'],['LP after graduation','Burned forever 🔥']].map(([l,v]) => (
             <div key={l} style={{ display:'flex', justifyContent:'space-between', fontSize:13, padding:'5px 0', borderBottom:'1px solid rgba(255,255,255,0.03)' }}>
               <span style={{ color:'var(--t3)' }}>{l}</span><span style={{ fontWeight:700, fontFamily:'var(--mono)' }}>{v}</span>
             </div>
@@ -174,7 +174,7 @@ export default function Create() {
         {isSuccess && <div style={{ background:'rgba(34,197,94,0.1)', border:'1px solid rgba(34,197,94,0.25)', borderRadius:10, padding:'10px 14px', fontSize:13, color:'var(--g)', marginBottom:14 }}>🎉 Token launched! Redirecting…</div>}
 
         <button className="btn-primary" style={{ width:'100%', padding:18, fontSize:16, fontWeight:800, borderRadius:14 }} onClick={handleCreate} disabled={busy}>
-          {uploading?'⬆️ Uploading…':isPending?'✍️ Confirm in wallet…':isConfirming?'⏳ Confirming…':isConnected?'🚀 Launch Token ('+totalMON.toFixed(0)+' MON)':'Connect Wallet to Launch'}
+          {uploading?'⬆️ Uploading…':isPending?'✍️ Confirm in wallet…':isConfirming?'⏳ Confirming…':isConnected?'🚀 Launch Token ('+totalMON.toFixed(1)+' MON)':'Connect Wallet to Launch'}
         </button>
 
         <div style={{ textAlign:'center', fontSize:11, color:'var(--t3)', marginTop:12 }}>By launching you agree this token has no inherent value and is for entertainment only.</div>
