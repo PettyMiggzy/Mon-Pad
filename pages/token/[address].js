@@ -95,7 +95,7 @@ export default function TokenDetail() {
       try {
         const curve = curveAddr || await client.readContract({ address: tokenAddr, abi: TOKEN_ABI, functionName: 'curve' })
         const [priceWei, monRaisedNet, bondedBps, graduated] = await Promise.all([
-          client.readContract({ address: curve, abi: CURVE_ABI, functionName: 'price' }),
+          client.readContract({ address: curve, abi: CURVE_ABI, functionName: 'priceWeiPerToken' }),
           client.readContract({ address: curve, abi: CURVE_ABI, functionName: 'monRaisedNet' }),
           client.readContract({ address: curve, abi: CURVE_ABI, functionName: 'bondedBps' }),
           client.readContract({ address: curve, abi: CURVE_ABI, functionName: 'graduated' }),
@@ -117,7 +117,7 @@ export default function TokenDetail() {
         client.readContract({ address: curve,     abi: CURVE_ABI, functionName: 'monRaisedNet' }),
         client.readContract({ address: curve,     abi: CURVE_ABI, functionName: 'capMon' }),
         client.readContract({ address: curve,     abi: CURVE_ABI, functionName: 'bondedBps' }),
-        client.readContract({ address: curve,     abi: CURVE_ABI, functionName: 'price' }),
+        client.readContract({ address: curve,     abi: CURVE_ABI, functionName: 'priceWeiPerToken' }),
         client.readContract({ address: curve,     abi: CURVE_ABI, functionName: 'creator' }),
         client.readContract({ address: curve,     abi: CURVE_ABI, functionName: 'pauseBuys' }),
         client.readContract({ address: curve,     abi: CURVE_ABI, functionName: 'pauseSells' }),

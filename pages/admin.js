@@ -5,7 +5,7 @@ import { FACTORY_ADDRESS, FACTORY_ABI, CURVE_ABI, fmtAddr } from '../lib/constan
 import { monad } from '../lib/wagmi'
 
 const PLATFORM = '0x57C8A5AeC1c172fE41416A2FAE6eBDD92b552A16'
-const TREASURY = '0xB9d4B73bE18914c6d64Bee65a806648370be467f'
+const TREASURY = '0x5dD4bF19C42d45FD414930eFE78D602c5975FFfd'
 const ALLOWED  = [PLATFORM.toLowerCase(), TREASURY.toLowerCase()]
 const SERVER   = process.env.NEXT_PUBLIC_SERVER_URL || ''
 

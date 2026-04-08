@@ -3,16 +3,16 @@ import { defineChain } from 'viem'
 import { walletConnect, injected, metaMask } from 'wagmi/connectors'
 
 export const monad = defineChain({
-    id: 10143,
-    name: 'Monad Testnet',
+    id: 143,
+    name: 'Monad',
     nativeCurrency: { name: 'MON', symbol: 'MON', decimals: 18 },
     rpcUrls: {
       default: {
-              http: ['https://testnet-rpc.monad.xyz']
+              http: ['https://rpc.monad.xyz']
       }
     },
     blockExplorers: {
-      default: { name: 'Monadscan', url: 'https://testnet.monadscan.com' }
+      default: { name: 'Monadscan', url: 'https://monadscan.com' }
     }
 })
 
@@ -26,7 +26,7 @@ export const wagmiConfig = createConfig({
           walletConnect({ projectId: WC_PROJECT_ID }),
         ],
     transports: {
-          [monad.id]: http('https://testnet-rpc.monad.xyz')
+          [monad.id]: http('https://rpc.monad.xyz')
     },
     ssr: true,
 })
