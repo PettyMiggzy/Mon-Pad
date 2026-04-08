@@ -174,11 +174,7 @@ export default function Home() {
               )}
               <div style={{ position:'absolute', inset:0, background:'linear-gradient(to top,rgba(0,0,0,0.85) 0%,transparent 55%)', pointerEvents:'none' }} />
               <div style={{ position:'absolute', bottom:0, left:0, right:0, padding:'10px 12px', zIndex:2, display:'flex', alignItems:'flex-end', gap:8 }}>
-                {meta?.pfpUrl && (
-                  <div style={{ width:26, height:26, borderRadius:7, overflow:'hidden', border:'1.5px solid rgba(255,255,255,0.2)', flexShrink:0 }}>
-                    <img src={fixUrl(meta.pfpUrl)} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
-                  </div>
-                )}
+                
                 <div>
                   <div style={{ fontSize:18, fontWeight:800, color:'white', lineHeight:1.1 }}>{fmtUSD(t.marketCap || t.monRaisedNet, monPrice)}</div>
                   <div style={{ fontSize:12, fontWeight:600, color:'rgba(255,255,255,0.7)' }}>{t.name} · ${t.symbol}</div>
