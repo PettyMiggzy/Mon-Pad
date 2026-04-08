@@ -639,7 +639,7 @@ export default function TokenDetail() {
                       📷 PFP
                       <input type="file" accept="image/*" style={{ display:'none' }} onChange={async e => {
                         const f = e.target.files?.[0]; if (!f) return
-                        const fd = new FormData(); fd.append('file',f); fd.append('address',tokenAddr)
+                        const fd = new FormData(); fd.append('pfp',f); fd.append('address',tokenAddr)
                         await fetch(`${SERVER}/api/upload/pfp`, { method:'POST', body:fd })
                         const r = await fetch(`${SERVER}/api/token/meta/${tokenAddr}`); const d = await r.json(); setMeta(d)
                       }} />
@@ -648,7 +648,7 @@ export default function TokenDetail() {
                       🖼 Banner
                       <input type="file" accept="image/*" style={{ display:'none' }} onChange={async e => {
                         const f = e.target.files?.[0]; if (!f) return
-                        const fd = new FormData(); fd.append('file',f); fd.append('address',tokenAddr)
+                        const fd = new FormData(); fd.append('banner',f); fd.append('address',tokenAddr)
                         await fetch(`${SERVER}/api/upload/banner`, { method:'POST', body:fd })
                         const r = await fetch(`${SERVER}/api/token/meta/${tokenAddr}`); const d = await r.json(); setMeta(d)
                       }} />
