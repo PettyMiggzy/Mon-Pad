@@ -301,7 +301,7 @@ export default function TokenDetail() {
     grid: { borderColor:'#1e1535', strokeDashArray:3 },
     plotOptions: { candlestick: { colors:{ upward:'#22c55e', downward:'#ef4444' }, wick:{ useFillColor:true } } },
     stroke: useLineChart ? { curve:'smooth', width:2, colors:['#6E54FF'] } : {},
-    tooltip: { theme:'dark', x:{ format:'dd MMM HH:mm' } },
+    tooltip: { theme: 'dark', x: { format: 'dd MMM HH:mm' } }
   }
 
   return (
