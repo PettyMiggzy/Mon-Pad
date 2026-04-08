@@ -598,6 +598,7 @@ input, textarea { font-family: var(--sans); }
 }
 .live-dot { width: 5px; height: 5px; background: white; border-radius: 50%; animation: blink 1.5s infinite; }
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+@keyframes pulseLine { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
 
 /* ═══════════════════════════════════════
    TAB BAR

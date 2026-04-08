@@ -225,7 +225,7 @@ export default function Home() {
               {tab==='live'?'Nobody is live right now':tab==='grad'?'No graduated tokens yet':tab==='trenches'?'No tokens in the trenches yet':'No tokens yet'}
             </div>
             <div style={{ fontSize:13, color:'var(--t3)', marginBottom:20 }}>
-              {tab==='live'?'Go live on your token page':tab==='grad'?'Tokens graduate at 420K MON':tab==='trenches'?'Tokens past 50% bonding show here':'Be the first to launch on MonPad'}
+              {tab==='live'?'Go live on your token page':tab==='grad'?'Tokens graduate at 425K MON':tab==='trenches'?'Tokens past 50% bonding show here':'Be the first to launch on MonPad'}
             </div>
             {(tab === 'movers' || tab === 'new') && (
               <button onClick={() => router.push('/create')}
@@ -265,6 +265,21 @@ function TokenCard({ token: t, meta, isLive, monPrice, onClick }) {
             <span style={{ width:5, height:5, background:'white', borderRadius:'50%', animation:'blink 1.5s infinite' }} />LIVE
           </div>
         )}
+      </div>
+
+      {/* Purple pulse lifeline */}
+      <div style={{ width:'100%', height:24, overflow:'hidden', position:'relative' }}>
+        <svg viewBox="0 0 200 24" preserveAspectRatio="none" style={{ width:'200%', height:'100%', position:'absolute', left:0, top:0, animation:'pulseLine 3s linear infinite' }}>
+          <polyline
+            points="0,12 10,12 15,12 18,4 22,20 26,8 30,16 34,12 50,12 55,12 58,6 62,18 66,10 70,14 74,12 90,12 95,12 98,4 102,20 106,8 110,16 114,12 130,12 135,12 138,6 142,18 146,10 150,14 154,12 170,12 175,12 178,4 182,20 186,8 190,16 194,12 200,12"
+            fill="none"
+            stroke={t.graduated ? '#FFAE45' : '#6E54FF'}
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            opacity="0.6"
+          />
+        </svg>
       </div>
 
       <div className="tcard-body">
