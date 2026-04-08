@@ -34,6 +34,7 @@ export default function Home() {
   const [liveRooms, setLive]  = useState([])
   const [loading, setLoading] = useState(true)
   const [monPrice, setMonPrice] = useState(0)
+  const [recentTrades, setRecentTrades] = useState({})
   const carouselRef = useRef(null)
 
   useEffect(() => {
@@ -53,11 +54,13 @@ export default function Home() {
         try {
           const msg = JSON.parse(e.data)
           if (msg.type === 'price_update') {
+            const addr = msg.tokenAddress?.toLowerCase()
             setTokens(prev => prev.map(t =>
-              t.token?.toLowerCase() === msg.tokenAddress?.toLowerCase()
+              t.token?.toLowerCase() === addr
                 ? { ...t, marketCap: BigInt(msg.marketCap||'0'), monRaisedNet: BigInt(msg.monRaisedNet||'0'), bondedBps: BigInt(msg.bondedBps||'0') }
                 : t
             ))
+            if (addr) setRecentTrades(prev => ({ ...prev, [addr]: Date.now() }))
           }
         } catch {}
       }
@@ -100,7 +103,7 @@ export default function Home() {
       setTokens(list)
       setMetas(map)
     } catch (e) {
-      console.error('loadTokens:', e)
+      // loadTokens error silenced
     } finally {
       setLoading(false)
     }
@@ -157,14 +160,15 @@ export default function Home() {
           <div key={i} style={{ flexShrink:0, width:230, height:145, borderRadius:12, background:'var(--bg2)', scrollSnapAlign:'start', animation:'pulse 1.5s infinite' }} />
         ))}
         {trending.map((t,i) => {
-          const meta = metas[t.token?.toLowerCase()] || { pfpUrl: 'default_image_uri', bannerUrl: 'default_image_uri' } // check fallback values for missing meta
+          const meta = metas[t.token?.toLowerCase()] || {}
           const isLive = live.has(t.token?.toLowerCase())
           const color  = GRAD_COLORS[t.colorIdx % GRAD_COLORS.length]
+          const bannerSrc = meta?.bannerUrl && meta.bannerUrl !== 'default_image_uri' ? fixUrl(meta.bannerUrl) : null
           return (
             <div key={t.token} onClick={() => router.push(`/token/${t.token}`)}
-              style={{ flexShrink:0, width:230, borderRadius:12, overflow:'hidden', position:'relative', cursor:'pointer', scrollSnapAlign:'start', background: meta?.bannerUrl ? '#000' : `linear-gradient(135deg,${color}22,${color}08)`, border:`1px solid ${color}22` }}>
-              {meta?.bannerUrl
-                ? <img src={fixUrl(meta.bannerUrl)} alt="" style={{ width:'100%', height:145, objectFit:'cover', display:'block' }} />
+              style={{ flexShrink:0, width:230, borderRadius:12, overflow:'hidden', position:'relative', cursor:'pointer', scrollSnapAlign:'start', background: bannerSrc ? '#000' : `linear-gradient(135deg,${color}22,${color}08)`, border:`1px solid ${color}22` }}>
+              {bannerSrc
+                ? <img src={bannerSrc} alt="" onError={e => { e.target.style.display='none' }} style={{ width:'100%', height:145, objectFit:'cover', display:'block' }} />
                 : <div style={{ height:145, display:'flex', alignItems:'center', justifyContent:'center', fontSize:54, fontWeight:900, color:`${color}20` }}>{(t.symbol||'?').slice(0,2)}</div>
               }
               {isLive && (
@@ -234,9 +238,14 @@ export default function Home() {
 
         {!loading && list.length > 0 && (
           <div className="token-grid">
-            {list.map(t => (
-              <TokenCard key={t.token} token={t} meta={metas[t.token?.toLowerCase()]} isLive={live.has(t.token?.toLowerCase())} monPrice={monPrice} onClick={() => router.push(`/token/${t.token}`)} />
-            ))}
+            {list.map(t => {
+              const lastTrade = recentTrades[t.token?.toLowerCase()] || 0
+              const age = Date.now() - lastTrade
+              const pulseIntensity = lastTrade > 0 && age < 30000 ? Math.max(0.2, 1 - age / 30000) : 0
+              return (
+                <TokenCard key={t.token} token={t} meta={metas[t.token?.toLowerCase()]} isLive={live.has(t.token?.toLowerCase())} monPrice={monPrice} onClick={() => router.push(`/token/${t.token}`)} pulseIntensity={pulseIntensity} />
+              )
+            })}
           </div>
         )}
       </div>
@@ -244,12 +253,18 @@ export default function Home() {
   )
 }
 
-function TokenCard({ token: t, meta, isLive, monPrice, onClick }) {
-  const pct   = Number(t.bondedBps) / 100
+function TokenCard({ token: t, meta, isLive, monPrice, onClick, pulseIntensity = 0 }) {
+  const rawPct = Number(t.bondedBps) / 100
+  const pct   = isNaN(rawPct) ? 0 : rawPct
   const color = GRAD_COLORS[t.colorIdx % GRAD_COLORS.length]
 
+  const pulseStyle = pulseIntensity > 0 ? {
+    boxShadow: `0 0 ${Math.round(pulseIntensity * 12)}px ${Math.round(pulseIntensity * 4)}px ${color}44`,
+    animation: `cardPulse ${(1.5 - pulseIntensity * 0.5).toFixed(2)}s ease-in-out infinite`,
+  } : {}
+
   return (
-    <div className="tcard" onClick={onClick}>
+    <div className="tcard" onClick={onClick} style={pulseStyle}>
       <div className="tcard-img" style={{ background: meta?.pfpUrl ? '#000' : `linear-gradient(135deg,${color}30,${color}10)`, position:'relative', overflow:'hidden' }}>
         {meta?.pfpUrl
           ? <img src={fixUrl(meta.pfpUrl)} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} />

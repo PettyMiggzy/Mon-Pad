@@ -884,3 +884,8 @@ input, textarea { font-family: var(--sans); }
   .tcard-sym  { font-size: 8px !important;  }
   .trending-title { font-size: 13px !important; }
 }
+
+@keyframes cardPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.92; transform: scale(1.01); }
+}

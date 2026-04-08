@@ -130,7 +130,7 @@ export default function TokenDetail() {
         const bal = await client.readContract({ address: tokenAddr, abi: TOKEN_ABI, functionName: 'balanceOf', args: [userAddr] })
         setTokenBalance(bal)
       }
-    } catch (e) { console.error(e) }
+    } catch (e) { /* chain load error */ }
   }
 
   async function loadTradesAndHolders(curveAddr) {
@@ -154,7 +154,7 @@ export default function TokenDetail() {
         .sort((a,b) => Number(b[1]) - Number(a[1]))
         .map(([addr, balance]) => ({ addr, balance }))
       setHolders(holderList)
-    } catch(e) { console.error('loadTradesAndHolders error:', e) }
+    } catch(e) { /* trades/holders load error */ }
   }
 
   useEffect(() => {
@@ -196,7 +196,7 @@ export default function TokenDetail() {
           y: [parseFloat(c.open), parseFloat(c.high), parseFloat(c.low), parseFloat(c.close)]
         }))
       }])
-    } catch(e) { console.error('chart error:', e) }
+    } catch(e) { /* chart build error */ }
   }
 
   function handleBuy() {
@@ -272,8 +272,10 @@ export default function TokenDetail() {
 
   if (!info) return <Layout showBack><div style={{ padding:'60px 14px', textAlign:'center', color:'var(--t3)' }}>Loading…</div></Layout>
 
-  const pct         = Number(info.bondedBps) / 100
-  const priceNum    = Number(info.priceWei) / 1e18
+  const rawPct      = Number(info.bondedBps) / 100
+  const pct         = isNaN(rawPct) ? 0 : rawPct
+  const rawPrice    = Number(info.priceWei) / 1e18
+  const priceNum    = isNaN(rawPrice) ? 0 : rawPrice
   const tokensEst   = (amt && priceNum > 0) ? Math.floor(parseFloat(amt) / priceNum / 1.02).toLocaleString() : '0'
   const isCreator   = userAddr?.toLowerCase() === info.creator?.toLowerCase()
   const dName       = meta?.name   || info.name
@@ -292,16 +294,16 @@ export default function TokenDetail() {
     xaxis: { type:'datetime', labels:{ style:{ colors:'#666', fontSize:'11px' } }, axisBorder:{ color:'#1e1535' }, axisTicks:{ color:'#1e1535' } },
     yaxis: { tooltip:{ enabled:true }, labels:{ style:{ colors:'#666', fontSize:'11px' }, formatter: v => {
          if (isNaN(v) || v === null || v === undefined) {
-            console.error('Invalid Value: ', v);
-            return 0;
+            return '—';
          } else {
             return v < 0.001 ? v.toExponential(4) : v.toFixed(8);
          }
-      } },
+      } } },
     grid: { borderColor:'#1e1535', strokeDashArray:3 },
     plotOptions: { candlestick: { colors:{ upward:'#22c55e', downward:'#ef4444' }, wick:{ useFillColor:true } } },
     stroke: useLineChart ? { curve:'smooth', width:2, colors:['#6E54FF'] } : {},
-    tooltip: { theme: 'dark', x: { format: 'dd MMM HH:mm' } }
+    tooltip: { theme: 'dark', x: { format: 'dd MMM HH:mm' }, },
+
   }
 
   return (
@@ -382,7 +384,7 @@ export default function TokenDetail() {
                 <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', borderTop:'1px solid var(--bd)', borderBottom:'1px solid var(--bd)' }}>
                   {[
                     ['VOL 24H', chartStats.vol24h > 0 ? fmtMON(BigInt(Math.floor(chartStats.vol24h*1e18))) + ' MON' : '—'],
-                    ['PRICE',   `${(Number(info.priceWei)/1e18).toFixed(8)} MON`],
+                    ['PRICE',   `${priceNum.toFixed(8)} MON`],
                     ['5M',      { val: chartStats.pct5m, pct: true }],
                     ['1H',      { val: chartStats.pct1h, pct: true }],
                   ].map(([label, v]) => (
@@ -489,7 +491,7 @@ export default function TokenDetail() {
                                 {h.addr?.toLowerCase()===curveAddr?.toLowerCase() ? '🔒 Curve' : fmtAddr(h.addr)}
                               </span>
                             </div>
-                            <span style={{ color:'var(--t1)', fontFamily:'var(--mono)', fontWeight:600 }}>{(Number(h.balance)/1e18).toLocaleString(undefined,{maximumFractionDigits:0})}</span>
+                            <span style={{ color:'var(--t1)', fontFamily:'var(--mono)', fontWeight:600 }}>{(isNaN(Number(h.balance)/1e18) ? 0 : Number(h.balance)/1e18).toLocaleString(undefined,{maximumFractionDigits:0})}</span>
                           </div>
                         ))
                     }
@@ -515,7 +517,7 @@ export default function TokenDetail() {
                 {mode==='sell' && tokenBalance > 0n && (
                   <div style={{ fontSize:12, color:'var(--t3)', marginBottom:8, display:'flex', justifyContent:'space-between' }}>
                     <span>Balance</span>
-                    <span style={{ color:'var(--t2)', fontWeight:600 }}>{(Number(tokenBalance)/1e18).toLocaleString(undefined,{maximumFractionDigits:0})} {dSym}</span>
+                    <span style={{ color:'var(--t2)', fontWeight:600 }}>{(isNaN(Number(tokenBalance)/1e18) ? 0 : Number(tokenBalance)/1e18).toLocaleString(undefined,{maximumFractionDigits:0})} {dSym}</span>
                   </div>
                 )}
 
@@ -524,7 +526,7 @@ export default function TokenDetail() {
                     <input type="number" placeholder={`0.0 ${mode==='buy'?'MON':dSym}`} value={amt} onChange={e => setAmt(e.target.value)}
                       style={{ width:'100%', padding:'14px 60px 14px 14px', fontSize:20, fontWeight:800, fontFamily:'var(--mono)',
                         background:'var(--bg2)', border:'1px solid var(--bd2)', borderRadius:10, color:'var(--t1)', outline:'none', boxSizing:'border-box' }} />
-                    <button onClick={() => { mode==='sell' ? setAmt((Number(tokenBalance)/1e18).toFixed(0)) : setAmt('') }}
+                    <button onClick={() => { mode==='sell' ? setAmt((isNaN(Number(tokenBalance)/1e18) ? 0 : Number(tokenBalance)/1e18).toFixed(0)) : setAmt('') }}
                       style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)', background:'rgba(110,84,255,0.15)', color:'var(--p2)', fontSize:10, fontWeight:700, padding:'4px 8px', borderRadius:5, border:'none', cursor:'pointer' }}>
                       {mode==='sell'?'MAX':'CLR'}
                     </button>
@@ -540,7 +542,7 @@ export default function TokenDetail() {
                         </button>
                       ))
                     : ['25%','50%','75%','100%'].map(p => (
-                        <button key={p} onClick={() => { setAmt((Number(tokenBalance)/1e18*(parseInt(p)/100)).toFixed(0)); setCustomAmt(false) }}
+                        <button key={p} onClick={() => { const bal = isNaN(Number(tokenBalance)/1e18) ? 0 : Number(tokenBalance)/1e18; setAmt((bal*(parseInt(p)/100)).toFixed(0)); setCustomAmt(false) }}
                           style={{ flex:1, padding:'8px 0', textAlign:'center', background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.15)', borderRadius:7, fontSize:12, fontWeight:700, color:'var(--r)', cursor:'pointer' }}>
                           {p}
                         </button>
