@@ -106,7 +106,7 @@ export default function Create() {
         <div style={{ background:'linear-gradient(135deg,rgba(110,84,255,0.12),rgba(133,230,255,0.06))', border:'1px solid rgba(110,84,255,0.2)', borderRadius:16, padding:'20px 18px', marginBottom:24, textAlign:'center' }}>
           <div style={{ fontSize:32, marginBottom:8 }}>🚀</div>
           <div style={{ fontSize:18, fontWeight:800, marginBottom:6 }}>Launch on MonPad</div>
-          <div style={{ fontSize:13, color:'var(--t2)' }}><span style={{ color:'var(--p2)', fontWeight:700 }}>Earn 1.5% of every trade</span> — buys and sells, forever.</div>
+          <div style={{ fontSize:13, color:'var(--t2)' }}><span style={{ color:'var(--p2)', fontWeight:700 }}>Earn 2% of every trade</span> — buys and sells, forever.</div>
           <div style={{ display:'flex', justifyContent:'center', gap:24, marginTop:16 }}>
             {[['100 MON','Launch fee'],['1B','Total supply'],['Fair launch','No presale']].map(([v,l]) => (
               <div key={l}><div style={{ fontSize:15, fontWeight:800, color:'var(--p2)' }}>{v}</div><div style={{ fontSize:10, color:'var(--t3)', marginTop:2 }}>{l}</div></div>
@@ -153,10 +153,10 @@ export default function Create() {
 
         <div style={{ background:'rgba(110,84,255,0.08)', border:'1px solid rgba(110,84,255,0.2)', borderRadius:12, padding:'14px 16px', marginBottom:20 }}>
           <div style={{ fontSize:13, fontWeight:800, color:'var(--p2)', marginBottom:8 }}>💰 Your earnings as creator</div>
-          {[['1% of every BUY','paid instantly to your wallet'],['0.5% of every SELL','paid instantly to your wallet'],['0.5% buy buffer','paid in full at graduation']].map(([v,d]) => (
+          {[['1% of every BUY','paid instantly to your wallet'],['0.5% of every SELL','paid instantly to your wallet'],['25K MON graduation reward','paid at graduation']].map(([v,d]) => (
             <div key={v} style={{ fontSize:12, color:'var(--t2)', marginBottom:4 }}>• <strong style={{ color:'var(--t1)' }}>{v}</strong> — {d}</div>
           ))}
-          <div style={{ marginTop:8, fontSize:12, color:'var(--p2)', fontWeight:700 }}>Total: 1.5% of all volume on your token</div>
+          <div style={{ marginTop:8, fontSize:12, color:'var(--p2)', fontWeight:700 }}>Total: 2% of all volume on your token + 25K MON at graduation</div>
         </div>
 
         <div className="card" style={{ marginBottom:20 }}>

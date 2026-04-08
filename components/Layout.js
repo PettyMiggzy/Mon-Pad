@@ -253,7 +253,7 @@ function DesktopFooter() {
         <Link href="/leaderboard" className="footer-link">Leaderboard</Link>
         <a href="https://t.me/MonshiUtilitySupport" target="_blank" rel="noreferrer" className="footer-link">Support</a>
       </div>
-      <div className="footer-copy">© 2025 MonPad · Built on Monad · Devs earn <strong style={{color:'#a78bfa'}}>1.5% of volume</strong></div>
+      <div className="footer-copy">© 2026 MonPad · Built on Monad · Devs earn <strong style={{color:'#a78bfa'}}>2% of volume</strong></div>
     </div>
   )
 }

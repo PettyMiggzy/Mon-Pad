@@ -126,7 +126,7 @@ export default function Home() {
       {/* LAUNCH BANNER */}
       <div style={{ margin:'12px 16px', padding:'24px 24px', background:'linear-gradient(135deg,rgba(110,84,255,0.15),rgba(133,230,255,0.08))', border:'1px solid rgba(110,84,255,0.25)', borderRadius:16, textAlign:'center' }}>
         <div style={{ fontSize:22, fontWeight:900, marginBottom:6 }}>MonPad</div>
-        <div style={{ fontSize:13, color:'var(--t3)', marginBottom:16 }}>Fair launch · No presale · Devs earn 1.5% forever · 200 MON to launch</div>
+        <div style={{ fontSize:13, color:'var(--t3)', marginBottom:16 }}>Fair launch · No presale · Devs earn 2% forever · 100 MON to launch</div>
         <div style={{ display:'flex', justifyContent:'center' }}>
           <button onClick={() => router.push('/create')}
             style={{ padding:'12px 32px', background:'linear-gradient(90deg,var(--p),var(--cyan))', border:'none', borderRadius:12, color:'white', fontWeight:800, fontSize:15, cursor:'pointer' }}>
