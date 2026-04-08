@@ -157,7 +157,7 @@ export default function Home() {
           <div key={i} style={{ flexShrink:0, width:230, height:145, borderRadius:12, background:'var(--bg2)', scrollSnapAlign:'start', animation:'pulse 1.5s infinite' }} />
         ))}
         {trending.map((t,i) => {
-          const meta = metas[t.token?.toLowerCase()]
+          const meta = metas[t.token?.toLowerCase()] || { pfpUrl: 'default_image_uri', bannerUrl: 'default_image_uri' } // check fallback values for missing meta
           const isLive = live.has(t.token?.toLowerCase())
           const color  = GRAD_COLORS[t.colorIdx % GRAD_COLORS.length]
           return (
