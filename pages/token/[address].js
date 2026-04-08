@@ -279,13 +279,21 @@ export default function TokenDetail() {
   const dName       = meta?.name   || info.name
   const dSym        = meta?.symbol || info.symbol
 
+  const useLineChart = (apexSeries?.[0]?.data?.length || 0) < 5
+  
   const apexOptions = {
-    chart: { type:'candlestick', background:'#0E091C', toolbar:{ show:false }, animations:{ enabled:false } },
+    chart: { 
+      type: useLineChart ? 'line' : 'candlestick', 
+      background:'#0E091C', 
+      toolbar:{ show:false }, 
+      animations:{ enabled:false } 
+    },
     theme: { mode:'dark' },
     xaxis: { type:'datetime', labels:{ style:{ colors:'#666', fontSize:'11px' } }, axisBorder:{ color:'#1e1535' }, axisTicks:{ color:'#1e1535' } },
     yaxis: { tooltip:{ enabled:true }, labels:{ style:{ colors:'#666', fontSize:'11px' }, formatter: v => v < 0.001 ? v.toExponential(4) : v.toFixed(8) } },
     grid: { borderColor:'#1e1535', strokeDashArray:3 },
     plotOptions: { candlestick: { colors:{ upward:'#22c55e', downward:'#ef4444' }, wick:{ useFillColor:true } } },
+    stroke: useLineChart ? { curve:'smooth', width:2, colors:['#6E54FF'] } : {},
     tooltip: { theme:'dark', x:{ format:'dd MMM HH:mm' } },
   }
 
@@ -358,7 +366,9 @@ export default function TokenDetail() {
                 <div style={{ height:340, width:'100%', background:'#0E091C', overflow:'hidden' }}>
                   {apexSeries.length === 0
                     ? <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100%', color:'#555', fontSize:14 }}>Loading chart…</div>
-                    : <ApexChart key={tf} type="candlestick" height={340} series={apexSeries} options={apexOptions} />
+                    : <ApexChart key={tf} type={useLineChart ? 'line' : 'candlestick'} height={340} 
+                        series={useLineChart ? [{ name: 'Price', data: apexSeries?.[0]?.data?.map(d => ({ x: d[0], y: d[4] })) || [] }] : apexSeries} 
+                        options={apexOptions} />
                   }
                 </div>
 
