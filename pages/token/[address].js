@@ -290,7 +290,14 @@ export default function TokenDetail() {
     },
     theme: { mode:'dark' },
     xaxis: { type:'datetime', labels:{ style:{ colors:'#666', fontSize:'11px' } }, axisBorder:{ color:'#1e1535' }, axisTicks:{ color:'#1e1535' } },
-    yaxis: { tooltip:{ enabled:true }, labels:{ style:{ colors:'#666', fontSize:'11px' }, formatter: v => v < 0.001 ? v.toExponential(4) : v.toFixed(8) } },
+    yaxis: { tooltip:{ enabled:true }, labels:{ style:{ colors:'#666', fontSize:'11px' }, formatter: v => {
+         if (isNaN(v) || v === null || v === undefined) {
+            console.error('Invalid Value: ', v);
+            return 0;
+         } else {
+            return v < 0.001 ? v.toExponential(4) : v.toFixed(8);
+         }
+      } },
     grid: { borderColor:'#1e1535', strokeDashArray:3 },
     plotOptions: { candlestick: { colors:{ upward:'#22c55e', downward:'#ef4444' }, wick:{ useFillColor:true } } },
     stroke: useLineChart ? { curve:'smooth', width:2, colors:['#6E54FF'] } : {},
