@@ -267,20 +267,7 @@ function TokenCard({ token: t, meta, isLive, monPrice, onClick }) {
         )}
       </div>
 
-      {/* Purple pulse lifeline - smaller and based on recent activity */}
-      <div style={{ width:'100%', height:12, overflow:'hidden', position:'relative', marginBottom:4 }}>
-        <svg viewBox="0 0 100 12" preserveAspectRatio="none" style={{ width:'100%', height:'100%', animation: (t.trades || 0) > 0 ? 'pulseLine 2s ease-in-out infinite' : 'none' }}>
-          <polyline
-            points={`0,6 ${(t.trades || 0) > 0 ? '10,6 12,2 16,10 18,4 22,8 25,6 35,6 38,3 42,9 44,5 48,7 50,6' : '0,6 50,6'} 60,6 65,6 70,6 80,6 90,6 100,6`}
-            fill="none"
-            stroke={t.graduated ? '#FFAE45' : '#6E54FF'}
-            strokeWidth="1"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            opacity={t.trades > 0 ? "0.7" : "0.2"}
-          />
-        </svg>
-      </div>
+
 
       <div className="tcard-body">
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:2 }}>
