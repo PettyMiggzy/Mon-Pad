@@ -25,7 +25,7 @@ export default function Create() {
   const [uploading, setUploading]   = useState(false)
   const [step, setStep]             = useState('')
 
-  const { writeContract, data: txHash, isPending }            = useWriteContract()
+  const { writeContract, data: txHash, isPending, error: writeError } = useWriteContract()
   const { isLoading: isConfirming, isSuccess, data: receipt } = useWaitForTransactionReceipt({ hash: txHash })
   const pendingMetaRef = useRef(null)
 
@@ -67,6 +67,7 @@ export default function Create() {
       setUploading(false)
     }
     setStep('confirm')
+    console.log('🚀 createLaunch:', { factory: FACTORY_ADDRESS, name: form.name.trim(), symbol: form.symbol.trim().toUpperCase(), maxSupply: MAX_SUPPLY.toString(), referrer, totalCost: totalCost.toString(), chainId: monad.id })
     writeContract({
       address: FACTORY_ADDRESS,
       abi: FACTORY_ABI,
@@ -96,6 +97,16 @@ export default function Create() {
     }
     setTimeout(() => router.push(tokenAddress ? '/token/'+tokenAddress : '/'), 1500)
   }, [isSuccess, receipt])
+
+  useEffect(() => {
+    if (writeError) {
+      const msg = writeError?.shortMessage || writeError?.message || 'Transaction failed'
+      if (!msg.includes('user rejected') && !msg.includes('User denied')) {
+        setError(msg)
+      }
+      console.error('writeContract error:', writeError)
+    }
+  }, [writeError])
 
   const busy = uploading||isPending||isConfirming
 
