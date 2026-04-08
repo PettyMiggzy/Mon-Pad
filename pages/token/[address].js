@@ -631,6 +631,11 @@ export default function TokenDetail() {
 
               <div style={{ height:1, background:'var(--bd)' }} />
 
+              {/* Debug info */}
+              <div style={{ padding:8, background:'var(--bg3)', fontSize:10, marginBottom:8, borderRadius:8, fontFamily:'monospace' }}>
+                DEBUG: userAddr={userAddr?.toLowerCase()} | creator={info.creator?.toLowerCase()} | match={isCreator}
+              </div>
+
               {isCreator && (
                 <div style={{ padding:'14px' }}>
                   <div style={{ fontSize:12, fontWeight:800, color:'var(--t3)', letterSpacing:'.5px', marginBottom:10, textTransform:'uppercase' }}>👑 Update Images</div>
