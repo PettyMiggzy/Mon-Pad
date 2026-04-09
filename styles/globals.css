@@ -889,3 +889,54 @@ input, textarea { font-family: var(--sans); }
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.92; transform: scale(1.01); }
 }
+
+
+/* ═══════════════════════════════════════
+   MOBILE TOP BAR
+═══════════════════════════════════════ */
+                .mobile-topbar {
+                    display: none;
+                    height: 56px;
+                    align-items: center;
+                    justify-content: space-between;
+                    padding: 0 16px;
+                    background: var(--bg);
+                    border-bottom: 1px solid var(--bd);
+                    position: sticky;
+                    top: 0;
+                    z-index: 100;
+                }
+.mobile-topbar-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.mobile-topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.mobile-topbar-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.06);
+    color: rgba(255,255,255,0.8);
+    transition: background .15s;
+}
+.mobile-topbar-icon:hover {
+    background: rgba(255,255,255,0.12);
+}
+@media (max-width: 767px) {
+    .mobile-topbar {
+          display: flex !important;
+    }
+}
+@media (min-width: 768px) {
+    .mobile-topbar {
+          display: none !important;
+    }
+}
