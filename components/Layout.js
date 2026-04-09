@@ -13,40 +13,40 @@ const NAV = [
   { href: '/leaderboard', label: 'Leaderboard', icon: (<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/></svg>)},
   { href: '/docs', label: 'Docs', icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="20" height="20"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>)},
   { href: 'https://t.me/MonshiUtilitySupport', label: 'Support', external: true, icon: (<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/></svg>)},
-   ]
+    ]
 
    export default function Layout({ children, showBack, title }) {
-                                                                                          const router = useRouter()
+      const router = useRouter()
      const path = router.pathname
       const [stats, setStats] = useState({ tokens: 0, volume: 0, devFees: 0, graduated: 0 })
      const [search, setSearch] = useState('')
 
      useEffect(() => {
-           if (!SERVER) return
+       if (!SERVER) return
         fetch(`${SERVER}/api/tokens`)
              .then(r => r.json())
          .then(tokens => {
                    const vol = tokens.reduce((a, t) => a + (t.volumeMon || 0), 0)
                    setStats({ tokens: tokens.length, volume: vol, devFees: vol * 0.015, graduated: tokens.filter(t => t.graduated).length })
-         })
-             .catch(() => {})
-   }, [])
+   })
+         .catch(() => {})
+     }, [])
 
      const handleSearch = e => {
            if (e.key === 'Enter' && search.trim()) router.push(`/?q=${encodeURIComponent(search.trim())}`)
-                                                                                        }
+     }
 
-                                                                                          const fmtMon = n => {
+     const fmtMon = n => {
        if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M'
        if (n >= 1000) return (n / 1000).toFixed(1) + 'K'
        return Math.floor(n).toLocaleString()
   }
 
-      return (
-        <div className="app-root">
+     return (
+           <div className="app-root">
   {/* SIDEBAR — desktop only */}
-         <aside className="sidebar">
-           <Link href="/create" className="sidebar-create-icon" title="Create Token">
+          <aside className="sidebar">
+            <Link href="/create" className="sidebar-create-icon" title="Create Token">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" width="20" height="20">
                 <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
     </svg>
@@ -73,7 +73,6 @@ const NAV = [
 
 {/* MAIN CONTENT AREA */}
       <div className="main-area">
-
       {/* MOBILE HEADER — only visible on mobile */}
         <header className="mobile-topbar">
                   <div className="mobile-topbar-left">
@@ -158,7 +157,7 @@ const NAV = [
           <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
           <span>Home</span>
         </div>
-        <div className={`nav-item${path==='/portfolio'?' on':''}`} onClick={() => router.push('/portfolio')}>
+        <div className={`nav-item${path==='/'&&router.query.focus==='search'?' on':''}`} onClick={() => router.push('/?focus=search')}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="24" height="24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35" strokeLinecap="round"/></svg>
           <span>Search</span>
         </div>
@@ -170,10 +169,10 @@ const NAV = [
         </div>
         <div className={`nav-item${path==='/live'?' on':''}`} onClick={() => router.push('/live')}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="24" height="24"><path d="M15 10l4.553-2.069A1 1 0 0121 8.87v6.26a1 1 0 01-1.447.899L15 14M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/></svg>
-                  <span>Live</span>
+          <span>Live</span>
         </div>
         <div className={`nav-item${path==='/profile'?' on':''}`} onClick={() => router.push('/profile')}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="24" height="24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="24" height="24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
           <span>Profile</span>
         </div>
         </nav>
