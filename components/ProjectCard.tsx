@@ -39,7 +39,7 @@ export default function ProjectCard({ project }: { project: Project }) {
     : 0;
 
   return (
-    <Link href={`/token/${project.curve}`} style={{ textDecoration: "none" }}>
+          <Link href={`/token/${project.token || project.curve}`} style={{ textDecoration: "none" }}>
       <div
         style={{
           background: "rgba(255,255,255,0.03)",
