@@ -33,7 +33,7 @@ const HEAT_1H_BLOCKS = 25_000n;
  * ========================= */
 
 // Factory
-const TOPIC_LAUNCHED = keccak256("Launched(address,address,address,address)");
+const TOPIC_LAUNCHED = keccak256("Launched(address,address,address,address,address,uint256)");
 
 // Curve
 const TOPIC_BUY = keccak256("Buy(address,uint256,uint256)");
@@ -155,11 +155,11 @@ export async function getProjects(): Promise<ProjectRow[]> {
   });
 
   const projects = logs.map((l) => {
-    // event Launched(address indexed token, address indexed curve, address indexed graduator, address creator)
+        // event Launched(address indexed token, address indexed curve, address indexed graduator, address creator, address referrer, uint256 devAmt)
     const token = decodeAddress(l.topics[1]);
     const curve = decodeAddress(l.topics[2]);
     const graduator = decodeAddress(l.topics[3]);
-    const creator = decodeAddress(l.data); // creator is the only data word
+        const creator = decodeAddress(wordAt(l.data, 0)); // word 0 = creator, word 1 = referrer, word 2 = devAmt
 
     return {
       token: token as `0x${string}`,
