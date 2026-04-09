@@ -21,8 +21,7 @@ export default function WalletButton() {
 
   // Deep-link to MetaMask mobile
   const openMetaMaskDeepLink = () => {
-          const url = encodeURIComponent(window.location.href)
-          window.location.href = `https://metamask.app.link/dapp/${window.location.host}`
+                    window.location.href = `https://metamask.app.link/dapp/${window.location.host}${window.location.pathname}${window.location.search}`
   }
 
   if (isConnected && address) {
@@ -92,37 +91,31 @@ export default function WalletButton() {
                 }}>
                   <div style={{ width: 36, height: 4, background: 'var(--bd2)', borderRadius: 999, margin: '0 auto 16px' }} />
               <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 4, textAlign: 'center' }}>Connect Wallet</div>
-              <div style={{ fontSize: 13, color: 'var(--t3)', marginBottom: 16, textAlign: 'center' }}>Choose your wallet to get started</div>
+                            <div style={{ fontSize: 13, color: 'var(--t3)', marginBottom: 20, textAlign: 'center' }}>MonPad supports MetaMask on mobile</div>
 
-{/* Browser extension / injected wallets */}
-{connectors.map(c => (
-                    <button key={c.id} onClick={() => { connect({ connector: c }); setShowConnect(false) }} style={{ width: '100%', padding: '16px', marginBottom: 10, background: 'var(--bg3)', border: '1px solid var(--bd)', borderRadius: 14, color: 'var(--t1)', fontSize: 15, fontWeight: 700, textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 14, fontFamily: 'var(--sans)' }}>
-                  <span style={{ fontSize: 28 }}>
-{c.id === 'metaMask' ? '🦊' : c.id === 'walletConnect' ? '🔗' : c.id === 'injected' ? '💼' : '🔌'}
-</span>
-                  <div>
-                        <div style={{ fontSize: 15, fontWeight: 700 }}>{c.name}</div>
-                    <div style={{ fontSize: 12, color: 'var(--t3)', fontWeight: 400, marginTop: 2 }}>
-{c.id === 'injected' ? 'Browser wallet / extension' : 'Connect wallet'}
-</div>
-    </div>
-    </button>
-              ))}
 
-{/* MetaMask deep-link for mobile browsers without extension */}
-              <button onClick={openMetaMaskDeepLink} style={{ width: '100%', padding: '16px', marginBottom: 10, background: 'var(--bg3)', border: '1px solid var(--bd)', borderRadius: 14, color: 'var(--t1)', fontSize: 15, fontWeight: 700, textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 14, fontFamily: 'var(--sans)' }}>
-                <span style={{ fontSize: 28 }}>🦊</span>
-                <div>
-                                    <div style={{ fontSize: 15, fontWeight: 700 }}>MetaMask</div>
-                  <div style={{ fontSize: 12, color: 'var(--t3)', fontWeight: 400, marginTop: 2 }}>Open in MetaMask app</div>
-                  </div>
-                  </button>
-
-{connectors.length === 0 && (
-                    <div style={{ textAlign: 'center', color: 'var(--t3)', fontSize: 12, padding: '4px 0 8px', marginTop: -4 }}>
-                  No browser extension detected
-                      </div>
-              )}
+{connectors.filter(c => c.id === 'metaMask' || c.id === 'injected').length > 0 ? (
+                      connectors.filter(c => c.id === 'metaMask' || c.id === 'injected').map(c => (
+                                              <button key={c.id} onClick={() => { connect({ connector: c }); setShowConnect(false) }} style={{ width: '100%', padding: '16px', marginBottom: 10, background: 'var(--bg3)', border: '1px solid var(--bd)', borderRadius: 14, color: 'var(--t1)', fontSize: 15, fontWeight: 700, textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 14, fontFamily: 'var(--sans)' }}>
+                          <span style={{ fontSize: 28 }}>&#128138;</span>
+                          <div>
+                            <div style={{ fontSize: 15, fontWeight: 700 }}>MetaMask</div>
+                            <div style={{ fontSize: 12, color: 'var(--t3)', fontWeight: 400, marginTop: 2 }}>Tap to connect</div>
+      </div>
+      </button>
+                      ))
+                                          ) : (
+                                                                <button onClick={openMetaMaskDeepLink} style={{ width: '100%', padding: '16px', marginBottom: 10, background: 'linear-gradient(135deg,rgba(245,130,32,0.15),rgba(245,130,32,0.08))', border: '1px solid rgba(245,130,32,0.4)', borderRadius: 14, color: 'var(--t1)', fontSize: 15, fontWeight: 700, textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 14, fontFamily: 'var(--sans)' }}>
+                                              <span style={{ fontSize: 28 }}>&#128138;</span>
+                                              <div>
+                                                <div style={{ fontSize: 15, fontWeight: 700 }}>Open in MetaMask</div>
+                                                <div style={{ fontSize: 12, color: 'rgba(245,130,32,0.8)', fontWeight: 400, marginTop: 2 }}>Opens this page inside the MetaMask app</div>
+                            </div>
+                            </button>
+                                          )}
+                                                              <div style={{ textAlign: 'center', color: 'var(--t3)', fontSize: 11, padding: '8px 0 0' }}>
+                                                                Don&apos;t have MetaMask? <a href="https://metamask.io/download/" target="_blank" rel="noreferrer" style={{ color: 'rgba(245,130,32,0.8)', textDecoration: 'none' }}>Download here</a>
+                                                                      </div>
 </div>
           ) : (
                           /* Desktop dropdown */
