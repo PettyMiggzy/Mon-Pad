@@ -28,7 +28,7 @@ export default function WalletButton() {
           return (
                     <div style={{ position: 'relative' }}>
             <button className="wallet-btn connected" onClick={() => setShowMenu(s => !s)}>
-{balance ? `${Number(balance.formatted).toFixed(2)} MON` : fmtAddr(address)}
+{balance?.formatted ? `${parseFloat(balance.formatted).toFixed(2)} MON` : fmtAddr(address)}
 </button>
 {showMenu && (
               <>
