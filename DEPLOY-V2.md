@@ -97,6 +97,12 @@ node deploy.js 2>&1 | tee deploy.log
 - [ ] Factory `platformWallet()` matches `PLATFORM_WALLET`
 - [ ] Factory `treasuryWallet()` matches your treasury
 - [ ] Factory `buybackWallet()` matches your buyback
+- [ ] Factory `graduationTarget()` = `425000000000000000000000` (425k MON in wei)
+- [ ] Factory `graduationCreatorReward()` = `25000000000000000000000` (25k MON in wei)
+- [ ] Factory `rewardRouter()` = StakingHub address (deploy.js auto-wires this)
+- [ ] Factory `monshiStakingPool()` = MONSHI pool address (deploy.js auto-wires this)
+- [ ] StakingHub `owner()` = PoolFactory address (deploy.js transfers this)
+- [ ] MONSHI pool `creator()` = `BUYBACK_WALLET` ⚠️ if this returns the deployer instead of buyback, deploy.js line 107 wasn't updated for burn vault — STOP and fix before any trades happen
 
 ---
 
