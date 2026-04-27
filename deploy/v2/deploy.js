@@ -21,7 +21,9 @@ const path = require('path');
 
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
-const RPC = process.env.RPC_URL || 'https://rpc.monad.xyz';
+// Multi-RPC: PRIMARY_RPC first (paid), FALLBACK_RPC second (public). Backward compat: RPC_URL still works.
+const PRIMARY_RPC = process.env.PRIMARY_RPC || process.env.RPC_URL || 'https://rpc.monad.xyz';
+const FALLBACK_RPC = process.env.FALLBACK_RPC || 'https://rpc.monad.xyz';
 const PK = process.env.PRIVATE_KEY;
 
 if (!PK) {
@@ -51,7 +53,14 @@ async function deploy(wallet, name, args = []) {
 }
 
 async function main() {
-  const provider = new ethers.JsonRpcProvider(RPC);
+  // FallbackProvider: tries primary first, falls back on failure. priority=1 = highest.
+  const providers = [
+    { provider: new ethers.JsonRpcProvider(PRIMARY_RPC, { chainId: 143, name: 'Monad' }), priority: 1, weight: 1, stallTimeout: 2000 },
+  ];
+  if (FALLBACK_RPC && FALLBACK_RPC !== PRIMARY_RPC) {
+    providers.push({ provider: new ethers.JsonRpcProvider(FALLBACK_RPC, { chainId: 143, name: 'Monad' }), priority: 2, weight: 1, stallTimeout: 2000 });
+  }
+  const provider = new ethers.FallbackProvider(providers, 143, { quorum: 1 });
   const wallet = new ethers.Wallet(PK, provider);
   
   console.log('🚀 MONPAD V2 DEPLOYMENT');
