@@ -1,203 +1,192 @@
 import { useState, useEffect } from 'react'
-import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
+import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt, usePublicClient } from 'wagmi'
+import { parseEther, formatEther } from 'viem'
 import Layout from '../components/Layout'
-import { FACTORY_ADDRESS, FACTORY_ABI, CURVE_ABI, fmtAddr } from '../lib/constants'
+import { FACTORY_ADDRESS, FACTORY_ABI, fmtAddr, fmtMON } from '../lib/constants'
 import { monad } from '../lib/wagmi'
 
-const PLATFORM = '0x57C8A5AeC1c172fE41416A2FAE6eBDD92b552A16'
-const TREASURY = '0x5dD4bF19C42d45FD414930eFE78D602c5975FFfd'
-const ALLOWED  = [PLATFORM.toLowerCase(), TREASURY.toLowerCase()]
-const SERVER   = process.env.NEXT_PUBLIC_SERVER_URL || ''
-
-export default function Admin() {
-    const { address, isConnected } = useAccount()
-    const [tokens, setTokens]       = useState([])
-    const [selected, setSelected]   = useState(null)  // { token, curve }
-  const [loading, setLoading]     = useState(true)
-    const [msg, setMsg]             = useState('')
-    const [globalPaused, setGP]     = useState(false)
-
+export default function AdminPanel() {
+  const { address: wallet, isConnected } = useAccount()
+  const publicClient = usePublicClient({ chainId: monad.id })
   const { writeContract, data: txHash, isPending } = useWriteContract()
-    const { isSuccess } = useWaitForTransactionReceipt({ hash: txHash })
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash: txHash })
 
-  const isAdmin = isConnected && ALLOWED.includes(address?.toLowerCase())
+  const [owner, setOwner] = useState(null)
+  const [config, setConfig] = useState({})
+  const [loading, setLoading] = useState(true)
 
-  useEffect(() => { if (SERVER) loadTokens() }, [])
-    useEffect(() => { if (isSuccess) { flash('✅ Done!'); loadTokens() } }, [isSuccess])
+  // Edit fields
+  const [edits, setEdits] = useState({
+    creationFee: '', graduationTarget: '', graduationCreatorReward: '',
+    maxDevBuyBps: '', rewardRouter: '', blocklistAddr: '', blocklistVal: false
+  })
+  const [pause, setPause] = useState({ launches: false, buys: false, sells: false })
 
-  async function loadTokens() {
+  useEffect(() => {
+    if (!FACTORY_ADDRESS || !publicClient) return
+    loadConfig()
+  }, [FACTORY_ADDRESS, publicClient])
+
+  useEffect(() => { if (isSuccess) loadConfig() }, [isSuccess])
+
+  async function loadConfig() {
+    try {
+      const calls = [
+        ['owner', []], ['creationFee', []], ['graduationTarget', []],
+        ['maxDevBuyBps', []], ['rewardRouter', []], ['getRewardRecipient', []],
+        ['pauseNewLaunches', []], ['pauseAllBuys', []], ['pauseAllSells', []]
+      ]
+      const c = {}
+      for (const [fn, args] of calls) {
         try {
-                const data = await fetch(`${SERVER}/api/tokens`).then(r => r.json())
-                setTokens(data)
+          c[fn] = await publicClient.readContract({ address: FACTORY_ADDRESS, abi: FACTORY_ABI, functionName: fn, args })
         } catch {}
-        setLoading(false)
+      }
+      setOwner(c.owner)
+      setConfig(c)
+      setPause({ launches: !!c.pauseNewLaunches, buys: !!c.pauseAllBuys, sells: !!c.pauseAllSells })
+    } catch {}
+    setLoading(false)
   }
 
-  function flash(m) { setMsg(m); setTimeout(() => setMsg(''), 4000) }
-
-  function call(functionName, args) {
-        writeContract({ address: FACTORY_ADDRESS, abi: FACTORY_ABI, functionName, args, chainId: monad.id })
-        flash('⏳ Waiting for wallet…')
+  function call(fn, args) {
+    writeContract({ address: FACTORY_ADDRESS, abi: FACTORY_ABI, functionName: fn, args, chainId: monad.id })
   }
 
-  if (!isConnected) return (
-        <Layout showBack title="Admin">
-          <div style={{ padding:'60px 16px', textAlign:'center', color:'var(--t3)' }}>
-        <div style={{ fontSize:32, marginBottom:12 }}>🔒</div>
-        <div style={{ fontSize:16, fontWeight:700 }}>Connect your wallet to access admin</div>
-  </div>
-  </Layout>
-  )
+  const isOwner = isConnected && owner && wallet?.toLowerCase() === owner.toLowerCase()
 
-  if (!isAdmin) return (
-        <Layout showBack title="Admin">
-          <div style={{ padding:'60px 16px', textAlign:'center', color:'var(--t3)' }}>
-        <div style={{ fontSize:32, marginBottom:12 }}>🚫</div>
-        <div style={{ fontSize:16, fontWeight:700 }}>Not authorized</div>
-        <div style={{ fontSize:13, marginTop:8, fontFamily:'var(--mono)' }}>{fmtAddr(address)}</div>
-    </div>
-    </Layout>
-  )
+  if (loading) return <Layout title="Admin"><div className="container dots text-t3" style={{padding:40, textAlign:"center"}}>Loading config</div></Layout>
+
+  if (!isConnected) {
+    return (
+      <Layout title="Admin">
+        <div className="container" style={{padding:40, textAlign:'center'}}>
+          <div className="card" style={{padding:40, maxWidth:420, margin:'0 auto'}}>
+            <div style={{fontSize:48, marginBottom:14}}>🔒</div>
+            <div className="text-xl font-bold mb-2">Admin Access</div>
+            <p className="text-t3 text-sm">Connect with the contract owner wallet</p>
+          </div>
+        </div>
+      </Layout>
+    )
+  }
+
+  if (!isOwner) {
+    return (
+      <Layout title="Admin">
+        <div className="container" style={{padding:40, textAlign:'center'}}>
+          <div className="card" style={{padding:40, maxWidth:480, margin:'0 auto'}}>
+            <div style={{fontSize:48, marginBottom:14}}>🚫</div>
+            <div className="text-xl font-bold mb-2">Not Authorized</div>
+            <p className="text-t3 text-sm mb-3">Only the factory owner can access this panel.</p>
+            <div className="text-xs font-mono text-t4">Owner: {owner ? fmtAddr(owner) : '???'}</div>
+            <div className="text-xs font-mono text-t4">You: {fmtAddr(wallet)}</div>
+          </div>
+        </div>
+      </Layout>
+    )
+  }
 
   return (
-        <Layout showBack title="Admin Panel">
-          <div style={{ maxWidth:800, margin:'0 auto', padding:'16px 16px 80px' }}>
+    <Layout title="Admin Panel">
+      <div className="container" style={{maxWidth:760, paddingBottom:60}}>
+        <div className="hero" style={{marginTop:16, marginBottom:16, padding:'24px 18px'}}>
+          <div style={{position:'relative', zIndex:1}}>
+            <div className="text-xs text-t3 font-bold mb-2" style={{letterSpacing:2}}>ADMIN PANEL</div>
+            <h1 className="hero-title" style={{fontSize:'clamp(24px,5vw,36px)'}}>🔧 MonPad Control</h1>
+            <p className="text-t2 text-sm">Owner: <span className="font-mono">{fmtAddr(owner)}</span></p>
+          </div>
+        </div>
 
-{msg && (
-            <div style={{ background:'rgba(110,84,255,0.15)', border:'1px solid var(--p)', borderRadius:10, padding:'10px 14px', fontSize:13, fontWeight:700, color:'var(--p2)', marginBottom:16 }}>
-{msg}
-</div>
-        )}
-
-{/* GLOBAL CONTROLS */}
-        <div className="card" style={{ marginBottom:20 }}>
-          <div style={{ fontSize:14, fontWeight:800, marginBottom:14, color:'var(--t1)' }}>🌐 Global Controls</div>
-          <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
-            <button className="btn-primary" style={{ background:'var(--r)', padding:'10px 18px', fontSize:13 }}
-              onClick={() => call('setEmergencyPaused', [true])}>
-              🚨 Emergency Pause All
-                </button>
-            <button className="btn-primary" style={{ background:'var(--g)', padding:'10px 18px', fontSize:13 }}
-              onClick={() => call('setEmergencyPaused', [false])}>
-              ✅ Resume All
-                </button>
-                </div>
-                </div>
-
-{/* TOKEN LIST */}
-        <div className="card" style={{ marginBottom:20 }}>
-          <div style={{ fontSize:14, fontWeight:800, marginBottom:14, color:'var(--t1)' }}>🪙 Tokens ({tokens.length})</div>
-{loading && <div style={{ color:'var(--t3)', fontSize:13 }}>Loading…</div>}
-{!loading && tokens.length === 0 && <div style={{ color:'var(--t3)', fontSize:13 }}>No tokens yet</div>}
-          <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-{tokens.map(t => (
-                <div key={t.tokenAddress}
-                onClick={() => setSelected(selected?.token === t.tokenAddress ? null : { token: t.tokenAddress, curve: t.curveAddress })}
-                style={{ padding:'10px 14px', borderRadius:10, border: selected?.token === t.tokenAddress ? '1px solid var(--p)' : '1px solid var(--bd2)',
-                                         background: selected?.token === t.tokenAddress ? 'rgba(110,84,255,0.1)' : 'var(--bg2)', cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                <div>
-                                    <span style={{ fontWeight:800, fontSize:14 }}>{t.name}</span>
-                  <span style={{ color:'var(--t3)', fontSize:12, marginLeft:8, fontFamily:'var(--mono)' }}>${t.symbol}</span>
-{t.graduated && <span style={{ marginLeft:8, fontSize:11, color:'var(--g)', fontWeight:700 }}>🎓 GRAD</span>}
-  </div>
-                <div style={{ fontSize:11, color:'var(--t3)', fontFamily:'var(--mono)' }}>{fmtAddr(t.tokenAddress)}</div>
-  </div>
-            ))}
+        {/* PAUSE SWITCHES */}
+        <div className="card mb-4" style={{borderColor:'rgba(248,113,113,0.3)', background:'rgba(248,113,113,0.04)'}}>
+          <div className="font-bold text-base mb-3">🚨 Emergency Pause</div>
+          {[
+            { key:'launches', label:'New Launches', fn:'setPauseNewLaunches', curr: pause.launches },
+            { key:'buys', label:'All Buys', fn:'setPauseAllBuys', curr: pause.buys },
+            { key:'sells', label:'All Sells', fn:'setPauseAllSells', curr: pause.sells },
+          ].map(p => (
+            <div key={p.key} className="flex justify-between items-center mb-2 p-3 rounded" style={{background:'rgba(0,0,0,0.3)'}}>
+              <div>
+                <div className="font-bold text-sm">{p.label}</div>
+                <div className={`text-xs font-mono ${p.curr ? 'text-red' : 'text-green'}`}>{p.curr ? '🔴 PAUSED' : '🟢 LIVE'}</div>
               </div>
-              </div>
+              <button className={`btn btn-sm ${p.curr ? 'btn-green' : 'btn-red'}`} disabled={isPending || isConfirming} onClick={() => call(p.fn, [!p.curr])}>{p.curr ? 'Resume' : 'Pause'}</button>
+            </div>
+          ))}
+        </div>
 
-{/* TOKEN ACTIONS */}
-{selected && (
-            <div className="card">
-              <div style={{ fontSize:14, fontWeight:800, marginBottom:4, color:'var(--t1)' }}>⚙️ Token Actions</div>
-            <div style={{ fontSize:12, color:'var(--t3)', fontFamily:'var(--mono)', marginBottom:14 }}>
-              Curve: {selected.curve}
-</div>
+        {/* ECONOMICS */}
+        <div className="card mb-4">
+          <div className="font-bold text-base mb-3">💰 Economics</div>
 
-{/* PAUSE / RESUME */}
-            <div style={{ marginBottom:16 }}>
-              <div style={{ fontSize:12, fontWeight:700, color:'var(--t3)', marginBottom:8, textTransform:'uppercase', letterSpacing:'.5px' }}>Trading</div>
-              <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-                <button className="btn-primary" style={{ background:'rgba(255,174,69,0.8)', padding:'9px 16px', fontSize:12 }}
-                  onClick={() => call('curvePause', [selected.curve, true, true])}>
-                  ⏸ Pause All Trading
-                    </button>
-                <button className="btn-primary" style={{ background:'rgba(255,174,69,0.8)', padding:'9px 16px', fontSize:12 }}
-                  onClick={() => call('curvePause', [selected.curve, true, false])}>
-                  ⏸ Pause Buys Only
-                    </button>
-                <button className="btn-primary" style={{ background:'rgba(255,174,69,0.8)', padding:'9px 16px', fontSize:12 }}
-                  onClick={() => call('curvePause', [selected.curve, false, true])}>
-                  ⏸ Pause Sells Only
-                    </button>
-                <button className="btn-primary" style={{ background:'var(--g)', padding:'9px 16px', fontSize:12 }}
-                  onClick={() => call('curvePause', [selected.curve, false, false])}>
-                  ▶️ Resume Trading
-                    </button>
-                    </div>
-                    </div>
+          <div className="mb-3">
+            <label className="input-label">Creation Fee (currently {fmtMON(config.creationFee)} MON)</label>
+            <div className="flex gap-2">
+              <input className="input" placeholder="100" value={edits.creationFee} onChange={e => setEdits({...edits, creationFee:e.target.value})} />
+              <button className="btn btn-primary" disabled={!edits.creationFee || isPending || isConfirming} onClick={() => call('setCreationFee', [parseEther(edits.creationFee)])}>Update</button>
+            </div>
+          </div>
 
-{/* DELIST */}
-            <div style={{ marginBottom:16 }}>
-              <div style={{ fontSize:12, fontWeight:700, color:'var(--t3)', marginBottom:8, textTransform:'uppercase', letterSpacing:'.5px' }}>Listing</div>
-              <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-                <button className="btn-primary" style={{ background:'var(--r)', padding:'9px 16px', fontSize:12 }}
-                  onClick={() => call('curveDelist', [selected.curve, true, true, true])}>
-                  🗑 Delist Token
-                    </button>
-                <button className="btn-primary" style={{ background:'var(--g)', padding:'9px 16px', fontSize:12 }}
-                  onClick={() => call('curveDelist', [selected.curve, false, false, false])}>
-                  ✅ Relist Token
-                    </button>
-                    </div>
-                    </div>
+          <div className="mb-3">
+            <label className="input-label">Graduation Target (currently {fmtMON(config.graduationTarget)} MON)</label>
+            <div className="flex gap-2">
+              <input className="input" placeholder="425000" value={edits.graduationTarget} onChange={e => setEdits({...edits, graduationTarget:e.target.value})} />
+              <button className="btn btn-primary" disabled={!edits.graduationTarget || isPending || isConfirming} onClick={() => call('setGraduationTarget', [parseEther(edits.graduationTarget)])}>Update</button>
+            </div>
+          </div>
 
-{/* DEV FREEZE */}
-            <div style={{ marginBottom:16 }}>
-              <div style={{ fontSize:12, fontWeight:700, color:'var(--t3)', marginBottom:8, textTransform:'uppercase', letterSpacing:'.5px' }}>Dev Wallet</div>
-              <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-                <button className="btn-primary" style={{ background:'var(--g)', padding:'9px 16px', fontSize:12 }}
-                  onClick={() => call('curveUnfreeze', [selected.curve])}>
-                  🔓 Unfreeze Dev Wallet
-                    </button>
-                <button className="btn-primary" style={{ background:'rgba(110,84,255,0.6)', padding:'9px 16px', fontSize:12 }}
-                  onClick={() => call('curveForceGrad', [selected.curve])}>
-                  🎓 Force Graduate
-                    </button>
-                    </div>
-                    </div>
+          <div className="mb-3">
+            <label className="input-label">Creator Grad Reward (in MON)</label>
+            <div className="flex gap-2">
+              <input className="input" placeholder="25000" value={edits.graduationCreatorReward} onChange={e => setEdits({...edits, graduationCreatorReward:e.target.value})} />
+              <button className="btn btn-primary" disabled={!edits.graduationCreatorReward || isPending || isConfirming} onClick={() => call('setGraduationCreatorReward', [parseEther(edits.graduationCreatorReward)])}>Update</button>
+            </div>
+          </div>
 
-{/* BOT PROTECTION */}
-            <div style={{ marginBottom:16 }}>
-              <div style={{ fontSize:12, fontWeight:700, color:'var(--t3)', marginBottom:8, textTransform:'uppercase', letterSpacing:'.5px' }}>Bot Protection</div>
-              <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-                <button className="btn-primary" style={{ background:'rgba(110,84,255,0.6)', padding:'9px 16px', fontSize:12 }}
-                  onClick={() => call('curveBot', [selected.curve, true, 500, 1])}>
-                  🤖 Enable Bot Protection
-                    </button>
-                <button className="btn-primary" style={{ background:'var(--bg3)', padding:'9px 16px', fontSize:12, border:'1px solid var(--bd2)', color:'var(--t2)' }}
-                  onClick={() => call('curveBot', [selected.curve, false, 0, 0])}>
-                  Disable Bot Protection
-                    </button>
-                    </div>
-                    </div>
+          <div>
+            <label className="input-label">Max Dev Buy BPS (currently {Number(config.maxDevBuyBps || 0)} = {Number(config.maxDevBuyBps || 0) / 100}%)</label>
+            <div className="flex gap-2">
+              <input className="input" placeholder="200" value={edits.maxDevBuyBps} onChange={e => setEdits({...edits, maxDevBuyBps:e.target.value})} />
+              <button className="btn btn-primary" disabled={!edits.maxDevBuyBps || isPending || isConfirming} onClick={() => call('setMaxDevBuyBps', [BigInt(edits.maxDevBuyBps)])}>Update</button>
+            </div>
+            <div className="text-xs text-t4 mt-1">100 = 1%, 200 = 2%. Max 1000 (10%).</div>
+          </div>
+        </div>
 
-{/* COPY ADDRESSES */}
-            <div style={{ marginTop:16, padding:'12px 14px', background:'var(--bg2)', borderRadius:10, border:'1px solid var(--bd)' }}>
-              <div style={{ fontSize:12, fontWeight:700, color:'var(--t3)', marginBottom:8 }}>Addresses</div>
-{[['Token', selected.token], ['Curve', selected.curve]].map(([l, v]) => (
-                  <div key={l} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
-                  <span style={{ fontSize:12, color:'var(--t3)' }}>{l}</span>
-                                                                              <button onClick={() => navigator.clipboard.writeText(v)}
-                    style={{ fontSize:11, fontFamily:'var(--mono)', color:'var(--p2)', background:'none', border:'none', cursor:'pointer' }}>
-{v} ⎘
-  </button>
-  </div>
-              ))}
-                </div>
-                </div>
+        {/* REWARD ROUTER */}
+        <div className="card mb-4" style={{background:'linear-gradient(135deg, rgba(168,85,247,0.06), rgba(34,211,238,0.04))'}}>
+          <div className="font-bold text-base mb-2">🔀 Reward Router (the magic switch)</div>
+          <p className="text-xs text-t3 mb-3">Routes 0.5% sell tax. <strong>Empty</strong> = goes to buyback wallet. <strong>Set</strong> = goes to staking hub.</p>
+          <div className="text-xs text-t3 mb-2">Currently routing to: <span className="font-mono text-purple">{fmtAddr(config.getRewardRecipient || '')}</span></div>
+          <div className="flex gap-2">
+            <input className="input" placeholder="0xStakingHubAddress (or empty for buyback)" value={edits.rewardRouter} onChange={e => setEdits({...edits, rewardRouter:e.target.value})} />
+            <button className="btn btn-primary" disabled={isPending || isConfirming} onClick={() => call('setRewardRouter', [edits.rewardRouter || '0x0000000000000000000000000000000000000000'])}>Set</button>
+          </div>
+        </div>
+
+        {/* BLOCKLIST */}
+        <div className="card mb-4">
+          <div className="font-bold text-base mb-2">🚫 Token Blocklist</div>
+          <p className="text-xs text-t3 mb-3">Block scam tokens from buying/selling.</p>
+          <div className="flex gap-2 mb-2">
+            <input className="input" placeholder="0xTokenAddress" value={edits.blocklistAddr} onChange={e => setEdits({...edits, blocklistAddr:e.target.value})} />
+          </div>
+          <div className="flex gap-2">
+            <button className="btn btn-red" style={{flex:1}} disabled={!edits.blocklistAddr || isPending || isConfirming} onClick={() => call('setBlocked', [edits.blocklistAddr, true])}>Block</button>
+            <button className="btn btn-green" style={{flex:1}} disabled={!edits.blocklistAddr || isPending || isConfirming} onClick={() => call('setBlocked', [edits.blocklistAddr, false])}>Unblock</button>
+          </div>
+        </div>
+
+        {/* TX STATUS */}
+        {(isPending || isConfirming || isSuccess) && (
+          <div className="card" style={{padding:14, position:'sticky', bottom:80, background:'var(--bg-card)', backdropFilter:'blur(20px)'}}>
+            {isPending && <div className="text-purple text-sm">✍️ Confirm in wallet...</div>}
+            {isConfirming && <div className="text-cyan text-sm dots">⏳ Confirming on chain</div>}
+            {isSuccess && <div className="text-green text-sm">✅ Updated! Reloading config...</div>}
+          </div>
         )}
-</div>
-          </Layout>
+      </div>
+    </Layout>
   )
 }

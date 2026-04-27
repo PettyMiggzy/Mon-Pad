@@ -1,168 +1,266 @@
 import { useState, useEffect } from 'react'
-import { useAccount, useBalance, usePublicClient } from 'wagmi'
 import { useRouter } from 'next/router'
+import { useAccount, useBalance } from 'wagmi'
 import Layout from '../components/Layout'
-import { FACTORY_ADDRESS, CURVE_ABI, TOKEN_ABI, START_BLOCK, fmtMON, fmtAddr, fmtTokens } from '../lib/constants'
-import { monad } from '../lib/wagmi'
+import { fmtMON, fmtUSD, fmtTokens, fmtAddr, timeAgo, MONSHI_TOKEN } from '../lib/constants'
+
+const SERVER = process.env.NEXT_PUBLIC_SERVER_URL || ''
 
 export default function Portfolio() {
   const router = useRouter()
-  const { address, isConnected } = useAccount()
-  const { data: balance } = useBalance({ address, chainId: monad.id })
-  const client = usePublicClient({ chainId: monad.id })
+  const { address: wallet, isConnected } = useAccount()
+  const { data: monBalance } = useBalance({ address: wallet })
 
   const [holdings, setHoldings] = useState([])
-  const [trades, setTrades]     = useState([])
-  const [loading, setLoading]   = useState(false)
-  const [tab, setTab]           = useState('Holdings')
+  const [stakes, setStakes] = useState([])
+  const [trades, setTrades] = useState([])
+  const [achievements, setAchievements] = useState([])
+  const [monPrice, setMonPrice] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [tab, setTab] = useState('holdings')
 
-  useEffect(() => { if (address && client) load() }, [address, client])
+  useEffect(() => {
+    if (!wallet || !SERVER) { setLoading(false); return }
+    fetch(`${SERVER}/api/mon-price`).then(r => r.json()).then(d => setMonPrice(d.price || 0)).catch(() => {})
+    loadAll()
+    const iv = setInterval(loadAll, 12000)
+    return () => clearInterval(iv)
+  }, [wallet])
 
-  async function load() {
-    if (!address) return
-    setLoading(true)
-    const SERVER = process.env.NEXT_PUBLIC_SERVER_URL || ''
+  async function loadAll() {
+    if (!wallet || !SERVER) return
     try {
-      const allTokens = await fetch(`${SERVER}/api/tokens`).then(r => r.json())
-
-      const myHoldings = []
-      const myTrades = []
-
-      await Promise.all(allTokens.map(async t => {
-        const token = t.tokenAddress
-        const curve = t.curveAddress
-        if (!token) return
-        try {
-          const bal = await client.readContract({ address: token, abi: TOKEN_ABI, functionName: 'balanceOf', args: [address] })
-          if (bal > 0n) {
-            let value = 0n
-            if (curve) {
-              try {
-                const priceWei = await client.readContract({ address: curve, abi: CURVE_ABI, functionName: 'priceWeiPerToken' })
-                value = (bal * priceWei) / (10n ** 18n)
-              } catch {}
-            }
-            myHoldings.push({ token, curve, name: t.name, symbol: t.symbol, bal, value, graduated: t.graduated })
-          }
-        } catch {}
-      }))
-
-      setHoldings(myHoldings)
-      setTrades(myTrades)
-    } catch (e) { console.error(e) }
-    finally { setLoading(false) }
+      const h = await fetch(`${SERVER}/api/portfolio/${wallet}/holdings`).then(r => r.ok ? r.json() : []).catch(() => [])
+      if (Array.isArray(h)) setHoldings(h)
+      const s = await fetch(`${SERVER}/api/staking/positions/${wallet}`).then(r => r.ok ? r.json() : []).catch(() => [])
+      if (Array.isArray(s)) setStakes(s)
+      const t = await fetch(`${SERVER}/api/portfolio/${wallet}/trades?limit=50`).then(r => r.ok ? r.json() : []).catch(() => [])
+      if (Array.isArray(t)) setTrades(t)
+      const a = await fetch(`${SERVER}/api/portfolio/${wallet}/achievements`).then(r => r.ok ? r.json() : []).catch(() => [])
+      if (Array.isArray(a)) setAchievements(a)
+    } catch {}
+    setLoading(false)
   }
 
-  const totalValue = holdings.reduce((s, h) => s + Number(h.value), 0)
-  const totalSpent = trades.filter(t => t.type === 'buy').reduce((s, t) => s + Number(t.mon), 0)
-  const totalReceived = trades.filter(t => t.type === 'sell').reduce((s, t) => s + Number(t.mon), 0)
-  const pnl = totalReceived - totalSpent + totalValue
-  const pnlPct = totalSpent > 0 ? ((pnl / totalSpent) * 100) : 0
+  if (!isConnected) {
+    return (
+      <Layout title="Portfolio">
+        <div className="container" style={{padding:'40px 16px', textAlign:'center'}}>
+          <div className="card" style={{padding:40, maxWidth:420, margin:'0 auto'}}>
+            <div style={{fontSize:48, marginBottom:14}}>💎</div>
+            <div className="text-xl font-bold mb-2">Connect Wallet</div>
+            <p className="text-t3 text-sm mb-4">Connect your wallet to see your holdings, stakes, P&L, and achievements.</p>
+          </div>
+        </div>
+      </Layout>
+    )
+  }
 
-  if (!isConnected) return (
-    <Layout title="Portfolio">
-      <div style={{ padding: '80px 14px', textAlign: 'center' }}>
-        <div style={{ fontSize: 48, marginBottom: 16 }}>💼</div>
-        <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>Connect your wallet</div>
-        <div style={{ fontSize: 13, color: 'var(--t3)' }}>Connect to view your MonPad portfolio</div>
-      </div>
-    </Layout>
-  )
+  const totalHoldingsMon = holdings.reduce((a, h) => a + Number(h.valueMon || 0), 0)
+  const totalStakedMon = stakes.reduce((a, s) => a + Number(s.valueMon || 0), 0)
+  const totalPending = stakes.reduce((a, s) => a + Number(s.pendingReward || 0) / 1e18, 0)
+  const monBal = monBalance ? Number(monBalance.value) / 1e18 : 0
+  const netWorth = totalHoldingsMon + totalStakedMon + monBal + totalPending
+  const realizedPnL = trades.reduce((a, t) => a + (Number(t.realizedPnL) || 0), 0)
+
+  // Calculate wallet tier
+  const monshiHolding = holdings.find(h => h.tokenAddress?.toLowerCase() === MONSHI_TOKEN.toLowerCase())
+  const monshiBalance = Number(monshiHolding?.balance || 0) / 1e18
+  let walletTier = 'shrimp'
+  if (monshiBalance >= 10_000_000) walletTier = 'whale'
+  else if (monshiBalance >= 1_000_000) walletTier = 'dolphin'
+  else if (monshiBalance >= 100_000) walletTier = 'crab'
+  if (achievements.find(a => a.id === 'royalty')) walletTier = 'royalty'
 
   return (
     <Layout title="Portfolio">
-      {/* WALLET INFO */}
-      <div style={{ padding: '16px 14px 0' }}>
-        <div style={{ background: 'var(--bg2)', border: '1px solid var(--bd)', borderRadius: 14, padding: '16px' }}>
-          <div style={{ fontSize: 11, color: 'var(--t3)', fontFamily: 'var(--mono)', marginBottom: 4 }}>{fmtAddr(address)}</div>
-          <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-.5px', marginBottom: 2 }}>
-            {balance ? `${Number(balance.formatted).toFixed(4)} MON` : '—'}
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--t3)' }}>Wallet balance</div>
-        </div>
-      </div>
-
-      {/* PNL CARD */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, margin: '10px 14px 0' }}>
-        <div style={{ background: 'var(--bg2)', border: '1px solid var(--bd)', borderRadius: 12, padding: '12px 14px' }}>
-          <div style={{ fontSize: 10, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '.3px', marginBottom: 6 }}>Token Value</div>
-          <div style={{ fontSize: 18, fontWeight: 800, fontFamily: 'var(--mono)' }}>{fmtMON(BigInt(Math.floor(totalValue)))} MON</div>
-        </div>
-        <div style={{ background: pnl >= 0 ? 'rgba(34,197,94,0.06)' : 'rgba(239,68,68,0.06)', border: `1px solid ${pnl >= 0 ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`, borderRadius: 12, padding: '12px 14px' }}>
-          <div style={{ fontSize: 10, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '.3px', marginBottom: 6 }}>P&L</div>
-          <div style={{ fontSize: 18, fontWeight: 800, fontFamily: 'var(--mono)', color: pnl >= 0 ? 'var(--g)' : 'var(--r)' }}>
-            {pnl >= 0 ? '+' : ''}{(pnl / 1e18).toFixed(2)} MON
-          </div>
-          <div style={{ fontSize: 11, color: pnl >= 0 ? 'var(--g)' : 'var(--r)', marginTop: 2 }}>
-            {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(1)}%
-          </div>
-        </div>
-      </div>
-
-      {/* TABS */}
-      <div style={{ display: 'flex', borderBottom: '1px solid var(--bd)', margin: '16px 14px 0' }}>
-        {['Holdings', 'Trades'].map(t => (
-          <div key={t} onClick={() => setTab(t)}
-            style={{ flex: 1, padding: '12px 0', textAlign: 'center', fontSize: 13, fontWeight: 700, color: tab === t ? 'var(--t1)' : 'var(--t3)', cursor: 'pointer', borderBottom: tab === t ? '2px solid var(--p)' : '2px solid transparent', marginBottom: -1 }}>
-            {t} {t === 'Holdings' && holdings.length > 0 && `(${holdings.length})`}
-            {t === 'Trades' && trades.length > 0 && `(${trades.length})`}
-          </div>
-        ))}
-      </div>
-
-      {loading && <div style={{ padding: '40px 14px', textAlign: 'center', color: 'var(--t3)', fontSize: 13 }}>Loading…</div>}
-
-      {/* HOLDINGS */}
-      {!loading && tab === 'Holdings' && (
-        <div style={{ padding: '0 14px' }}>
-          {holdings.length === 0 && (
-            <div style={{ padding: '40px 0', textAlign: 'center' }}>
-              <div style={{ fontSize: 32, marginBottom: 10 }}>🌱</div>
-              <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 6 }}>No holdings yet</div>
-              <div style={{ fontSize: 12, color: 'var(--t3)', marginBottom: 16 }}>Buy tokens on MonPad to see them here</div>
-              <button className="btn-primary" style={{ padding: '10px 24px' }} onClick={() => router.push('/')}>Browse Tokens</button>
+      <div className="container" style={{paddingBottom:60}}>
+        {/* HERO with Net Worth */}
+        <div className="hero" style={{marginTop:16, marginBottom:16, padding:'28px 18px'}}>
+          <div style={{position:'relative', zIndex:1}}>
+            <div className="text-xs text-t3 font-bold mb-2" style={{letterSpacing:2}}>NET WORTH</div>
+            <div className="hero-title" style={{fontSize:'clamp(36px,7vw,56px)', marginBottom:6}}>{fmtUSD(BigInt(Math.floor(netWorth * 1e18)), monPrice)}</div>
+            <div className="text-t2 text-sm font-mono mb-3">{netWorth.toFixed(4)} MON</div>
+            <div className="flex justify-center gap-2 mb-2" style={{flexWrap:'wrap'}}>
+              <span className={`tier-badge ${walletTier}`}>{walletTier === 'whale' ? '🐋 Whale' : walletTier === 'dolphin' ? '🐬 Dolphin' : walletTier === 'crab' ? '🦀 Crab' : walletTier === 'royalty' ? '👑 Royalty' : '🦐 Shrimp'}</span>
+              <span className="tag">{fmtAddr(wallet)}</span>
+              {realizedPnL !== 0 && <span className={`tag ${realizedPnL > 0 ? 'tag-green' : ''}`} style={realizedPnL < 0 ? {background:'rgba(248,113,113,0.15)', color:'var(--red)', borderColor:'rgba(248,113,113,0.3)'} : {}}>{realizedPnL > 0 ? '📈' : '📉'} {realizedPnL > 0 ? '+' : ''}{realizedPnL.toFixed(2)} MON realized</span>}
             </div>
-          )}
-          {holdings.map(h => (
-            <div key={h.token} onClick={() => router.push(`/token/${h.token}`)}
-              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 0', borderBottom: '1px solid var(--bd)', cursor: 'pointer' }}>
-              <div style={{ width: 44, height: 44, borderRadius: 10, background: 'radial-gradient(circle at 35% 35%,#3b1d9e,#120830)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800, color: 'rgba(255,255,255,0.12)', flexShrink: 0 }}>
-                {(h.symbol || '?').slice(0, 2)}
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 15, fontWeight: 800 }}>{h.name}</div>
-                <div style={{ fontSize: 11, color: 'var(--t3)', fontFamily: 'var(--mono)' }}>{fmtTokens(h.bal)} {h.symbol} {h.graduated ? '· 🎓' : ''}</div>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: 14, fontWeight: 800, fontFamily: 'var(--mono)' }}>~{fmtMON(h.value)} MON</div>
-                <div style={{ fontSize: 10, color: 'var(--t3)', marginTop: 2 }}>est. value</div>
-              </div>
-            </div>
+          </div>
+        </div>
+
+        {/* QUICK STATS */}
+        <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(140px, 1fr))', gap:10, marginBottom:16}}>
+          <div className="card" style={{padding:14}}>
+            <div className="text-xs text-t3 mb-1">💎 Holdings</div>
+            <div className="font-mono font-bold text-base">{fmtUSD(BigInt(Math.floor(totalHoldingsMon * 1e18)), monPrice)}</div>
+            <div className="text-xs text-t4 mt-1">{holdings.length} tokens</div>
+          </div>
+          <div className="card" style={{padding:14}}>
+            <div className="text-xs text-t3 mb-1">🥩 Staked</div>
+            <div className="font-mono font-bold text-base">{fmtUSD(BigInt(Math.floor(totalStakedMon * 1e18)), monPrice)}</div>
+            <div className="text-xs text-t4 mt-1">{stakes.length} positions</div>
+          </div>
+          <div className="card" style={{padding:14, background:'rgba(74,222,128,0.05)', borderColor:'rgba(74,222,128,0.3)'}}>
+            <div className="text-xs text-t3 mb-1">💰 Claimable</div>
+            <div className="font-mono font-bold text-base text-green">{totalPending.toFixed(4)} MON</div>
+            <div className="text-xs text-t4 mt-1">across {stakes.filter(s => Number(s.pendingReward) > 0).length} stakes</div>
+          </div>
+          <div className="card" style={{padding:14}}>
+            <div className="text-xs text-t3 mb-1">⛽ MON Balance</div>
+            <div className="font-mono font-bold text-base">{monBal.toFixed(4)}</div>
+            <div className="text-xs text-t4 mt-1">{fmtUSD(BigInt(Math.floor(monBal * 1e18)), monPrice)}</div>
+          </div>
+        </div>
+
+        {/* TABS */}
+        <div className="tabs" style={{margin:'8px 0 16px'}}>
+          {[['holdings', '💎 Holdings'], ['stakes', '🥩 Stakes'], ['trades', '📊 Trades'], ['achievements', '🏆 Achievements']].map(([id, lbl]) => (
+            <button key={id} className={`tab ${tab === id ? 'active' : ''}`} onClick={() => setTab(id)}>{lbl}</button>
           ))}
         </div>
-      )}
 
-      {/* TRADES */}
-      {!loading && tab === 'Trades' && (
-        <div style={{ padding: '0 14px' }}>
-          {trades.length === 0 && <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--t3)', fontSize: 13 }}>No trades yet</div>}
-          {trades.map((t, i) => (
-            <div key={i} onClick={() => router.push(`/token/${t.token}`)}
-              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--bd)', cursor: 'pointer' }}>
-              <div style={{ fontSize: 11, fontWeight: 800, padding: '3px 8px', borderRadius: 5, background: t.type === 'buy' ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)', color: t.type === 'buy' ? 'var(--g)' : 'var(--r)', flexShrink: 0 }}>
-                {t.type.toUpperCase()}
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 700 }}>{t.name}</div>
-                <div style={{ fontSize: 11, color: 'var(--t3)', fontFamily: 'var(--mono)' }}>{fmtTokens(t.tokens)} {t.symbol}</div>
-              </div>
-              <div style={{ fontSize: 13, fontWeight: 800, fontFamily: 'var(--mono)', color: t.type === 'buy' ? 'var(--r)' : 'var(--g)' }}>
-                {t.type === 'buy' ? '-' : '+'}{fmtMON(t.mon)} MON
-              </div>
+        {/* HOLDINGS TAB */}
+        {tab === 'holdings' && (
+          loading ? <div className="text-center text-t3 dots" style={{padding:40}}>Loading holdings</div>
+          : holdings.length === 0 ? (
+            <div className="card text-center" style={{padding:40}}>
+              <div style={{fontSize:48, marginBottom:14}}>💎</div>
+              <div className="text-xl font-bold mb-2">No tokens yet</div>
+              <p className="text-t3 mb-4 text-sm">Buy your first MonPad token to start collecting</p>
+              <button className="btn btn-primary" onClick={() => router.push('/')}>Browse Tokens →</button>
             </div>
-          ))}
-        </div>
-      )}
+          ) : (
+            <div style={{display:'flex', flexDirection:'column', gap:10}}>
+              {holdings.map(h => {
+                const pnl = Number(h.realizedPnL || 0) + Number(h.unrealizedPnL || 0)
+                const pnlPct = h.costBasis > 0 ? (pnl / Number(h.costBasis) / 1e18) * 100 : 0
+                return (
+                  <div key={h.tokenAddress} className="card" style={{cursor:'pointer'}} onClick={() => router.push(`/token/${h.tokenAddress}`)}>
+                    <div className="flex justify-between items-center" style={{flexWrap:'wrap', gap:10}}>
+                      <div className="flex items-center gap-3" style={{minWidth:0, flex:1}}>
+                        <div style={{width:40, height:40, borderRadius:'var(--r)', background:'linear-gradient(135deg, var(--p), var(--p-deep))', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:900, fontSize:14, flexShrink:0}}>{(h.symbol || '?').slice(0,2)}</div>
+                        <div style={{minWidth:0, flex:1}}>
+                          <div className="font-bold" style={{whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{h.name}</div>
+                          <div className="font-mono text-xs text-t3">${h.symbol} · {fmtTokens(h.balance)}</div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-mono font-bold">{fmtUSD(BigInt(Math.floor(Number(h.valueMon) * 1e18)), monPrice)}</div>
+                        {pnl !== 0 && (
+                          <div className={`text-xs font-mono ${pnl > 0 ? 'text-green' : 'text-red'}`}>
+                            {pnl > 0 ? '+' : ''}{pnl.toFixed(3)} MON ({pnlPct > 0 ? '+' : ''}{pnlPct.toFixed(1)}%)
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )
+        )}
+
+        {/* STAKES TAB */}
+        {tab === 'stakes' && (
+          loading ? <div className="text-center text-t3 dots" style={{padding:40}}>Loading stakes</div>
+          : stakes.length === 0 ? (
+            <div className="card text-center" style={{padding:40}}>
+              <div style={{fontSize:48, marginBottom:14}}>🥩</div>
+              <div className="text-xl font-bold mb-2">No active stakes</div>
+              <p className="text-t3 mb-4 text-sm">Stake any MonPad token to earn MON from sell-tax</p>
+              <button className="btn btn-primary" onClick={() => router.push('/staking')}>Browse Pools →</button>
+            </div>
+          ) : (
+            <div style={{display:'flex', flexDirection:'column', gap:10}}>
+              {stakes.map((s, i) => {
+                const isLocked = Date.now() / 1000 < Number(s.unlockAt)
+                return (
+                  <div key={i} className="card" style={{cursor:'pointer'}} onClick={() => router.push(`/stake/${s.tokenAddress}`)}>
+                    <div className="flex justify-between items-center mb-2" style={{flexWrap:'wrap', gap:8}}>
+                      <div className="flex items-center gap-3" style={{minWidth:0, flex:1}}>
+                        <div style={{width:40, height:40, borderRadius:'var(--r)', background:'linear-gradient(135deg, var(--p), var(--p-deep))', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:900, fontSize:14, flexShrink:0}}>{(s.symbol || '?').slice(0,2)}</div>
+                        <div style={{minWidth:0}}>
+                          <div className="font-bold">{s.symbol}</div>
+                          <div className="text-xs text-t3 font-mono">{fmtTokens(s.amount)} staked</div>
+                        </div>
+                      </div>
+                      <span className={`tag ${isLocked ? '' : 'tag-green'}`}>{['30d', '90d', '180d', '365d'][s.tier] || '?'} · {[1, 1.5, 2.5, 4][s.tier] || 1}x</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <div className="text-xs text-t3">{isLocked ? `🔒 Unlocks ${new Date(Number(s.unlockAt) * 1000).toLocaleDateString()}` : '🔓 Unlocked'}</div>
+                      <div className="font-mono font-bold text-green">+{fmtMON(s.pendingReward)} MON</div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )
+        )}
+
+        {/* TRADES TAB */}
+        {tab === 'trades' && (
+          loading ? <div className="text-center text-t3 dots" style={{padding:40}}>Loading trades</div>
+          : trades.length === 0 ? (
+            <div className="card text-center" style={{padding:40}}>
+              <div style={{fontSize:48, marginBottom:14}}>📊</div>
+              <div className="text-xl font-bold mb-2">No trades yet</div>
+              <p className="text-t3 text-sm">Your trade history will appear here</p>
+            </div>
+          ) : (
+            <div className="card" style={{padding:0, overflow:'hidden'}}>
+              <table style={{width:'100%', fontSize:12}}>
+                <thead style={{borderBottom:'1px solid var(--bd)'}}>
+                  <tr>
+                    <th style={{textAlign:'left', padding:12, color:'var(--t3)', fontWeight:700, fontSize:11, letterSpacing:1, textTransform:'uppercase'}}>Type</th>
+                    <th style={{textAlign:'left', padding:12, color:'var(--t3)', fontWeight:700, fontSize:11, letterSpacing:1, textTransform:'uppercase'}}>Token</th>
+                    <th style={{textAlign:'right', padding:12, color:'var(--t3)', fontWeight:700, fontSize:11, letterSpacing:1, textTransform:'uppercase'}}>MON</th>
+                    <th style={{textAlign:'right', padding:12, color:'var(--t3)', fontWeight:700, fontSize:11, letterSpacing:1, textTransform:'uppercase'}}>Time</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {trades.map((t, i) => (
+                    <tr key={i} style={{borderBottom:'1px solid rgba(255,255,255,0.04)', cursor:'pointer'}} onClick={() => router.push(`/token/${t.tokenAddress}`)}>
+                      <td style={{padding:12}}>
+                        <span style={{fontSize:10, padding:'2px 6px', borderRadius:4, background: t.type === 'buy' ? 'rgba(74,222,128,0.15)' : 'rgba(248,113,113,0.15)', color: t.type === 'buy' ? 'var(--green)' : 'var(--red)', fontWeight:700}}>{(t.type || 'BUY').toUpperCase()}</span>
+                      </td>
+                      <td style={{padding:12}}>
+                        <div className="font-bold text-xs">${t.symbol || '???'}</div>
+                      </td>
+                      <td style={{padding:12, textAlign:'right', fontFamily:'var(--mono)'}}>{fmtMON(t.monAmount || '0')}</td>
+                      <td style={{padding:12, textAlign:'right', color:'var(--t4)', fontSize:11}}>{t.timestamp ? timeAgo(t.timestamp) : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
+        )}
+
+        {/* ACHIEVEMENTS TAB */}
+        {tab === 'achievements' && (
+          <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(140px, 1fr))', gap:10}}>
+            {[
+              { id: 'first_buy', icon: '🎯', title: 'First Buy', desc: 'Made your first trade' },
+              { id: 'whale', icon: '🐋', title: 'Whale', desc: 'Hold 10M+ MONSHI' },
+              { id: 'royalty', icon: '👑', title: 'Royalty', desc: 'Top 1% holder' },
+              { id: 'diamond_hands', icon: '💎', title: 'Diamond Hands', desc: 'Stake for 365d' },
+              { id: 'creator', icon: '🚀', title: 'Creator', desc: 'Launched a token' },
+              { id: 'graduate', icon: '🎓', title: 'Graduate', desc: 'Token reached graduation' },
+            ].map(a => {
+              const earned = achievements.find(x => x.id === a.id)
+              return (
+                <div key={a.id} className="card text-center" style={{padding:16, opacity: earned ? 1 : 0.4, borderColor: earned ? 'var(--p)' : 'var(--bd)'}}>
+                  <div style={{fontSize:32, marginBottom:8}}>{a.icon}</div>
+                  <div className="font-bold text-sm mb-1">{a.title}</div>
+                  <div className="text-xs text-t3">{a.desc}</div>
+                  {earned && <div className="tag tag-gold mt-2" style={{fontSize:9}}>EARNED</div>}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
     </Layout>
   )
 }

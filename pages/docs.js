@@ -2,110 +2,103 @@ import Layout from '../components/Layout'
 
 export default function Docs() {
   return (
-    <Layout showBack title="Docs">
-      <div style={{ padding: '20px 14px 40px', maxWidth: 480 }}>
-
-        {/* HERO */}
-        <div style={{ background: 'linear-gradient(135deg,rgba(110,84,255,0.12),rgba(133,230,255,0.06))', border: '1px solid rgba(110,84,255,0.2)', borderRadius: 16, padding: '24px 20px', marginBottom: 28, textAlign: 'center' }}>
-          <div style={{ fontSize: 36, marginBottom: 10 }}>📖</div>
-          <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 8 }}>MonPad Documentation</div>
-          <div style={{ fontSize: 13, color: 'var(--t2)', lineHeight: 1.7 }}>
-            The fairest token launchpad on Monad. Creators earn from day one.
+    <Layout title="Docs">
+      <div className="container" style={{maxWidth:760, paddingBottom:60}}>
+        <div className="hero" style={{marginTop:16, marginBottom:24, padding:'24px 18px'}}>
+          <div style={{position:'relative', zIndex:1}}>
+            <h1 className="hero-title" style={{fontSize:'clamp(28px,5vw,40px)'}}>📖 How MonPad Works</h1>
+            <p className="text-t2 text-sm">The fairest pad on Monad. Devs earn forever.</p>
           </div>
         </div>
 
-        {/* HOW IT WORKS */}
-        <Section title="How MonPad Works">
-          <P>MonPad is a fair launch token launchpad on Monad. Anyone can launch a token for 10 MON. Every token starts on a bonding curve — price increases as more people buy. When 400,000 MON is raised, the token graduates to Uniswap V3 and liquidity is permanently locked.</P>
+        <Section title="🚀 Launching" emoji="🚀">
+          <p>Anyone can launch a token on MonPad for <Bold>100 MON</Bold>.</p>
+          <ul>
+            <li><Bold>1B fixed supply</Bold> — minted to bonding curve at deploy</li>
+            <li><Bold>0-2% optional dev buy</Bold> — atomic at launch, no front-running</li>
+            <li><Bold>No insider allocations</Bold> — no team tokens, no presale, no vesting unlocks</li>
+            <li><Bold>Custom branding</Bold> — banner image, token icon, social links</li>
+          </ul>
         </Section>
 
-        {/* DEV FEES — THIS IS THE MAIN SECTION */}
-        <Section title="💰 Creator Fees — Devs Earn 1.5% of Volume">
-          <P style={{ color: 'var(--p2)', fontWeight: 600, fontSize: 15 }}>
-            Every creator earns 1.5% of the total trading volume on their token. That means every buy and every sell pays you — automatically, on-chain, forever while on the bonding curve.
-          </P>
+        <Section title="📈 Trading Fees" emoji="📈">
+          <p>Every trade has a small fee that pays creators, the platform, and stakers.</p>
 
-          <div style={{ marginTop: 16, marginBottom: 16 }}>
-            <FeeRow label="0.5% of every BUY" desc="Sent to your wallet immediately when someone buys" badge="INSTANT" color="var(--g)" />
-            <FeeRow label="0.5% of every SELL" desc="Sent to your wallet immediately when someone sells" badge="INSTANT" color="var(--g)" />
-            <FeeRow label="0.5% buy buffer" desc="Accumulates in the bonding curve, paid to you in full at graduation" badge="AT GRAD" color="var(--gold)" />
+          <div className="card mt-3 mb-3" style={{padding:16}}>
+            <div className="font-bold text-base mb-2 text-green">🟢 BUY (2% total)</div>
+            <ul style={{listStyle:'none', display:'flex', flexDirection:'column', gap:6, fontSize:13}}>
+              <li>• <Bold>1%</Bold> to token creator (instant)</li>
+              <li>• <Bold>1%</Bold> to curve buffer (paid to platform at graduation)</li>
+            </ul>
           </div>
 
-          <div style={{ background: 'rgba(110,84,255,0.08)', border: '1px solid rgba(110,84,255,0.2)', borderRadius: 12, padding: '14px 16px', marginBottom: 8 }}>
-            <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--p2)', marginBottom: 8 }}>Example: 100,000 MON volume on your token</div>
-            <Row l="0.5% buy fees (paid instantly)" v="~250 MON" />
-            <Row l="0.5% sell fees (paid instantly)" v="~250 MON" />
-            <Row l="0.5% buffer (paid at graduation)" v="~500 MON" />
-            <div style={{ height: 1, background: 'var(--bd)', margin: '8px 0' }} />
-            <Row l="Total earned" v="~1,000 MON" bold />
-          </div>
-          <P>Your fees arrive in your wallet automatically. No claiming required for instant fees.</P>
-        </Section>
-
-        {/* BONDING CURVE */}
-        <Section title="📈 Bonding Curve">
-          <P>Every token starts at a price of 0.000150 MON per token. As more MON is raised, the price increases linearly. This means early buyers get lower prices and the curve rewards early participation.</P>
-          <P>The bonding curve is fully on-chain. No central order book. Price is determined by a formula, not by matching orders.</P>
-          <Row l="Starting price" v="0.000150 MON/token" />
-          <Row l="Total supply" v="1,000,000,000 tokens" />
-          <Row l="Graduation target" v="400,000 MON raised" />
-        </Section>
-
-        {/* FEES FULL BREAKDOWN */}
-        <Section title="Fee Breakdown">
-          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--t2)', marginBottom: 10 }}>On every BUY (2% total)</div>
-          <Row l="1% — MonPad platform" v="Pays for infrastructure" />
-          <Row l="0.5% — Creator (instant)" v="Your wallet" />
-          <Row l="0.5% — Creator buffer" v="Paid at graduation" />
-
-          <div style={{ height: 1, background: 'var(--bd)', margin: '14px 0' }} />
-          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--t2)', marginBottom: 10 }}>On every SELL (2% total)</div>
-          <Row l="1% — Sell buffer" v="Paid to MonPad at graduation" />
-          <Row l="0.5% — Buyback" v="Used for MON buybacks" />
-          <Row l="0.5% — Creator (instant)" v="Your wallet" />
-        </Section>
-
-        {/* GRADUATION */}
-        <Section title="🎓 Graduation">
-          <P>When a token raises 400,000 MON on the bonding curve, it graduates automatically. At graduation:</P>
-          <div style={{ marginTop: 8, marginBottom: 8 }}>
-            {[
-              'Creator receives all accumulated buy buffer fees',
-              'Creation fee goes to buyback wallet',
-              'Sell buffer goes to MonPad platform',
-              'All remaining MON + tokens are added as Uniswap V3 liquidity',
-              'LP position is permanently burned — nobody can rug the pool',
-            ].map((s, i) => (
-              <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
-                <span style={{ color: 'var(--g)', flexShrink: 0 }}>✓</span>
-                <span style={{ fontSize: 13, color: 'var(--t2)' }}>{s}</span>
-              </div>
-            ))}
+          <div className="card" style={{padding:16}}>
+            <div className="font-bold text-base mb-2 text-red">🔴 SELL (2% total)</div>
+            <ul style={{listStyle:'none', display:'flex', flexDirection:'column', gap:6, fontSize:13}}>
+              <li>• <Bold>0.5%</Bold> to token creator (instant)</li>
+              <li>• <Bold>0.5%</Bold> to staking pool (or buyback wallet)</li>
+              <li>• <Bold>1%</Bold> to platform (instant)</li>
+            </ul>
           </div>
         </Section>
 
-        {/* CONTRACTS */}
-        <Section title="🔒 Contracts">
-          <P>All contracts are deployed on Monad Mainnet (Chain ID: 143).</P>
-          <div style={{ background: 'var(--bg2)', border: '1px solid var(--bd)', borderRadius: 12, padding: '12px 14px', marginTop: 10 }}>
-            {[
-              ['Factory', '0xfEdC5df2F34Ec01Ac9cbc0c557a4BFD3de6C5c45'],
-              ['WMON', '0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A'],
-              ['Uniswap V3 NPM', '0x7197e214c0b767cfb76fb734ab638e2c192f4e53'],
-            ].map(([l, v]) => (
-              <div key={l} style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 10, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '.3px', marginBottom: 2 }}>{l}</div>
-                <div style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--p2)', wordBreak: 'break-all' }}>{v}</div>
-              </div>
-            ))}
+        <Section title="🎓 Graduation" emoji="🎓">
+          <p>When a token raises <Bold>425,000 MON</Bold> on the bonding curve, it graduates:</p>
+          <ul>
+            <li><Bold>400,000 MON</Bold> + remaining tokens → Uniswap V3 liquidity pool</li>
+            <li>LP tokens are <Bold>permanently burned</Bold> 🔥 (rug-proof forever)</li>
+            <li><Bold>25,000 MON</Bold> goes to the creator (marketing reward)</li>
+            <li>Buy buffer accumulated from trades → platform wallet</li>
+          </ul>
+          <p className="mt-3">After graduation, the token trades on the open market like any other.</p>
+        </Section>
+
+        <Section title="🥩 Staking" emoji="🥩">
+          <p>Anyone can create a staking pool for any MonPad token. Free for 1M+ MONSHI holders, 200 MON otherwise (→ buyback).</p>
+
+          <div className="card mt-3 mb-3" style={{padding:16}}>
+            <div className="font-bold text-base mb-2">⏰ Lock Tiers</div>
+            <table style={{width:'100%', fontSize:13}}>
+              <thead>
+                <tr style={{borderBottom:'1px solid var(--bd)'}}>
+                  <th style={{textAlign:'left', padding:'6px 0', color:'var(--t3)', fontWeight:700, fontSize:11, letterSpacing:1, textTransform:'uppercase'}}>Lock</th>
+                  <th style={{textAlign:'right', padding:'6px 0', color:'var(--t3)', fontWeight:700, fontSize:11, letterSpacing:1, textTransform:'uppercase'}}>Boost</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td style={{padding:'8px 0'}}>30 days</td><td style={{textAlign:'right', fontFamily:'var(--mono)'}}>1.0x</td></tr>
+                <tr><td style={{padding:'8px 0'}}>90 days</td><td style={{textAlign:'right', fontFamily:'var(--mono)', color:'var(--cyan)'}}>1.5x</td></tr>
+                <tr><td style={{padding:'8px 0'}}>180 days</td><td style={{textAlign:'right', fontFamily:'var(--mono)', color:'var(--p2)'}}>2.5x</td></tr>
+                <tr><td style={{padding:'8px 0'}}>365 days</td><td style={{textAlign:'right', fontFamily:'var(--mono)', color:'var(--gold)'}}>4.0x</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p className="mb-3">Sell-tax 0.5% from each token's trades flows to staking. <Bold>40%</Bold> goes to MONSHI's pool, <Bold>60%</Bold> distributed to other pools by trading volume.</p>
+
+          <div className="card" style={{background:'rgba(252,211,77,0.05)', borderColor:'rgba(252,211,77,0.3)', padding:14, fontSize:13, color:'var(--gold)'}}>
+            ⚠ <Bold>Early unstake:</Bold> 10% fee on tokens (sent to creator) + ALL pending rewards forfeited (boosts other stakers).
           </div>
         </Section>
 
-        {/* BOT PROTECTION */}
-        <Section title="🤖 Bot Protection">
-          <P>Every token launches with bot protection enabled by default. This limits max buy size to 2.5% of remaining supply and enforces a 1-block cooldown between buys from the same wallet. Creators can ask MonPad to adjust these settings.</P>
+        <Section title="💸 Why MonPad?" emoji="💸">
+          <ul>
+            <li>🎯 <Bold>Fair launch</Bold> — no presale, no team tokens, no insider trading</li>
+            <li>💰 <Bold>Devs earn forever</Bold> — 2% of all volume, paid instantly</li>
+            <li>🔥 <Bold>LP burned</Bold> — graduated tokens have unrugable liquidity</li>
+            <li>🔀 <Bold>Upgradeable</Bold> — admin params tunable without redeploying</li>
+            <li>🤝 <Bold>Referrals</Bold> — share your link to earn from new launches</li>
+            <li>🏆 <Bold>Achievements</Bold> — earn badges for trading, staking, creating</li>
+          </ul>
         </Section>
 
+        <Section title="🔗 Links" emoji="🔗">
+          <ul>
+            <li><a href="https://x.com/Monshi_Monpad" target="_blank" rel="noreferrer" className="text-purple">𝕏 @Monshi_Monpad</a></li>
+            <li><a href="https://t.me/monshimonad" target="_blank" rel="noreferrer" className="text-purple">📱 Telegram</a></li>
+            <li><a href="https://github.com/PettyMiggzy/Mon-Pad" target="_blank" rel="noreferrer" className="text-purple">⚙️ GitHub</a></li>
+          </ul>
+        </Section>
       </div>
     </Layout>
   )
@@ -113,36 +106,13 @@ export default function Docs() {
 
 function Section({ title, children }) {
   return (
-    <div style={{ marginBottom: 28 }}>
-      <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 12, paddingBottom: 8, borderBottom: '1px solid var(--bd)' }}>{title}</div>
-      {children}
+    <div className="card mb-4" style={{padding:20}}>
+      <h2 className="text-lg font-black mb-3">{title}</h2>
+      <div style={{color:'var(--t2)', fontSize:14, lineHeight:1.7}}>{children}</div>
     </div>
   )
 }
 
-function P({ children, style }) {
-  return <p style={{ fontSize: 13, color: 'var(--t2)', lineHeight: 1.7, marginBottom: 10, ...style }}>{children}</p>
-}
-
-function Row({ l, v, bold }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '4px 0', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-      <span style={{ color: 'var(--t3)' }}>{l}</span>
-      <span style={{ fontFamily: 'var(--mono)', fontWeight: bold ? 800 : 600, color: bold ? 'var(--p2)' : 'var(--t1)' }}>{v}</span>
-    </div>
-  )
-}
-
-function FeeRow({ label, desc, badge, color }) {
-  return (
-    <div style={{ display: 'flex', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--bd)' }}>
-      <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)', marginBottom: 2 }}>{label}</div>
-        <div style={{ fontSize: 11, color: 'var(--t3)' }}>{desc}</div>
-      </div>
-      <div style={{ background: `rgba(${color === 'var(--g)' ? '34,197,94' : '255,174,69'},0.12)`, color, fontSize: 9, fontWeight: 800, padding: '3px 7px', borderRadius: 5, letterSpacing: '.5px', alignSelf: 'center', flexShrink: 0 }}>
-        {badge}
-      </div>
-    </div>
-  )
+function Bold({ children }) {
+  return <strong style={{color:'var(--p2)'}}>{children}</strong>
 }

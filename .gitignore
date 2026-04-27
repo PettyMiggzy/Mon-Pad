@@ -7,12 +7,16 @@ node_modules
 .DS_Store
 *.tsbuildinfo
 tsconfig.tsbuildinfo
+*.log
+.cache
 
-# Hardhat workspace (don't commit huge node_modules)
-hardhat-test/node_modules/
-hardhat-test/cache/
-hardhat-test/artifacts/
-hardhat-test/package-lock.json
+# Hardhat workspace
+hardhat-test/
+compile.js
 
 # Deploy secrets
 deploy/v2/.env
+deploy/v2/deployed.json
+
+# OS
+Thumbs.db
