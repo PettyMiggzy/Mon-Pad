@@ -45,7 +45,7 @@ export default function Docs() {
         <Section title="🎓 Graduation" emoji="🎓">
           <p>When a token raises <Bold>425,000 MON</Bold> on the bonding curve, it graduates:</p>
           <ul>
-            <li><Bold>400,000 MON</Bold> + remaining tokens → Uniswap V3 liquidity pool</li>
+            <li><Bold>425,000 MON</Bold> + remaining tokens → Uniswap V3 liquidity pool</li>
             <li>LP tokens are <Bold>permanently burned</Bold> 🔥 (rug-proof forever)</li>
             <li><Bold>25,000 MON</Bold> goes to the creator (marketing reward)</li>
             <li>Buy buffer accumulated from trades → platform wallet</li>
