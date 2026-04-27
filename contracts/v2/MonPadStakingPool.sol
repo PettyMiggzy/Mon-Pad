@@ -15,7 +15,13 @@ contract MonPadStakingPool {
     address public owner;
     address public hub;
     address public token;          // token being staked
-    address public creator;        // gets early-unstake fees in MON? No — those stay in pool. Forfeited rewards too.
+    address public creator;        // for non-MONSHI: only address allowed to call burn(). For MONSHI: receiver of vault.
+    bool public immutable burnsToCreator;  // true ONLY for MONSHI pool — vault routes to creator instead of dead
+    address public constant DEAD = 0x000000000000000000000000000000000000dEaD;
+
+    // Burn vault — early-unstake fees accumulate here, creator chooses WHEN to burn (timing only, not destination)
+    uint256 public burnVault;
+    uint256 public totalBurned;    // lifetime tokens sent to DEAD (only increments for non-MONSHI pools)
     
     // Lock tier multipliers (BPS — 10000 = 1.0x)
     uint16[4] public tierMultBps = [10000, 15000, 25000, 40000];   // 1.0/1.5/2.5/4.0x
@@ -44,14 +50,18 @@ contract MonPadStakingPool {
     event RewardClaimed(address indexed user, uint256 indexed stakeIdx, uint256 reward);
     event RewardNotified(uint256 amount);
     event TierChanged(uint8 idx, uint16 multBps, uint32 duration);
+    event BurnVaultDeposit(address indexed unstaker, uint256 amount, uint256 newVault);
+    event Burned(address indexed by, uint256 amount, uint256 totalBurned);
+    event MonshiVaultRouted(address indexed by, uint256 amount);
     
     modifier onlyOwner() { require(msg.sender == owner, "!owner"); _; }
     modifier onlyHub() { require(msg.sender == hub, "!hub"); _; }
     
-    constructor(address _token, address _hub, address _creator) {
+    constructor(address _token, address _hub, address _creator, bool _burnsToCreator) {
         token = _token;
         hub = _hub;
         creator = _creator;
+        burnsToCreator = _burnsToCreator;
         owner = msg.sender;
     }
     
@@ -151,10 +161,11 @@ contract MonPadStakingPool {
             forfeitedReward = reward;
             reward = 0;
             // forfeited reward stays in pool (boosts other stakers via rewardPerWeightedStored on next notify)
-            // fee in tokens stays in contract (not redistributed automatically — sits as pool tokens)
-            // Could send fee tokens back to creator wallet here if desired:
-            if (fee > 0 && creator != address(0)) {
-                IERC20(token).transfer(creator, fee);
+            // fee tokens accumulate in burnVault — only creator can call burn() to flush them
+            // Destination locked at construction: DEAD for normal pools, creator wallet for MONSHI pool
+            if (fee > 0) {
+                burnVault += fee;
+                emit BurnVaultDeposit(msg.sender, fee, burnVault);
             }
         }
         
@@ -188,6 +199,30 @@ contract MonPadStakingPool {
     function totalRawStaked() external view returns (uint256 t) {
         // would need iteration, expensive — track separately if needed
         return 0;
+    }
+    
+    // ── BURN VAULT ────────────────────────────
+    /// @notice Flushes the accumulated burn vault. Only creator can call.
+    ///         Destination is locked at construction:
+    ///         - burnsToCreator=false (normal pools): tokens sent to DEAD address (real burn)
+    ///         - burnsToCreator=true  (MONSHI pool):  tokens sent to creator (=buyback wallet)
+    ///         Creator's only power is timing — they cannot redirect destination.
+    function burn() external {
+        require(msg.sender == creator, "!creator");
+        uint256 amt = burnVault;
+        require(amt > 0, "empty vault");
+        burnVault = 0;
+        
+        if (burnsToCreator) {
+            // MONSHI path — tokens routed to creator (= buyback wallet at deploy time)
+            IERC20(token).transfer(creator, amt);
+            emit MonshiVaultRouted(msg.sender, amt);
+        } else {
+            // Default — actual burn to dead address, increments lifetime burned counter
+            totalBurned += amt;
+            IERC20(token).transfer(DEAD, amt);
+            emit Burned(msg.sender, amt, totalBurned);
+        }
     }
     
     // ── ADMIN ─────────────────────────────────

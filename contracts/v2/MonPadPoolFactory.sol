@@ -75,7 +75,8 @@ contract MonPadPoolFactory {
         address poolCreator = msg.sender;
         // Could check factory.isLaunched(token) and set creator from curve
         
-        pool = address(new MonPadStakingPool(token, hub, poolCreator));
+        // Public pools always have burnsToCreator=false → burn vault routes to DEAD (anti-rug)
+        pool = address(new MonPadStakingPool(token, hub, poolCreator, false));
         tokenToPool[token] = pool;
         allPools.push(pool);
         
@@ -88,10 +89,11 @@ contract MonPadPoolFactory {
         emit PoolCreated(token, pool, msg.sender, free ? 0 : poolCreationFee);
     }
     
-    // Admin only — back-create pool without fee (for MONSHI itself, etc)
-    function adminCreatePool(address token, address creator) external onlyOwner returns (address pool) {
+    // Admin only — back-create pool without fee (for MONSHI itself, etc).
+    // burnsToCreator=true ONLY for MONSHI pool (vault routes to creator/buyback instead of DEAD).
+    function adminCreatePool(address token, address creator, bool burnsToCreator) external onlyOwner returns (address pool) {
         require(tokenToPool[token] == address(0), "exists");
-        pool = address(new MonPadStakingPool(token, hub, creator));
+        pool = address(new MonPadStakingPool(token, hub, creator, burnsToCreator));
         tokenToPool[token] = pool;
         allPools.push(pool);
         try IHub(hub).registerPool(token, pool) {} catch {}

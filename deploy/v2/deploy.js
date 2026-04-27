@@ -102,9 +102,9 @@ async function main() {
     await tx2.wait();
     console.log('   ✓ Done');
     
-    // Create MONSHI staking pool
+    // Create MONSHI staking pool — burnsToCreator=true so vault routes to creator (=deployer=buyback) instead of DEAD
     console.log('🔧 Creating MONSHI staking pool...');
-    const tx3 = await poolFactory.contract.adminCreatePool(MONSHI, wallet.address);
+    const tx3 = await poolFactory.contract.adminCreatePool(MONSHI, wallet.address, true);
     const receipt3 = await tx3.wait();
     // Find PoolCreated event for pool address
     let monshiPoolAddr = null;
