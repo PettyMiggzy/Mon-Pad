@@ -1,4 +1,18 @@
 .next
 node_modules
+.env
 .env.local
+.env.production
 .vercel
+.DS_Store
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+
+# Hardhat workspace (don't commit huge node_modules)
+hardhat-test/node_modules/
+hardhat-test/cache/
+hardhat-test/artifacts/
+hardhat-test/package-lock.json
+
+# Deploy secrets
+deploy/v2/.env

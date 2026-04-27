@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import Head from 'next/head'
 import { WagmiProvider } from 'wagmi'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { RainbowKitProvider, darkTheme } from '@rainbow-me/rainbowkit'
@@ -8,42 +9,38 @@ import '@rainbow-me/rainbowkit/styles.css'
 
 const queryClient = new QueryClient()
 
-function SplashScreen() {
-    return (
-          <div style={{
-            position: 'fixed', inset: 0, zIndex: 9999, background: '#000',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            flexDirection: 'column',
-    }}>
-      <img src="/monpad-logo.png" alt="MonPad" style={{ width: 108, height: 108, borderRadius: 24, objectFit: 'cover', boxShadow: '0 10px 34px rgba(0,0,0,0.24)' }} />
-      <img src="/monpad-text-logo.png" alt="MonPad" style={{ width: 200, height: 'auto', objectFit: 'contain', marginTop: 18 }} />
-  </div>
-  )
-}
+const monPadTheme = darkTheme({
+  accentColor: '#A855F7',
+  accentColorForeground: 'white',
+  borderRadius: 'medium',
+  fontStack: 'system',
+})
 
 export default function App({ Component, pageProps }) {
-    const [showSplash, setShowSplash] = useState(false)
-
-  useEffect(() => {
-        const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
-        if (!isMobile) return
-        const seen = sessionStorage.getItem('monpad_splash_seen')
-        if (!seen) {
-                setShowSplash(true)
-                sessionStorage.setItem('monpad_splash_seen', '1')
-                const t = setTimeout(() => setShowSplash(false), 2500)
-                return () => clearTimeout(t)
-        }
-  }, [])
-
   return (
-        <WagmiProvider config={wagmiConfig}>
-          <QueryClientProvider client={queryClient}>
-            <RainbowKitProvider theme={darkTheme()} modalSize="compact">
-  {showSplash && <SplashScreen />}
-          <Component {...pageProps} />
-    </RainbowKitProvider>
-    </QueryClientProvider>
-    </WagmiProvider>
-    )
+    <>
+      <Head>
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+        <meta name="theme-color" content="#A855F7" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="MonPad" />
+        <link rel="manifest" href="/manifest.json" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/Pad.png" />
+        <link rel="icon" type="image/png" href="/Pad.png" />
+        <title>MonPad — Fair Launch on Monad</title>
+        <meta name="description" content="Launch tokens, trade, stake, and earn on Monad. The fairest launchpad in the trenches." />
+        <meta property="og:title" content="MonPad" />
+        <meta property="og:description" content="Fair launch token launchpad on Monad. Devs earn 2% forever." />
+        <meta property="og:image" content="/monpad-splash.jpg" />
+      </Head>
+      <WagmiProvider config={wagmiConfig}>
+        <QueryClientProvider client={queryClient}>
+          <RainbowKitProvider theme={monPadTheme} modalSize="compact">
+            <Component {...pageProps} />
+          </RainbowKitProvider>
+        </QueryClientProvider>
+      </WagmiProvider>
+    </>
+  )
 }

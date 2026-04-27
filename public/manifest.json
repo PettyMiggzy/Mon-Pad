@@ -1,0 +1,14 @@
+{
+  "name": "MonPad — Fair Launch on Monad",
+  "short_name": "MonPad",
+  "description": "Launch tokens, trade, stake, and earn on Monad",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#050308",
+  "theme_color": "#A855F7",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "/Pad.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/Pad.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

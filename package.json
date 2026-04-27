@@ -14,12 +14,16 @@
     "@wagmi/core": "^3.4.2",
     "apexcharts": "^5.10.5",
     "autoprefixer": "^10.4.27",
+    "dotenv": "^17.4.2",
+    "ethers": "^6.16.0",
     "express": "^4.17.1",
+    "ganache": "^7.9.2",
     "next": "14.1.0",
     "postcss": "^8.5.9",
     "react": "^18.2.0",
     "react-apexcharts": "^2.1.0",
     "react-dom": "^18.2.0",
+    "solc": "^0.8.34",
     "tailwindcss": "^4.2.2",
     "viem": "^2.47.10",
     "wagmi": "^3.6.1"
@@ -27,5 +31,21 @@
   "devDependencies": {
     "eslint": "^8",
     "eslint-config-next": "14.1.0"
-  }
+  },
+  "description": "",
+  "main": "next.config.js",
+  "directories": {
+    "lib": "lib"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PettyMiggzy/Mon-Pad.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/PettyMiggzy/Mon-Pad/issues"
+  },
+  "homepage": "https://github.com/PettyMiggzy/Mon-Pad#readme"
 }
