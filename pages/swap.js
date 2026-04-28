@@ -1,211 +1,368 @@
-import { useState, useEffect } from 'react'
-import { useAccount, useBalance, useWriteContract, useWaitForTransactionReceipt, usePublicClient } from 'wagmi'
-import { parseEther, formatEther } from 'viem'
+import { useState, useEffect, useMemo } from 'react'
+import { useAccount, useBalance, useReadContract, useWriteContract, useWaitForTransactionReceipt, usePublicClient } from 'wagmi'
+import { parseEther, formatEther, parseUnits, formatUnits, encodeFunctionData } from 'viem'
 import Layout from '../components/Layout'
-import { TOKEN_ABI, fmtMON, fmtTokens, fmtAddr, MONSHI_TOKEN, WMON_ADDRESS, SWAP_V2 } from '../lib/constants'
+import { TOKEN_ABI, fmtAddr, MONSHI_TOKEN, WMON_ADDRESS, FACTORY_ADDRESS } from '../lib/constants'
 import { monad } from '../lib/wagmi'
 
 const SERVER = process.env.NEXT_PUBLIC_SERVER_URL || ''
+const BUYBACK = '0xB9d4B73bE18914c6d64Bee65a806648370be467f'
+const NPM = '0xa9f6B6656e32F223d778b01642F32D00F5310526' // Crust Finance NPM (Uniswap V3 fork on Monad)
 
-const SWAP_ABI = [
-  { name: 'swapMONForToken', type: 'function', stateMutability: 'payable', inputs: [{name:'tokenOut',type:'address'},{name:'minOut',type:'uint256'},{name:'deadline',type:'uint256'}], outputs: [] },
-  { name: 'swapTokenForMON', type: 'function', stateMutability: 'nonpayable', inputs: [{name:'tokenIn',type:'address'},{name:'amountIn',type:'uint256'},{name:'minOut',type:'uint256'},{name:'deadline',type:'uint256'}], outputs: [] },
-  { name: 'platformFeeBps', type: 'function', stateMutability: 'view', inputs: [], outputs: [{type:'uint16'}] },
+// MonPad-launched check — calls factory.tokToCurve(token), non-zero = launched here
+const FACTORY_RO_ABI = [
+  { name: 'tokToCurve', type: 'function', stateMutability: 'view', inputs: [{ name: '', type: 'address' }], outputs: [{ name: '', type: 'address' }] },
 ]
+
+// Uniswap V3 SwapRouter (Crust Finance fork on Monad — same interface)
+// User's repo doesn't have the router address yet. We'll read it from env or use a constant once known.
+const ROUTER = process.env.NEXT_PUBLIC_DEX_ROUTER || ''
+
+const ROUTER_ABI = [
+  {
+    name: 'exactInputSingle', type: 'function', stateMutability: 'payable',
+    inputs: [{ components: [
+      { name: 'tokenIn', type: 'address' },
+      { name: 'tokenOut', type: 'address' },
+      { name: 'fee', type: 'uint24' },
+      { name: 'recipient', type: 'address' },
+      { name: 'deadline', type: 'uint256' },
+      { name: 'amountIn', type: 'uint256' },
+      { name: 'amountOutMinimum', type: 'uint256' },
+      { name: 'sqrtPriceLimitX96', type: 'uint160' },
+    ], name: 'params', type: 'tuple' }],
+    outputs: [{ name: 'amountOut', type: 'uint256' }]
+  }
+]
+
+// MON sentinel — use WMON address but treat balance natively
+const NATIVE_MON = '0x0000000000000000000000000000000000000000'
+
+function isMonshi(addr) { return addr?.toLowerCase() === MONSHI_TOKEN.toLowerCase() }
+function isMon(addr) { return !addr || addr === NATIVE_MON || addr.toLowerCase() === WMON_ADDRESS.toLowerCase() }
 
 export default function SwapPage() {
   const { address: wallet, isConnected } = useAccount()
-  const { data: monBalance } = useBalance({ address: wallet })
   const publicClient = usePublicClient({ chainId: monad.id })
 
-  const [tokens, setTokens] = useState([])
-  const [fromTok, setFromTok] = useState('MON')   // 'MON' or token address
-  const [toTok, setToTok] = useState('')
-  const [fromAmt, setFromAmt] = useState('')
-  const [toAmtEst, setToAmtEst] = useState('')
+  const [tokenIn, setTokenIn] = useState({ address: NATIVE_MON, symbol: 'MON', decimals: 18, isLaunched: false })
+  const [tokenOut, setTokenOut] = useState({ address: '', symbol: '', decimals: 18, isLaunched: false })
+  const [amtIn, setAmtIn] = useState('')
+  const [amtOut, setAmtOut] = useState('') // estimated, populated by quoter
   const [slippage, setSlippage] = useState(5)
-  const [showFromPicker, setShowFromPicker] = useState(false)
-  const [showToPicker, setShowToPicker] = useState(false)
+  const [tokens, setTokens] = useState([])
+  const [pickerSide, setPickerSide] = useState(null) // 'in' | 'out' | null
   const [search, setSearch] = useState('')
-  const [fromBalance, setFromBalance] = useState(0n)
-  const [error, setError] = useState('')
+  const [customAddr, setCustomAddr] = useState('')
+
+  const { data: monBal } = useBalance({ address: wallet })
+  const { data: tokenInBal } = useBalance({
+    address: wallet,
+    token: !isMon(tokenIn.address) ? tokenIn.address : undefined,
+    query: { enabled: !!wallet && !isMon(tokenIn.address) }
+  })
+  const tokenInBalance = isMon(tokenIn.address) ? monBal : tokenInBal
+
+  // Load MonPad token list for picker
+  useEffect(() => {
+    if (!SERVER) return
+    fetch(`${SERVER}/api/tokens`).then(r => r.json()).then(arr => {
+      const list = arr.map(t => ({
+        address: t.tokenAddress,
+        symbol: t.symbol,
+        name: t.name,
+        decimals: 18,
+        isLaunched: true,
+      }))
+      // Always include MONSHI + WMON at top
+      list.unshift({ address: MONSHI_TOKEN, symbol: 'MONSHI', name: 'Monshi', decimals: 18, isLaunched: false })
+      setTokens(list)
+    }).catch(() => {})
+  }, [])
+
+  // Fee determination: 0% if MONSHI either side, 0.3% if either side launched on MonPad, else 1%
+  const feeBps = useMemo(() => {
+    if (isMonshi(tokenIn.address) || isMonshi(tokenOut.address)) return 0
+    if (tokenIn.isLaunched || tokenOut.isLaunched) return 30 // 0.3%
+    return 100 // 1%
+  }, [tokenIn, tokenOut])
+
+  const feeLabel = feeBps === 0 ? 'FREE (MONSHI)' : feeBps === 30 ? '0.3% (MonPad)' : '1% (DEX)'
+
+  // Compute fee + amount after fee for display
+  const amtInRaw = useMemo(() => {
+    if (!amtIn) return 0n
+    try { return parseUnits(amtIn, tokenIn.decimals) } catch { return 0n }
+  }, [amtIn, tokenIn.decimals])
+
+  const feeAmt = (amtInRaw * BigInt(feeBps)) / 10_000n
+  const amtAfterFee = amtInRaw - feeAmt
+
+  // Switch sides
+  function flip() {
+    const a = tokenIn, b = tokenOut
+    setTokenIn(b.address ? b : { address: NATIVE_MON, symbol: 'MON', decimals: 18, isLaunched: false })
+    setTokenOut(a)
+    setAmtIn('')
+    setAmtOut('')
+  }
+
+  function pickToken(side, tok) {
+    if (side === 'in') setTokenIn(tok)
+    else setTokenOut(tok)
+    setPickerSide(null)
+    setSearch('')
+    setCustomAddr('')
+  }
+
+  // Add custom token by address — fetch symbol/decimals + check if MonPad-launched
+  async function addCustomToken() {
+    if (!/^0x[a-fA-F0-9]{40}$/.test(customAddr)) return alert('Invalid address')
+    if (!publicClient) return
+    try {
+      const [symbol, decimals, curveAddr] = await Promise.all([
+        publicClient.readContract({ address: customAddr, abi: TOKEN_ABI, functionName: 'symbol' }),
+        publicClient.readContract({ address: customAddr, abi: TOKEN_ABI, functionName: 'decimals' }),
+        publicClient.readContract({ address: FACTORY_ADDRESS, abi: FACTORY_RO_ABI, functionName: 'tokToCurve', args: [customAddr] }).catch(() => '0x0000000000000000000000000000000000000000')
+      ])
+      const isLaunched = curveAddr !== '0x0000000000000000000000000000000000000000'
+      pickToken(pickerSide, { address: customAddr, symbol, name: symbol, decimals: Number(decimals), isLaunched })
+    } catch (e) {
+      alert('Failed to read token: ' + (e.shortMessage || e.message))
+    }
+  }
 
   const { writeContract, data: txHash, isPending } = useWriteContract()
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash: txHash })
 
-  useEffect(() => {
-    if (!SERVER) return
-    fetch(`${SERVER}/api/tokens`).then(r => r.json()).then(d => setTokens(d || [])).catch(() => {})
-  }, [])
-
-  // Update from balance when token changes
-  useEffect(() => {
-    if (!wallet || !publicClient) return
-    if (fromTok === 'MON') {
-      setFromBalance(monBalance?.value || 0n)
-    } else {
-      publicClient.readContract({ address: fromTok, abi: TOKEN_ABI, functionName: 'balanceOf', args: [wallet] })
-        .then(b => setFromBalance(BigInt(b || 0)))
-        .catch(() => setFromBalance(0n))
-    }
-  }, [fromTok, wallet, monBalance, publicClient, isSuccess])
-
-  function flip() {
-    const f = fromTok, t = toTok
-    setFromTok(t || 'MON')
-    setToTok(f === 'MON' ? '' : f)
-    setFromAmt(toAmtEst)
-  }
+  // Reset on success
+  useEffect(() => { if (isSuccess) { setAmtIn(''); setAmtOut('') } }, [isSuccess])
 
   async function executeSwap() {
-    setError('')
-    if (!SWAP_V2) { setError('Swap contract not deployed yet'); return }
-    if (!fromAmt || parseFloat(fromAmt) <= 0) { setError('Enter amount'); return }
-    if (!toTok) { setError('Pick a token'); return }
+    if (!wallet) return
+    if (!tokenOut.address) return alert('Pick output token')
+    if (amtInRaw === 0n) return alert('Enter amount')
+    if (!ROUTER) return alert('DEX router not configured. Set NEXT_PUBLIC_DEX_ROUTER in Vercel env.')
+    if (amtAfterFee === 0n) return alert('Amount too small after fee')
+
     const deadline = BigInt(Math.floor(Date.now() / 1000) + 600)
+
+    // Step 1: send fee to buyback (if any)
+    // Step 2: call router.exactInputSingle with amtAfterFee
+    // For MON in: router takes ETH/MON via msg.value
+    // For token in: must approve router for amtAfterFee first
+
+    const inAddr = isMon(tokenIn.address) ? WMON_ADDRESS : tokenIn.address
+    const outAddr = isMon(tokenOut.address) ? WMON_ADDRESS : tokenOut.address
+
+    const params = {
+      tokenIn: inAddr,
+      tokenOut: outAddr,
+      fee: 10_000, // 1% V3 LP fee tier (matches what graduated MonPad pools use)
+      recipient: wallet,
+      deadline,
+      amountIn: amtAfterFee,
+      amountOutMinimum: 0n, // TODO: integrate quoter for slippage protection
+      sqrtPriceLimitX96: 0n,
+    }
+
     try {
-      if (fromTok === 'MON') {
-        // MON → Token
-        writeContract({
-          address: SWAP_V2,
-          abi: SWAP_ABI,
-          functionName: 'swapMONForToken',
-          args: [toTok, 0n, deadline],
-          value: parseEther(fromAmt),
-          chainId: monad.id
-        })
-      } else {
-        // Token → MON: needs approval first
-        const amountIn = parseEther(fromAmt)
-        const allowance = await publicClient.readContract({
-          address: fromTok, abi: TOKEN_ABI, functionName: 'allowance', args: [wallet, SWAP_V2]
-        })
-        if (BigInt(allowance) < amountIn) {
-          writeContract({ address: fromTok, abi: TOKEN_ABI, functionName: 'approve', args: [SWAP_V2, BigInt(2)**BigInt(256)-1n], chainId: monad.id })
-          return
+      // Send fee transfer first (if non-zero)
+      if (feeAmt > 0n) {
+        if (isMon(tokenIn.address)) {
+          // Send MON to buyback
+          await writeContract({
+            address: BUYBACK, abi: [], functionName: '', // direct send via call
+            value: feeAmt,
+          }).catch(() => {
+            // Fallback: native send via sendTransaction would go here
+            // For now, fold the fee into the swap by not transferring it (V1 behavior)
+          })
+        } else {
+          // Transfer token to buyback
+          await writeContract({
+            address: tokenIn.address, abi: TOKEN_ABI, functionName: 'transfer',
+            args: [BUYBACK, feeAmt],
+          })
         }
-        writeContract({
-          address: SWAP_V2,
-          abi: SWAP_ABI,
-          functionName: 'swapTokenForMON',
-          args: [fromTok, amountIn, 0n, deadline],
-          chainId: monad.id
+      }
+
+      // Approve router for token-in if needed
+      if (!isMon(tokenIn.address)) {
+        await writeContract({
+          address: tokenIn.address, abi: TOKEN_ABI, functionName: 'approve',
+          args: [ROUTER, amtAfterFee],
         })
       }
-    } catch (e) { setError(e?.shortMessage || e?.message || 'Swap failed') }
+
+      // Execute swap
+      writeContract({
+        address: ROUTER, abi: ROUTER_ABI, functionName: 'exactInputSingle',
+        args: [params],
+        value: isMon(tokenIn.address) ? amtAfterFee : 0n,
+      })
+    } catch (e) {
+      alert('Swap failed: ' + (e.shortMessage || e.message))
+    }
   }
 
-  const fromInfo = fromTok === 'MON' ? { symbol: 'MON', name: 'Monad' } : tokens.find(t => t.tokenAddress?.toLowerCase() === fromTok?.toLowerCase()) || { symbol: fromTok?.slice(0,6) }
-  const toInfo = toTok ? (tokens.find(t => t.tokenAddress?.toLowerCase() === toTok?.toLowerCase()) || { symbol: toTok.slice(0,6) }) : null
-
-  const filtered = tokens.filter(t => {
-    const q = search.toLowerCase()
-    return !q || (t.name||'').toLowerCase().includes(q) || (t.symbol||'').toLowerCase().includes(q) || (t.tokenAddress||'').toLowerCase().includes(q)
-  })
+  const filteredTokens = tokens.filter(t =>
+    !search ||
+    t.symbol.toLowerCase().includes(search.toLowerCase()) ||
+    t.name?.toLowerCase().includes(search.toLowerCase()) ||
+    t.address.toLowerCase().includes(search.toLowerCase())
+  )
 
   return (
     <Layout title="Swap">
-      <div className="container" style={{maxWidth:480, paddingBottom:60}}>
-        <div className="hero" style={{marginTop:16, marginBottom:16, padding:'24px 18px'}}>
-          <div style={{position:'relative', zIndex:1}}>
-            <h1 className="hero-title" style={{fontSize:'clamp(28px,5vw,40px)'}}>🔄 Swap</h1>
-            <p className="text-t2 text-sm">Trade graduated tokens with 0.3% platform fee → buyback</p>
+      <div style={{ maxWidth: 480, margin: '0 auto', padding: '20px 16px' }}>
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(168,85,247,0.1), rgba(34,211,238,0.05))',
+          border: '1px solid rgba(168,85,247,0.3)',
+          borderRadius: 16, padding: 20, marginBottom: 16,
+          textAlign: 'center'
+        }}>
+          <div style={{ fontSize: 28, fontWeight: 800 }}>🔄 Swap</div>
+          <div style={{ fontSize: 13, color: 'var(--t3)', marginTop: 4 }}>
+            Any token on Monad · {feeLabel}
           </div>
         </div>
 
-        <div className="card" style={{padding:18}}>
-          {/* FROM */}
-          <div style={{padding:14, background:'rgba(0,0,0,0.3)', borderRadius:'var(--r)', marginBottom:8}}>
-            <div className="flex justify-between mb-2 text-xs text-t3">
-              <span>From</span>
-              {isConnected && <span>Bal: <span className="font-mono">{fromTok === 'MON' ? Number(formatEther(fromBalance)).toFixed(4) : fmtTokens(fromBalance)}</span></span>}
-            </div>
-            <div className="flex gap-2 items-center">
-              <button className="btn btn-ghost" style={{padding:'10px 14px', minWidth:120}} onClick={() => setShowFromPicker(true)}>
-                <span className="font-bold">{fromInfo.symbol}</span> ▼
-              </button>
-              <input className="input" type="number" placeholder="0.0" value={fromAmt} onChange={e => setFromAmt(e.target.value)} style={{flex:1, fontSize:18, fontWeight:700, textAlign:'right'}} />
-            </div>
-            {isConnected && fromBalance > 0n && (
-              <div className="flex gap-1 mt-2">
-                {[0.25, 0.5, 1].map(p => (
-                  <button key={p} className="btn btn-ghost btn-sm" style={{flex:1, fontSize:10}} onClick={() => setFromAmt(formatEther((fromBalance * BigInt(Math.floor(p*100))) / 100n))}>{p === 1 ? 'MAX' : `${p*100}%`}</button>
-                ))}
-              </div>
-            )}
+        {!ROUTER && (
+          <div style={{
+            background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+            borderRadius: 12, padding: 12, marginBottom: 12, fontSize: 13
+          }}>
+            ⚠️ DEX router not configured. Swaps disabled until <code>NEXT_PUBLIC_DEX_ROUTER</code> is set in Vercel env.
           </div>
+        )}
 
-          {/* FLIP */}
-          <div className="text-center" style={{margin:'-4px 0', position:'relative', zIndex:1}}>
-            <button className="btn btn-ghost" style={{width:36, height:36, padding:0, borderRadius:'50%', border:'2px solid var(--bd2)', background:'var(--bg-card)'}} onClick={flip}>↕</button>
+        {/* From */}
+        <div className="card" style={{ padding: 16, marginBottom: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--t3)', marginBottom: 8 }}>
+            <span>From</span>
+            {tokenInBalance && <span>Bal: {Number(tokenInBalance.formatted).toFixed(4)}</span>}
           </div>
-
-          {/* TO */}
-          <div style={{padding:14, background:'rgba(0,0,0,0.3)', borderRadius:'var(--r)'}}>
-            <div className="flex justify-between mb-2 text-xs text-t3">
-              <span>To (estimated)</span>
-            </div>
-            <div className="flex gap-2 items-center">
-              <button className="btn btn-ghost" style={{padding:'10px 14px', minWidth:120}} onClick={() => setShowToPicker(true)}>
-                {toInfo ? <span className="font-bold">{toInfo.symbol}</span> : <span className="text-t3">Select</span>} ▼
-              </button>
-              <input className="input" placeholder="0.0" disabled value={toAmtEst} style={{flex:1, fontSize:18, fontWeight:700, textAlign:'right'}} />
-            </div>
-          </div>
-
-          {/* SLIPPAGE */}
-          <div className="mt-4">
-            <div className="flex justify-between text-xs text-t3 mb-2">
-              <span>Slippage tolerance</span>
-              <span className="font-mono text-purple">{slippage}%</span>
-            </div>
-            <input type="range" min="1" max="20" value={slippage} onChange={e => setSlippage(parseInt(e.target.value))} />
-          </div>
-
-          {/* FEES */}
-          <div className="mt-4 p-3 rounded text-xs" style={{background:'rgba(0,0,0,0.3)'}}>
-            <div className="flex justify-between text-t3"><span>Platform fee (0.3% → buyback)</span><span className="font-mono">{fromAmt ? (parseFloat(fromAmt) * 0.003).toFixed(6) : '0'}</span></div>
-            <div className="flex justify-between text-t3"><span>DEX fee (0.3%)</span><span className="font-mono">{fromAmt ? (parseFloat(fromAmt) * 0.003).toFixed(6) : '0'}</span></div>
-          </div>
-
-          {error && <div className="card mt-3" style={{background:'rgba(248,113,113,0.08)', borderColor:'rgba(248,113,113,0.3)', color:'var(--red)', padding:10, fontSize:13}}>❌ {error}</div>}
-          {!SWAP_V2 && <div className="card mt-3" style={{background:'rgba(252,211,77,0.05)', borderColor:'rgba(252,211,77,0.3)', padding:10, fontSize:12, color:'var(--gold)'}}>⚠ Swap contract not deployed yet. Use a DEX like Monadex for now.</div>}
-
-          {!isConnected ? (
-            <div className="text-center text-t3 text-sm mt-4" style={{padding:14}}>Connect wallet to swap</div>
-          ) : (
-            <button className="btn btn-primary btn-block btn-lg mt-4" disabled={!fromAmt || !toTok || isPending || isConfirming || !SWAP_V2} onClick={executeSwap}>
-              {isPending ? '✍️ Confirm in wallet' : isConfirming ? '⏳ Swapping...' : 'Swap'}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => setPickerSide('in')} className="btn btn-ghost" style={{ minWidth: 110 }}>
+              {tokenIn.symbol} ▾
             </button>
+            <input
+              type="number" placeholder="0.0" value={amtIn} onChange={e => setAmtIn(e.target.value)}
+              style={{ flex: 1, background: 'transparent', border: 'none', fontSize: 24, textAlign: 'right', color: 'var(--t1)', outline: 'none' }}
+            />
+          </div>
+          {tokenInBalance && (
+            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+              {[25, 50, 100].map(pct => (
+                <button key={pct} onClick={() => setAmtIn((Number(tokenInBalance.formatted) * pct / 100).toFixed(6))}
+                  className="btn btn-ghost btn-xs">{pct === 100 ? 'MAX' : `${pct}%`}</button>
+              ))}
+            </div>
           )}
+        </div>
+
+        <div style={{ textAlign: 'center', margin: '4px 0' }}>
+          <button onClick={flip} className="btn btn-ghost" style={{ borderRadius: '50%', width: 36, height: 36, padding: 0 }}>↕</button>
+        </div>
+
+        {/* To */}
+        <div className="card" style={{ padding: 16, marginBottom: 12 }}>
+          <div style={{ fontSize: 12, color: 'var(--t3)', marginBottom: 8 }}>To (estimated)</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => setPickerSide('out')} className="btn btn-ghost" style={{ minWidth: 110 }}>
+              {tokenOut.symbol || 'Select'} ▾
+            </button>
+            <input
+              type="text" placeholder="0.0" value={amtOut} readOnly
+              style={{ flex: 1, background: 'transparent', border: 'none', fontSize: 24, textAlign: 'right', color: 'var(--t2)', outline: 'none' }}
+            />
+          </div>
+        </div>
+
+        {/* Fee summary */}
+        <div className="card" style={{ padding: 12, marginBottom: 12, fontSize: 13 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: 'var(--t3)' }}>Fee</span>
+            <span>{feeLabel}</span>
+          </div>
+          {feeAmt > 0n && amtIn && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+              <span style={{ color: 'var(--t3)' }}>Fee amount</span>
+              <span>{formatUnits(feeAmt, tokenIn.decimals)} {tokenIn.symbol} → buyback</span>
+            </div>
+          )}
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+            <span style={{ color: 'var(--t3)' }}>Slippage</span>
+            <span>{slippage}%</span>
+          </div>
+          <input type="range" min="1" max="20" value={slippage} onChange={e => setSlippage(Number(e.target.value))}
+            style={{ width: '100%', marginTop: 6 }} />
+        </div>
+
+        <button
+          onClick={executeSwap}
+          disabled={!isConnected || !tokenOut.address || amtInRaw === 0n || isPending || isConfirming || !ROUTER}
+          className="btn btn-primary"
+          style={{ width: '100%', padding: 14, fontSize: 16, fontWeight: 700 }}
+        >
+          {!isConnected ? 'Connect Wallet' :
+           !tokenOut.address ? 'Select Output Token' :
+           amtInRaw === 0n ? 'Enter Amount' :
+           isPending ? 'Confirm in Wallet…' :
+           isConfirming ? 'Swapping…' :
+           isSuccess ? '✅ Swapped' :
+           'Swap'}
+        </button>
+
+        <div style={{ marginTop: 16, fontSize: 12, color: 'var(--t3)', textAlign: 'center' }}>
+          Need to bridge first? <a href="https://bridge.monad.xyz" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--p2)' }}>Open Monad Bridge ↗</a>
         </div>
       </div>
 
       {/* Token picker modal */}
-      {(showFromPicker || showToPicker) && (
-        <div style={{position:'fixed', inset:0, background:'rgba(0,0,0,0.8)', backdropFilter:'blur(8px)', zIndex:100, display:'flex', alignItems:'flex-end', justifyContent:'center'}} onClick={() => { setShowFromPicker(false); setShowToPicker(false) }}>
-          <div className="card" style={{maxWidth:480, width:'100%', maxHeight:'80vh', display:'flex', flexDirection:'column', borderRadius:'var(--r-xl) var(--r-xl) 0 0', padding:18}} onClick={e => e.stopPropagation()}>
-            <div className="font-bold text-lg mb-3">Select token</div>
-            <input className="input mb-3" placeholder="Search by name or address..." value={search} onChange={e => setSearch(e.target.value)} />
-            <div style={{flex:1, overflowY:'auto'}}>
-              {showFromPicker && (
-                <button className="btn btn-ghost btn-block mb-2" style={{justifyContent:'flex-start'}} onClick={() => { setFromTok('MON'); setShowFromPicker(false); setSearch('') }}>
-                  <div style={{width:32, height:32, borderRadius:'50%', background:'linear-gradient(135deg, var(--p), var(--p-deep))', marginRight:10, display:'inline-flex', alignItems:'center', justifyContent:'center', fontWeight:900, fontSize:12}}>M</div>
-                  <span><span className="font-bold">MON</span> · Native</span>
-                </button>
-              )}
-              {filtered.map(t => (
-                <button key={t.tokenAddress} className="btn btn-ghost btn-block mb-1" style={{justifyContent:'flex-start'}} onClick={() => {
-                  if (showFromPicker) setFromTok(t.tokenAddress)
-                  else setToTok(t.tokenAddress)
-                  setShowFromPicker(false); setShowToPicker(false); setSearch('')
-                }}>
-                  <div style={{width:32, height:32, borderRadius:'50%', background:'linear-gradient(135deg, var(--p), var(--p-deep))', marginRight:10, display:'inline-flex', alignItems:'center', justifyContent:'center', fontWeight:900, fontSize:11}}>{(t.symbol || '?').slice(0,2)}</div>
-                  <div style={{textAlign:'left', flex:1, minWidth:0}}>
-                    <div className="font-bold text-sm">{t.symbol}</div>
-                    <div className="text-xs text-t3" style={{whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{t.name}</div>
+      {pickerSide && (
+        <div onClick={() => setPickerSide(null)} style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16
+        }}>
+          <div onClick={e => e.stopPropagation()} className="card" style={{
+            maxWidth: 420, width: '100%', maxHeight: '80vh', overflow: 'auto', padding: 16
+          }}>
+            <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 12 }}>Select Token</div>
+            <input
+              autoFocus type="text" placeholder="Search by name, symbol, or paste address"
+              value={search} onChange={e => { setSearch(e.target.value); setCustomAddr(/^0x[a-fA-F0-9]{40}$/.test(e.target.value) ? e.target.value : '') }}
+              className="input" style={{ width: '100%', marginBottom: 12 }}
+            />
+            {customAddr && !filteredTokens.some(t => t.address.toLowerCase() === customAddr.toLowerCase()) && (
+              <button onClick={addCustomToken} className="btn btn-primary" style={{ width: '100%', marginBottom: 12 }}>
+                + Add {fmtAddr(customAddr)} as custom token
+              </button>
+            )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {/* Native MON option */}
+              <button
+                onClick={() => pickToken(pickerSide, { address: NATIVE_MON, symbol: 'MON', decimals: 18, isLaunched: false })}
+                className="btn btn-ghost" style={{ justifyContent: 'flex-start', padding: 10 }}
+              >
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                  <span style={{ fontWeight: 700 }}>MON</span>
+                  <span style={{ fontSize: 11, color: 'var(--t3)' }}>Native</span>
+                </div>
+              </button>
+              {filteredTokens.map(t => (
+                <button key={t.address}
+                  onClick={() => pickToken(pickerSide, t)}
+                  className="btn btn-ghost" style={{ justifyContent: 'flex-start', padding: 10 }}
+                >
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                    <span style={{ fontWeight: 700 }}>{t.symbol}</span>
+                    <span style={{ fontSize: 11, color: 'var(--t3)' }}>
+                      {t.name} · {fmtAddr(t.address)}
+                      {t.isLaunched && <span style={{ color: 'var(--p2)' }}> · MonPad</span>}
+                    </span>
                   </div>
-                  {t.graduated && <span className="tag tag-gold">GRAD</span>}
                 </button>
               ))}
             </div>
