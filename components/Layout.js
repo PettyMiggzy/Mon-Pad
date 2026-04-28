@@ -50,7 +50,7 @@ export default function Layout({ children, showBack, title, hideHero }) {
               </button>
             ) : (
               <Link href="/" className="brand">
-                <img src="/monpad-logo.png" alt="MonPad" className="brand-logo" style={{width:32, height:32, objectFit:'contain', borderRadius:8}} />
+                <img src="/monpad-logo.png" alt="MonPad" className="brand-logo" style={{width:96, height:96, objectFit:'contain', borderRadius:12}} />
                 <div className="brand-name">Mon<span className="accent">Pad</span></div>
               </Link>
             )}
