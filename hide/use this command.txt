@@ -1,1 +1,0 @@
-scp C:\Users\singl\Desktop\monpad\this\monpad_final_clean\hide\blocklist.json root@138.68.248.211:/root/monpad-server/blocklist.json

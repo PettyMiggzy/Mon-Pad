@@ -20,3 +20,6 @@ deploy/v2/deployed.json
 
 # OS
 Thumbs.db
+
+# operational notes / leak shielding
+hide/
