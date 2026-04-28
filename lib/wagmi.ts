@@ -19,7 +19,10 @@ export const monad = defineChain({
   blockExplorers: { default: { name: 'Monadscan', url: 'https://monadscan.com' } },
 })
 
-export const WC_PROJECT_ID = process.env.NEXT_PUBLIC_WC_PROJECT_ID || 'cc1358b5e311a1f844c1d6482633c78d'
+if (!process.env.NEXT_PUBLIC_WC_PROJECT_ID) {
+  throw new Error('NEXT_PUBLIC_WC_PROJECT_ID env required — refusing to use leaked hardcoded fallback. Create new project at cloud.walletconnect.com.')
+}
+export const WC_PROJECT_ID = process.env.NEXT_PUBLIC_WC_PROJECT_ID
 
 export const wagmiConfig = getDefaultConfig({
   appName: 'MonPad',
