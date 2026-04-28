@@ -50,7 +50,7 @@ export default function Layout({ children, showBack, title, hideHero }) {
               </button>
             ) : (
               <Link href="/" className="brand">
-                <div className="brand-logo">M</div>
+                <img src="/monpad-logo.png" alt="MonPad" className="brand-logo" style={{width:32, height:32, objectFit:'contain', borderRadius:8}} />
                 <div className="brand-name">Mon<span className="accent">Pad</span></div>
               </Link>
             )}
@@ -63,6 +63,10 @@ export default function Layout({ children, showBack, title, hideHero }) {
                 {item.label}
               </Link>
             ))}
+            <a href="https://bridge.monad.xyz" target="_blank" rel="noopener noreferrer" className="topbar-link" style={{display:'inline-flex',alignItems:'center',gap:4}}>
+              Bridge
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12"><path d="M7 17L17 7M17 7H7M17 7V17"/></svg>
+            </a>
           </nav>
 
           <div className="topbar-actions">
