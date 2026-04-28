@@ -5,8 +5,11 @@ const nextConfig = {
   typescript: { ignoreBuildErrors: true },
   images: {
     remotePatterns: [
-      { protocol: 'http', hostname: '**', port: '', pathname: '/uploads/**' },
-      { protocol: 'https', hostname: '**', pathname: '/uploads/**' },
+      { protocol: 'https', hostname: 'api.monpad.net', pathname: '/uploads/**' },
+      { protocol: 'https', hostname: 'monpad.net', pathname: '/uploads/**' },
+      { protocol: 'https', hostname: 'www.monpad.net', pathname: '/uploads/**' },
+      { protocol: 'https', hostname: 'i.imgur.com' },
+      { protocol: 'https', hostname: 'pbs.twimg.com' },
     ],
   },
   env: {
