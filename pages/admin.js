@@ -161,7 +161,7 @@ export default function AdminPanel() {
           <div className="text-xs text-t3 mb-2">Currently routing to: <span className="font-mono text-purple">{fmtAddr(config.getRewardRecipient || '')}</span></div>
           <div className="flex gap-2">
             <input className="input" placeholder="0xStakingHubAddress (or empty for buyback)" value={edits.rewardRouter} onChange={e => setEdits({...edits, rewardRouter:e.target.value})} />
-            <button className="btn btn-primary" disabled={isPending || isConfirming} onClick={() => call('setRewardRouter', [edits.rewardRouter || '0x0000000000000000000000000000000000000000'])}>Set</button>
+            <button className="btn btn-primary" disabled={isPending || isConfirming} onClick={() => { const v = (edits.rewardRouter || '').trim(); if (!v) { if (!confirm('Empty input will route rewards to the buyback wallet (sends 0x0 to setRewardRouter). Continue?')) return; call('setRewardRouter', ['0x0000000000000000000000000000000000000000']); return; } if (!/^0x[a-fA-F0-9]{40}$/.test(v)) { alert('Invalid address. Must be 0x followed by 40 hex chars.'); return; } call('setRewardRouter', [v]); }}>Set</button>
           </div>
         </div>
 

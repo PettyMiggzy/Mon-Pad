@@ -1,12 +1,11 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useAccount, useBalance, useReadContract, useWriteContract, useWaitForTransactionReceipt, usePublicClient } from 'wagmi'
+import { useAccount, useBalance, useReadContract, useWriteContract, useWaitForTransactionReceipt, usePublicClient, useSendTransaction } from 'wagmi'
 import { parseEther, formatEther, parseUnits, formatUnits, encodeFunctionData } from 'viem'
 import Layout from '../components/Layout'
-import { TOKEN_ABI, fmtAddr, MONSHI_TOKEN, WMON_ADDRESS, FACTORY_ADDRESS } from '../lib/constants'
+import { TOKEN_ABI, fmtAddr, MONSHI_TOKEN, WMON_ADDRESS, FACTORY_ADDRESS, BUYBACK_WALLET } from '../lib/constants'
 import { monad } from '../lib/wagmi'
 
 const SERVER = process.env.NEXT_PUBLIC_SERVER_URL || ''
-const BUYBACK = '0xB9d4B73bE18914c6d64Bee65a806648370be467f'
 const NPM = '0xa9f6B6656e32F223d778b01642F32D00F5310526' // Crust Finance NPM (Uniswap V3 fork on Monad)
 
 // MonPad-launched check — calls factory.tokToCurve(token), non-zero = launched here
@@ -42,6 +41,17 @@ function isMonshi(addr) { return addr?.toLowerCase() === MONSHI_TOKEN.toLowerCas
 function isMon(addr) { return !addr || addr === NATIVE_MON || addr.toLowerCase() === WMON_ADDRESS.toLowerCase() }
 
 export default function SwapPage() {
+  // Swap is disabled until slippage protection (quoter) is integrated.
+  // See DEPLOY-V2.md DEPLOY_SWAP=0 - amountOutMinimum=0n is sandwich-vulnerable.
+  return (
+    <Layout title="Swap">
+      <div style={{ maxWidth: 480, margin: "60px auto", padding: 32, textAlign: "center", border: "1px solid #333", borderRadius: 12 }}>
+        <h2 style={{ marginTop: 0 }}>Swap - coming soon</h2>
+        <p style={{ opacity: 0.8, lineHeight: 1.6 }}>The swap router is being upgraded with proper slippage protection. For now, please use an external DEX. We will re-enable this page once V2 is fully audited.</p>
+      </div>
+    </Layout>
+  )
+  // eslint-disable-next-line no-unreachable
   const { address: wallet, isConnected } = useAccount()
   const publicClient = usePublicClient({ chainId: monad.id })
 
@@ -133,6 +143,7 @@ export default function SwapPage() {
   }
 
   const { writeContract, data: txHash, isPending } = useWriteContract()
+  const { sendTransactionAsync } = useSendTransaction()
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash: txHash })
 
   // Reset on success
@@ -171,18 +182,12 @@ export default function SwapPage() {
       if (feeAmt > 0n) {
         if (isMon(tokenIn.address)) {
           // Send MON to buyback
-          await writeContract({
-            address: BUYBACK, abi: [], functionName: '', // direct send via call
-            value: feeAmt,
-          }).catch(() => {
-            // Fallback: native send via sendTransaction would go here
-            // For now, fold the fee into the swap by not transferring it (V1 behavior)
-          })
+          await sendTransactionAsync({ to: BUYBACK_WALLET, value: feeAmt })
         } else {
           // Transfer token to buyback
           await writeContract({
             address: tokenIn.address, abi: TOKEN_ABI, functionName: 'transfer',
-            args: [BUYBACK, feeAmt],
+            args: [BUYBACK_WALLET, feeAmt],
           })
         }
       }

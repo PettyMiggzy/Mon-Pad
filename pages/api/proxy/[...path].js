@@ -4,7 +4,7 @@ const SERVER = process.env.NEXT_PUBLIC_SERVER_URL || 'https://api.monpad.net'
 
 export default async function handler(req, res) {
   // Block admin/upload paths — these must hit the backend directly with proper auth, never via the public proxy
-  const blocked = ['admin/', 'admin\', '/admin', 'upload/'];
+  const blocked = ['admin/', 'admin', '/admin', 'upload/'];
   const requestPath = (req.query.path || []).join('/');
   if (blocked.some(b => requestPath.startsWith(b) || requestPath.includes(b))) {
     return res.status(404).end();
