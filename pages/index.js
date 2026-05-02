@@ -145,8 +145,8 @@ export default function Home() {
             <h1 className="hero-title">Launch on the fairest pad on Monad</h1>
             <p className="hero-sub">No presale. No insider games. <strong style={{color:'var(--p2)'}}>Devs earn 2% of all volume forever.</strong></p>
             <div className="flex gap-3 justify-center" style={{flexWrap:'wrap'}}>
-              <button onClick={() => router.push('/create')} className="btn btn-primary btn-lg">🚀 Launch Token</button>
-              <button onClick={() => router.push('/staking')} className="btn btn-cyan btn-lg">🥩 Stake & Earn</button>
+              <Link href="/create" className="btn btn-primary btn-lg" style={{textDecoration:'none'}}>🚀 Launch Token</Link>
+              <Link href="/staking" className="btn btn-cyan btn-lg" style={{textDecoration:'none'}}>🥩 Stake & Earn</Link>
             </div>
             <div className="flex gap-6 justify-center mt-6" style={{flexWrap:'wrap', fontSize:13}}>
               <div className="text-center">
