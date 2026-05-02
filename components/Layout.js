@@ -53,7 +53,7 @@ export default function Layout({ children, showBack, title, hideHero }) {
                 <img
                   src="/Pad.png"
                   alt="MonPad"
-                  style={{ height: 36, width: 'auto', maxWidth: 200, objectFit: 'contain', display: 'block' }}
+                  style={{ height: 48, width: 'auto', maxWidth: 240, objectFit: 'contain', display: 'block' }}
                 />
               </Link>
             )}

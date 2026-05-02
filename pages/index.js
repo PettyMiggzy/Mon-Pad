@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/router'
 import Layout from '../components/Layout'
+import Link from 'next/link'
 import { fmtUSD, fmtAddr, fmtMON, fmtTokens, timeAgo } from '../lib/constants'
 
 const SERVER = process.env.NEXT_PUBLIC_SERVER_URL || ''
@@ -216,7 +217,7 @@ export default function Home() {
               <div style={{fontSize:64, marginBottom:16}}>🚀</div>
               <div className="text-xl font-bold mb-2">{search ? 'No tokens found' : tab === 'live' ? 'Nobody live right now' : tab === 'graduated' ? 'No graduations yet' : 'No tokens yet'}</div>
               <p className="text-t3 mb-6">{search ? `No matches for "${search}"` : 'Be the first to launch on the new MonPad'}</p>
-              {!search && <button onClick={() => router.push('/create')} className="btn btn-primary btn-lg">🚀 Launch the First Token</button>}
+              {!search && <Link href="/create" className="btn btn-primary btn-lg" style={{textDecoration:'none'}}>🚀 Launch the First Token</Link>}
             </div>
           ) : (
             <div className="token-grid">
