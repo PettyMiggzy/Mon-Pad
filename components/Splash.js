@@ -34,8 +34,8 @@ export default function Splash() {
       }}
     >
       <img
-        src="/MonshiPad.png"
-        alt="MonPad"
+        src="/splash.png"
+        alt="MonPad splash"
         style={{ maxWidth: '60vw', maxHeight: '60vh', objectFit: 'contain' }}
       />
     </div>

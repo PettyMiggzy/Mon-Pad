@@ -3,7 +3,8 @@ import { useRouter } from 'next/router'
 import { useAccount, useReadContract } from 'wagmi'
 import { erc20Abi } from 'viem'
 import Layout from '../components/Layout'
-import { fmtMON, fmtUSD, fmtTokens, fmtAddr, STAKING_POOL_ABI, MONSHI_TOKEN } from '../lib/constants'
+import { fmtMON, fmtUSD, fmtTokens, fmtAddr, STAKING_POOL_ABI } from '../lib/constants'
+import { resolveTokenImage } from '../lib/tokenImage'
 
 const SERVER = process.env.NEXT_PUBLIC_SERVER_URL || ''
 
@@ -144,22 +145,21 @@ function PoolCard({ p, onClick }) {
     query: { enabled: !!tokenAddress },
   })
 
-  // Fetch token meta image from the existing metadata system used by token detail pages.
-  const [metaImage, setMetaImage] = useState(null)
+  // Resolve token image via the generic chain:
+  // on-chain tokenURI -> server meta -> Monad token-list -> Monshi fallback -> null.
+  const [resolvedImage, setResolvedImage] = useState(null)
   useEffect(() => {
-    if (!tokenAddress || !SERVER) return
+    if (!tokenAddress) return
     let cancelled = false
-    fetch(`${SERVER}/api/token/${tokenAddress}/meta`)
-      .then(r => r.ok ? r.json() : null)
-      .then(m => { if (!cancelled && m && m.image) setMetaImage(m.image) })
+    resolveTokenImage(tokenAddress, { serverUrl: SERVER })
+      .then(img => { if (!cancelled) setResolvedImage(img) })
       .catch(() => {})
     return () => { cancelled = true }
   }, [tokenAddress])
 
   // Fallbacks: prefer on-chain symbol, then API symbol if non-placeholder, else dash. Special-case Monshi for image.
   const symbol = onChainSymbol || (p.symbol && p.symbol !== 'TOKEN' ? p.symbol : null) || '—'
-  const isMonshi = tokenAddress && tokenAddress.toLowerCase() === MONSHI_TOKEN.toLowerCase()
-  const image = metaImage || (isMonshi ? '/MonshiPad.png' : null)
+  const image = resolvedImage
 
   return (
     <div className="card" style={{cursor:'pointer'}} onClick={onClick}>
