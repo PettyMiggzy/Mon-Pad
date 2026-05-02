@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
-import { useAccount } from 'wagmi'
+import { useAccount, useReadContract } from 'wagmi'
+import { erc20Abi } from 'viem'
 import Layout from '../components/Layout'
-import { fmtMON, fmtUSD, fmtTokens, fmtAddr } from '../lib/constants'
+import { fmtMON, fmtUSD, fmtTokens, fmtAddr, STAKING_POOL_ABI, MONSHI_TOKEN } from '../lib/constants'
 
 const SERVER = process.env.NEXT_PUBLIC_SERVER_URL || ''
 
@@ -101,22 +102,7 @@ export default function StakingDashboard() {
           </div>
         ) : (
           <div className="token-grid">
-            {pools.map(p => (
-              <div key={p.address} className="card" style={{cursor:'pointer'}} onClick={() => router.push(`/stake/${p.tokenAddress}`)}>
-                <div className="flex items-center gap-3 mb-3">
-                  <div style={{width:48, height:48, borderRadius:'var(--r)', background:'linear-gradient(135deg, var(--p), var(--p-deep))', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:900, fontSize:16}}>{(p.symbol || '?').slice(0,2)}</div>
-                  <div style={{minWidth:0, flex:1}}>
-                    <div className="font-bold">{p.name || p.symbol}</div>
-                    <div className="font-mono text-xs text-t3">${p.symbol}</div>
-                  </div>
-                </div>
-                <div className="text-xs text-t3 mb-1">Total Staked</div>
-                <div className="font-mono font-bold text-base mb-2">{fmtTokens(p.totalStaked || 0)} ${p.symbol}</div>
-                <div className="text-xs text-t3 mb-1">Lifetime Rewards</div>
-                <div className="font-mono font-bold text-green">{fmtMON(p.totalRewards || 0)} MON</div>
-                <button className="btn btn-primary btn-sm btn-block mt-3">Stake →</button>
-              </div>
-            ))}
+            {pools.map(p => <PoolCard key={p.address} p={p} onClick={() => router.push(`/stake/${p.tokenAddress}`)} />)}
           </div>
         )}
 
@@ -133,5 +119,68 @@ export default function StakingDashboard() {
         </div>
       </div>
     </Layout>
+  )
+}
+
+
+function PoolCard({ p, onClick }) {
+  // Resolve underlying token address: prefer API-provided p.tokenAddress, fall back to pool.token() on-chain.
+  const tokenAddrFromApi = p.tokenAddress && p.tokenAddress.length === 42 ? p.tokenAddress : null
+
+  const { data: tokenAddrOnChain } = useReadContract({
+    address: p.address,
+    abi: STAKING_POOL_ABI,
+    functionName: 'token',
+    query: { enabled: !tokenAddrFromApi && !!p.address },
+  })
+
+  const tokenAddress = tokenAddrFromApi || tokenAddrOnChain || null
+
+  // Read on-chain symbol() for a generic, source-of-truth label.
+  const { data: onChainSymbol } = useReadContract({
+    address: tokenAddress,
+    abi: erc20Abi,
+    functionName: 'symbol',
+    query: { enabled: !!tokenAddress },
+  })
+
+  // Fetch token meta image from the existing metadata system used by token detail pages.
+  const [metaImage, setMetaImage] = useState(null)
+  useEffect(() => {
+    if (!tokenAddress || !SERVER) return
+    let cancelled = false
+    fetch(`${SERVER}/api/token/${tokenAddress}/meta`)
+      .then(r => r.ok ? r.json() : null)
+      .then(m => { if (!cancelled && m && m.image) setMetaImage(m.image) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [tokenAddress])
+
+  // Fallbacks: prefer on-chain symbol, then API symbol if non-placeholder, else dash. Special-case Monshi for image.
+  const symbol = onChainSymbol || (p.symbol && p.symbol !== 'TOKEN' ? p.symbol : null) || '—'
+  const isMonshi = tokenAddress && tokenAddress.toLowerCase() === MONSHI_TOKEN.toLowerCase()
+  const image = metaImage || (isMonshi ? '/MonshiPad.png' : null)
+
+  return (
+    <div className="card" style={{cursor:'pointer'}} onClick={onClick}>
+      <div className="flex items-center gap-3 mb-3">
+        {image ? (
+          <img src={image} alt={symbol} style={{width:48, height:48, borderRadius:'var(--r)', objectFit:'cover'}} />
+        ) : (
+          <div style={{width:48, height:48, borderRadius:'var(--r)', background:'linear-gradient(135deg, var(--p), var(--p-deep))', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:900, fontSize:16}}>
+            {(symbol || '?').slice(0,2)}
+          </div>
+        )}
+        <div style={{minWidth:0, flex:1}}>
+          <div className="font-bold">{p.name || symbol}</div>
+          <div className="font-mono text-xs text-t3">${symbol}</div>
+        </div>
+      </div>
+      <div className="text-xs text-t3 mb-1">Total Staked</div>
+      <div className="font-mono font-bold text-base mb-2">{fmtTokens(p.totalStaked || 0)} ${symbol}</div>
+      <div className="text-xs text-t3 mb-1">Lifetime Rewards</div>
+      <div className="font-mono font-bold text-green">{fmtMON(p.totalRewards || 0)} MON</div>
+      <button className="btn btn-primary btn-sm btn-block mt-3">Stake →</button>
+    </div>
   )
 }

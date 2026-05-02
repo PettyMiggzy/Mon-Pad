@@ -4,6 +4,7 @@ import { WagmiProvider } from 'wagmi'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { RainbowKitProvider, darkTheme } from '@rainbow-me/rainbowkit'
 import { wagmiConfig } from '../lib/wagmi'
+import Splash from '../components/Splash'
 import '../styles/globals.css'
 import '@rainbow-me/rainbowkit/styles.css'
 
@@ -37,6 +38,7 @@ export default function App({ Component, pageProps }) {
       <WagmiProvider config={wagmiConfig}>
         <QueryClientProvider client={queryClient}>
           <RainbowKitProvider theme={monPadTheme} modalSize="compact">
+            <Splash />
             <Component {...pageProps} />
           </RainbowKitProvider>
         </QueryClientProvider>
