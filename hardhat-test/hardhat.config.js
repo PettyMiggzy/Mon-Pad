@@ -4,7 +4,11 @@ module.exports = {
   solidity: {
     version: "0.8.24",
     settings: {
-      optimizer: { enabled: true, runs: 200 },
+      // runs=1 optimizes for deployed bytecode size (the factories embed the
+      // bytecode of the contracts they `new`-deploy, so they bloat past EIP-170's
+      // 24576-byte limit at runs=200). Trade-off: ~5-15% higher per-call gas,
+      // acceptable for the factory pattern used here.
+      optimizer: { enabled: true, runs: 1 },
       viaIR: true,
       // EVM version pinned to paris (matches Remix deploy + production target).
       evmVersion: "paris",
