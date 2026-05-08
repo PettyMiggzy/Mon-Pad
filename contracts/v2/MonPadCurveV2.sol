@@ -20,6 +20,11 @@ interface IFactory {
     function pauseAllSells() external view returns (bool);
     function blocked(address tok) external view returns (bool);
     function owner() external view returns (address);
+    function graduator() external view returns (address);
+}
+
+interface IGraduator {
+    function onGraduate(address token) external payable;
 }
 
 interface IToken {
@@ -288,20 +293,17 @@ contract MonPadCurveV2 {
             buyBuffer = 0;
         }
         
-        // Send LP MON + remaining tokens to platform wallet to handle LP creation
-        // (Real implementation would call NPM directly; for upgradeability we let platform handle it)
-        uint256 remainingMon = address(this).balance;
-        uint256 remainingTokens = IToken(token).balanceOf(address(this));
+        // Hand off LP MON + LP tokens to Graduator (Q1: graduator read each call from factory)
+        // Sequence is locked: safeTransfer tokens FIRST, then onGraduate{value: 400_000 ether}.
+        // The 400_000 MON value is exact; if curve balance is short the call reverts. That is correct behavior.
+        address grad = f.graduator();
+        require(grad != address(0), "!graduator");
+        uint256 lpTokens = IToken(token).balanceOf(address(this));
+        require(lpTokens > 0, "no lp tokens");
+        _safeTransfer(token, grad, lpTokens);
+        IGraduator(grad).onGraduate{value: 400_000 ether}(token);
         
-        if (remainingMon > 0) {
-            (bool ok, ) = f.platformWallet().call{value: remainingMon}("");
-            require(ok, "lp mon fail");
-        }
-        if (remainingTokens > 0) {
-            IToken(token).transfer(f.platformWallet(), remainingTokens);
-        }
-        
-        emit Graduated(lpAmt, creatorReward, platformGets);
+        emit Graduated(400_000 ether, creatorReward, platformGets);
     }
     
     // ── ADMIN (owner of factory) ──────────────
@@ -319,4 +321,12 @@ contract MonPadCurveV2 {
     }
     
     receive() external payable {}
+
+    /// @dev Minimal SafeERC20-style transfer (OZ-free).
+    function _safeTransfer(address tok, address to, uint256 amt) internal {
+        (bool ok, bytes memory data) = tok.call(
+            abi.encodeWithSelector(IToken.transfer.selector, to, amt)
+        );
+        require(ok && (data.length == 0 || abi.decode(data, (bool))), "safeTransfer fail");
+    }
 }

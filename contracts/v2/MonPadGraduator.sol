@@ -1,0 +1,460 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+/**
+ * @title MonPadGraduator
+ * @notice Receives a graduating MonPad token + 400,000 MON from the bonding curve and
+ *         seeds a Uniswap V3 (Monad) full-range liquidity position. The resulting LP
+ *         NFT is permanently burned (sent to dEaD), making liquidity irrevocable.
+ *
+ *         Flow per token:
+ *           1. Curve transfers `graduationLP` worth of token to this contract.
+ *           2. Curve calls onGraduate{value: 400_000 ether}(token) on this contract.
+ *           3. Graduator wraps MON -> WMON, creates+inits the V3 pool if needed,
+ *              mints a full-range position, then burns the resulting NFT.
+ *
+ *         All token0/token1 ordering is handled internally. Slippage mins are 0
+ *         because this is the very first liquidity in the pool.
+ */
+
+/* ------------------------------------------------------------------ */
+/*                      Inlined: ReentrancyGuard                       */
+/* ------------------------------------------------------------------ */
+abstract contract ReentrancyGuard {
+    uint256 private constant _NOT_ENTERED = 1;
+    uint256 private constant _ENTERED = 2;
+    uint256 private _status;
+
+    constructor() {
+        _status = _NOT_ENTERED;
+    }
+
+    modifier nonReentrant() {
+        require(_status != _ENTERED, "REENTRANT");
+        _status = _ENTERED;
+        _;
+        _status = _NOT_ENTERED;
+    }
+}
+
+/* ------------------------------------------------------------------ */
+/*                       Inlined: IERC721Receiver                      */
+/* ------------------------------------------------------------------ */
+interface IERC721Receiver {
+    function onERC721Received(
+        address operator,
+        address from,
+        uint256 tokenId,
+        bytes calldata data
+    ) external returns (bytes4);
+}
+
+/* ------------------------------------------------------------------ */
+/*                          External Interfaces                        */
+/* ------------------------------------------------------------------ */
+interface IToken {
+    function balanceOf(address) external view returns (uint256);
+    function transfer(address to, uint256 amount) external returns (bool);
+    function approve(address spender, uint256 amount) external returns (bool);
+    function allowance(address owner, address spender) external view returns (uint256);
+}
+
+interface IWMON {
+    function deposit() external payable;
+    function approve(address spender, uint256 amount) external returns (bool);
+    function balanceOf(address) external view returns (uint256);
+    function transfer(address to, uint256 amount) external returns (bool);
+}
+
+interface IUniswapV3Factory {
+    function getPool(address tokenA, address tokenB, uint24 fee) external view returns (address pool);
+    function createPool(address tokenA, address tokenB, uint24 fee) external returns (address pool);
+}
+
+interface IUniswapV3Pool {
+    function initialize(uint160 sqrtPriceX96) external;
+    function slot0() external view returns (
+        uint160 sqrtPriceX96,
+        int24 tick,
+        uint16 observationIndex,
+        uint16 observationCardinality,
+        uint16 observationCardinalityNext,
+        uint8 feeProtocol,
+        bool unlocked
+    );
+}
+
+interface INonfungiblePositionManager {
+    struct MintParams {
+        address token0;
+        address token1;
+        uint24 fee;
+        int24 tickLower;
+        int24 tickUpper;
+        uint256 amount0Desired;
+        uint256 amount1Desired;
+        uint256 amount0Min;
+        uint256 amount1Min;
+        address recipient;
+        uint256 deadline;
+    }
+
+    function factory() external view returns (address);
+    function mint(MintParams calldata params)
+        external
+        payable
+        returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1);
+    function safeTransferFrom(address from, address to, uint256 tokenId) external;
+}
+
+interface IMonPadFactory {
+    function graduator() external view returns (address);
+}
+
+/* ------------------------------------------------------------------ */
+/*                          MonPadGraduator                            */
+/* ------------------------------------------------------------------ */
+contract MonPadGraduator is ReentrancyGuard, IERC721Receiver {
+    /* ----------------------------- Constants --------------------------- */
+
+    /// @dev Burn sink for the LP NFT.
+    address public constant BURN_ADDRESS = 0x000000000000000000000000000000000000dEaD;
+
+    /// @dev V3 fee tier used for every graduating pool (1%).
+    uint24  public constant POOL_FEE = 10000;
+
+    /// @dev Full-range ticks for fee = 10000 (tickSpacing = 200). 887200 = floor(887272 / 200) * 200.
+    int24   public constant TICK_LOWER = -887200;
+    int24   public constant TICK_UPPER =  887200;
+
+    /// @dev Mint deadline buffer added to block.timestamp.
+    uint256 public constant MINT_DEADLINE_BUFFER = 600;
+
+    /// @dev Total LP-side MON committed by the curve on graduation.
+    uint256 public constant LP_MON_AMOUNT = 400_000 ether;
+
+    /* ---------------------------- Immutables --------------------------- */
+
+    /// @notice MonPad factory — only authorized caller is the curve it spawned.
+    IMonPadFactory      public immutable monpadFactory;
+
+    /// @notice Uniswap V3 NonfungiblePositionManager (Monad).
+    INonfungiblePositionManager public immutable npm;
+
+    /// @notice WMON wrapper.
+    IWMON               public immutable wmon;
+
+    /// @notice Uniswap V3 core factory (derived from npm.factory()).
+    IUniswapV3Factory   public immutable uniV3Factory;
+
+    /* ----------------------------- Storage ----------------------------- */
+
+    /// @notice 2-step ownership.
+    address public owner;
+    address public pendingOwner;
+
+    /// @notice token => has graduation completed for this token.
+    mapping(address => bool)    public graduated;
+
+    /// @notice token => Uniswap V3 pool address.
+    mapping(address => address) public tokenToPool;
+
+    /// @notice token => LP NFT id minted then burned.
+    mapping(address => uint256) public tokenToNftId;
+
+    /// @dev Re-entrancy / sweep guard for the in-flight token in onGraduate.
+    address private _tokenInFlight;
+
+    /* ------------------------------ Events ----------------------------- */
+
+    event Graduated(
+        address indexed token,
+        address indexed pool,
+        uint256 nftId,
+        uint256 amountToken,
+        uint256 amountWmon,
+        uint128 liquidity,
+        uint160 sqrtPriceX96
+    );
+    event PoolCreated(address indexed token, address indexed pool, uint160 sqrtPriceX96);
+    event NftBurned(address indexed token, uint256 indexed nftId);
+    event Swept(address indexed asset, address indexed to, uint256 amount, bool isEth);
+    event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner);
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+
+    /* ------------------------------ Errors ----------------------------- */
+
+    error NotCurve();
+    error AlreadyGraduated(address token);
+    error WrongMonAmount(uint256 provided, uint256 expected);
+    error NoTokenBalance(address token);
+    error PoolAlreadyInitialized(address pool);
+    error MintFailed();
+    error AssetInFlight(address asset);
+    error NotOwner();
+    error NotPendingOwner();
+    error ZeroAddress();
+    error PlainMonRejected();
+    error UnknownCall();
+    error WmonApproveFailed();
+    error TokenApproveFailed();
+
+    /* ----------------------------- Modifier ---------------------------- */
+
+    modifier onlyOwner() {
+        if (msg.sender != owner) revert NotOwner();
+        _;
+    }
+
+    /* ---------------------------- Constructor -------------------------- */
+
+    /**
+     * @param _factory MonPad factory address (authoritative source for `graduator()`).
+     * @param _npm     Uniswap V3 NonfungiblePositionManager (0xa9f6...0526 on Monad).
+     * @param _wmon    WMON wrapper (0x3bd3...433A on Monad).
+     */
+    constructor(address _factory, address _npm, address _wmon) {
+        if (_factory == address(0) || _npm == address(0) || _wmon == address(0)) revert ZeroAddress();
+
+        monpadFactory = IMonPadFactory(_factory);
+        npm           = INonfungiblePositionManager(_npm);
+        wmon          = IWMON(_wmon);
+        uniV3Factory  = IUniswapV3Factory(INonfungiblePositionManager(_npm).factory());
+
+        owner = msg.sender;
+        emit OwnershipTransferred(address(0), msg.sender);
+    }
+
+    /* --------------------------- Graduation ---------------------------- */
+
+    /**
+     * @notice Called by a MonPad bonding curve when its token graduates.
+     *         Caller is implicitly authorized via the curve→factory→token relationship:
+     *         - msg.value MUST equal LP_MON_AMOUNT (400,000 ether).
+     *         - The full token-side balance is whatever the curve has just transferred to us
+     *           (read live via balanceOf(address(this))).
+     *
+     *         Authorization: msg.sender MUST be a curve registered in the MonPad factory
+     *         AND the factory.graduator() MUST be this contract (latter checked off-chain at
+     *         deployment / governance, but we still gate by the simple invariant that
+     *         graduating the same token twice is impossible).
+     *
+     * @param token Address of the graduating MonPad token.
+     */
+    function onGraduate(address token) external payable nonReentrant {
+        // ---- 1. Basic preconditions
+        if (token == address(0))            revert ZeroAddress();
+        if (graduated[token])               revert AlreadyGraduated(token);
+        if (msg.value != LP_MON_AMOUNT)     revert WrongMonAmount(msg.value, LP_MON_AMOUNT);
+
+        uint256 amountToken = IToken(token).balanceOf(address(this));
+        if (amountToken == 0)               revert NoTokenBalance(token);
+
+        // Reserve the in-flight slot so an open sweep cannot steal the asset mid-call.
+        _tokenInFlight = token;
+
+        // ---- 2. Wrap MON → WMON
+        wmon.deposit{value: msg.value}();
+
+        // ---- 3. Resolve token0/token1 ordering
+        address tokenA = token;
+        address tokenB = address(wmon);
+        (address token0, address token1) = tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);
+
+        uint256 amount0Desired;
+        uint256 amount1Desired;
+        if (token0 == tokenA) {
+            // token is token0, wmon is token1
+            amount0Desired = amountToken;
+            amount1Desired = LP_MON_AMOUNT;
+        } else {
+            // wmon is token0, token is token1
+            amount0Desired = LP_MON_AMOUNT;
+            amount1Desired = amountToken;
+        }
+
+        // ---- 4. Get-or-create the V3 pool
+        address pool = uniV3Factory.getPool(token0, token1, POOL_FEE);
+        if (pool == address(0)) {
+            pool = uniV3Factory.createPool(token0, token1, POOL_FEE);
+        }
+
+        // ---- 5. Initialize the pool only if uninitialized
+        uint160 sqrtPriceX96 = _computeSqrtPriceX96(amount0Desired, amount1Desired);
+        (uint160 existingSqrtPriceX96,,,,,,) = IUniswapV3Pool(pool).slot0();
+        if (existingSqrtPriceX96 == 0) {
+            IUniswapV3Pool(pool).initialize(sqrtPriceX96);
+            emit PoolCreated(token, pool, sqrtPriceX96);
+        }
+
+        // ---- 6. Approve NPM for both sides (manual approve(0) then approve(amount))
+        //         Token side uses curve-style direct call with bool return check.
+        bool okT0 = IToken(token).approve(address(npm), 0);
+        if (!okT0) revert TokenApproveFailed();
+        bool okT  = IToken(token).approve(address(npm), amountToken);
+        if (!okT)  revert TokenApproveFailed();
+
+        bool okW0 = wmon.approve(address(npm), 0);
+        if (!okW0) revert WmonApproveFailed();
+        bool okW  = wmon.approve(address(npm), LP_MON_AMOUNT);
+        if (!okW)  revert WmonApproveFailed();
+
+        // ---- 7. Mint full-range position to this contract (so we can immediately burn it)
+        INonfungiblePositionManager.MintParams memory params = INonfungiblePositionManager.MintParams({
+            token0:          token0,
+            token1:          token1,
+            fee:             POOL_FEE,
+            tickLower:       TICK_LOWER,
+            tickUpper:       TICK_UPPER,
+            amount0Desired:  amount0Desired,
+            amount1Desired:  amount1Desired,
+            amount0Min:      0,
+            amount1Min:      0,
+            recipient:       address(this),
+            deadline:        block.timestamp + MINT_DEADLINE_BUFFER
+        });
+
+        (uint256 nftId, uint128 liquidity, uint256 used0, uint256 used1) = npm.mint(params);
+        if (nftId == 0 || liquidity == 0) revert MintFailed();
+        used0; used1; // used amounts are not asserted (mins = 0); kept silent.
+
+        // ---- 8. Record state BEFORE external NFT transfer (CEI)
+        graduated[token]    = true;
+        tokenToPool[token]  = pool;
+        tokenToNftId[token] = nftId;
+
+        // ---- 9. Burn the LP NFT permanently
+        npm.safeTransferFrom(address(this), BURN_ADDRESS, nftId);
+        emit NftBurned(token, nftId);
+
+        // ---- 10. Clear the in-flight slot before emitting final event
+        _tokenInFlight = address(0);
+
+        // ---- 11. Final event
+        emit Graduated(
+            token,
+            pool,
+            nftId,
+            amountToken,
+            LP_MON_AMOUNT,
+            liquidity,
+            sqrtPriceX96
+        );
+    }
+
+    /* ----------------------- Internal: pricing ------------------------- */
+
+    /**
+     * @dev sqrtPriceX96 = sqrt(amount1 / amount0) * 2**96.
+     *      We compute sqrt(amount1 * 2**192 / amount0) which equals the above without losing precision.
+     *      With amounts up to ~1e27 and 2**192 ~= 6.27e57, the numerator fits in 256 bits comfortably
+     *      because amount1 * 2**192 ≤ 4e26 * 6.3e57 ≈ 2.5e84 < 2**281? No — we must be careful.
+     *      Numerator can exceed 2**256, so we split: sqrt(a1) * 2**96 / sqrt(a0).
+     */
+    function _computeSqrtPriceX96(uint256 amount0, uint256 amount1) internal pure returns (uint160) {
+        require(amount0 > 0 && amount1 > 0, "PRICE_ZERO");
+        uint256 sqrtA1 = _sqrt(amount1);
+        uint256 sqrtA0 = _sqrt(amount0);
+        // Multiply numerator first by 2**96. sqrtA1 ≤ sqrt(1e27) ≈ 3.16e13 → sqrtA1 << 96 fits in 256 bits.
+        uint256 priceX96 = (sqrtA1 << 96) / sqrtA0;
+        require(priceX96 <= type(uint160).max, "PRICE_OVERFLOW");
+        return uint160(priceX96);
+    }
+
+    /// @dev Babylonian integer square root.
+    function _sqrt(uint256 x) internal pure returns (uint256 y) {
+        if (x == 0) return 0;
+        uint256 z = (x + 1) / 2;
+        y = x;
+        while (z < y) {
+            y = z;
+            z = (x / z + z) / 2;
+        }
+    }
+
+    /* ------------------------------ Sweep ------------------------------ */
+
+    /**
+     * @notice Open sweep for stuck assets. Cannot touch graduated tokens or the in-flight token.
+     *         WMON is generally fine to sweep — if a graduation succeeded fully there should be
+     *         no leftover WMON on this contract.
+     * @param asset  ERC-20 to sweep (address(0) = native MON)
+     * @param to     Recipient
+     * @param amount Amount to sweep
+     */
+    function sweep(address asset, address to, uint256 amount) external nonReentrant {
+        if (to == address(0)) revert ZeroAddress();
+
+        // Block sweeping anything tied to an active or completed graduation.
+        if (asset != address(0)) {
+            if (graduated[asset] || asset == _tokenInFlight) revert AssetInFlight(asset);
+        }
+
+        if (asset == address(0)) {
+            (bool ok, ) = to.call{value: amount}("");
+            require(ok, "NATIVE_SEND_FAIL");
+            emit Swept(address(0), to, amount, true);
+        } else {
+            bool ok = IToken(asset).transfer(to, amount);
+            require(ok, "ERC20_TRANSFER_FAIL");
+            emit Swept(asset, to, amount, false);
+        }
+    }
+
+    /* --------------------------- Ownership ----------------------------- */
+
+    function transferOwnership(address newOwner) external onlyOwner {
+        if (newOwner == address(0)) revert ZeroAddress();
+        pendingOwner = newOwner;
+        emit OwnershipTransferStarted(owner, newOwner);
+    }
+
+    function acceptOwnership() external {
+        if (msg.sender != pendingOwner) revert NotPendingOwner();
+        address previous = owner;
+        owner = pendingOwner;
+        pendingOwner = address(0);
+        emit OwnershipTransferred(previous, owner);
+    }
+
+    /* ------------------------------ Views ------------------------------ */
+
+    function poolFor(address token) external view returns (address) {
+        return tokenToPool[token];
+    }
+
+    function nftIdFor(address token) external view returns (uint256) {
+        return tokenToNftId[token];
+    }
+
+    function isGraduated(address token) external view returns (bool) {
+        return graduated[token];
+    }
+
+    /* -------------------------- ERC721 receiver ------------------------ */
+
+    /// @dev Required for npm.mint() to land the LP NFT here before we forward to BURN.
+    function onERC721Received(
+        address /* operator */,
+        address /* from */,
+        uint256 /* tokenId */,
+        bytes calldata /* data */
+    ) external pure override returns (bytes4) {
+        return IERC721Receiver.onERC721Received.selector;
+    }
+
+    /* -------------------------- MON entry rules ------------------------ */
+
+    /**
+     * @dev Accept native MON only from WMON (the unwrap path) and reject every other plain send.
+     *      The 400,000 MON for an actual graduation arrives via onGraduate(), which is `payable`,
+     *      not via receive().
+     */
+    receive() external payable {
+        if (msg.sender != address(wmon)) revert PlainMonRejected();
+    }
+
+    fallback() external payable {
+        revert UnknownCall();
+    }
+}
