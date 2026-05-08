@@ -103,15 +103,71 @@ function loadContract(name) {
   process.exit(1);
 }
 
-async function deploy(wallet, name, args = []) {
+// Sleep helper for the inter-deploy delay (lets the RPC's nonce/mempool catch up
+// between back-to-back deploys; the public Monad RPC otherwise rejects bursts with
+// "An existing transaction had higher priority").
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+// Detect transient RPC errors that should retry with bumped gas (vs hard errors that
+// should fail immediately).
+function isTransient(e) {
+  const msg = (e?.shortMessage || e?.message || '').toLowerCase();
+  return (
+    msg.includes('higher priority') ||      // Monad-specific mempool message
+    msg.includes('underpriced') ||
+    msg.includes('replacement') ||
+    msg.includes('nonce') ||
+    msg.includes('timeout') ||
+    e?.code === 'NETWORK_ERROR' ||
+    e?.code === 'TIMEOUT' ||
+    e?.code === 'SERVER_ERROR'
+  );
+}
+
+async function deploy(wallet, name, args = [], existingAddr = null) {
+  // RESUME_* env vars let an operator skip already-deployed contracts after a partial
+  // failure, avoiding redundant gas spend on re-deploys.
+  if (existingAddr && /^0x[a-fA-F0-9]{40}$/.test(existingAddr)) {
+    console.log(`📦 ${name}: using existing deployment ${existingAddr} (skipping deploy)`);
+    const c = loadContract(name);
+    return { addr: existingAddr, contract: new ethers.Contract(existingAddr, c.abi, wallet) };
+  }
+
   const c = loadContract(name);
   const factory = new ethers.ContractFactory(c.abi, c.bytecode, wallet);
   console.log(`📦 Deploying ${name}...`);
-  const contract = await factory.deploy(...args);
-  await contract.waitForDeployment();
-  const addr = await contract.getAddress();
-  console.log(`   ✓ ${name}: ${addr}`);
-  return { addr, contract };
+
+  let lastError;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      // On retries, bump gas explicitly to outprice any stuck/conflicting tx in the mempool.
+      let overrides = {};
+      if (attempt > 1) {
+        const feeData = await wallet.provider.getFeeData();
+        const mult = BigInt(attempt + 1); // 2x on attempt 2, 3x on attempt 3
+        if (feeData.maxFeePerGas) {
+          overrides.maxFeePerGas = (feeData.maxFeePerGas * mult * 12n) / 10n; // +20% headroom
+          overrides.maxPriorityFeePerGas = ((feeData.maxPriorityFeePerGas || feeData.maxFeePerGas) * mult * 12n) / 10n;
+        }
+        console.log(`   🔁 Retry ${attempt}/3 with bumped gas (maxFeePerGas=${overrides.maxFeePerGas?.toString() || 'default'})`);
+      }
+      const contract = overrides.maxFeePerGas
+        ? await factory.deploy(...args, overrides)
+        : await factory.deploy(...args);
+      await contract.waitForDeployment();
+      const addr = await contract.getAddress();
+      console.log(`   ✓ ${name}: ${addr}`);
+      return { addr, contract };
+    } catch (e) {
+      lastError = e;
+      const transient = isTransient(e);
+      console.error(`   ⚠ Attempt ${attempt}/3 failed: ${e.shortMessage || e.message}`);
+      if (!transient || attempt === 3) throw e;
+      console.error(`   ⏳ Transient RPC error — waiting 15s before retry...`);
+      await sleep(15000);
+    }
+  }
+  throw lastError;
 }
 
 async function main() {
@@ -141,11 +197,25 @@ async function main() {
 
   const deployed = {};
 
+  // RESUME_* env vars let an operator skip already-deployed contracts after a partial
+  // failure. Each one expects a 0x-prefixed 40-hex-char address and points at an existing
+  // deployment of the matching contract. Resume mode is triggered per-contract.
+  const RESUME_FACTORY     = process.env.RESUME_FACTORY     || null;
+  const RESUME_HUB         = process.env.RESUME_HUB         || null;
+  const RESUME_POOLFACTORY = process.env.RESUME_POOLFACTORY || null;
+  const RESUME_GRADUATOR   = process.env.RESUME_GRADUATOR   || null;
+
+  // 5s delay between consecutive deploys to give the public Monad RPC's nonce/mempool
+  // a moment to update. Without it, back-to-back deploys can trip "An existing
+  // transaction had higher priority" errors.
+  const INTER_DEPLOY_DELAY_MS = 5000;
+
   // ============================================================
   // 1. Factory V2.1
   // ============================================================
-  const factory = await deploy(wallet, 'MonPadFactoryV2', [PLATFORM, TREASURY, BUYBACK]);
+  const factory = await deploy(wallet, 'MonPadFactoryV2', [PLATFORM, TREASURY, BUYBACK], RESUME_FACTORY);
   deployed.factory = factory.addr;
+  if (!RESUME_FACTORY) await sleep(INTER_DEPLOY_DELAY_MS);
 
   // ============================================================
   // 2. Vesting (no constructor args) — opt-in only.
@@ -155,6 +225,7 @@ async function main() {
   if (process.env.DEPLOY_VESTING === '1') {
     const vesting = await deploy(wallet, 'MonPadVesting');
     deployed.vesting = vesting.addr;
+    await sleep(INTER_DEPLOY_DELAY_MS);
   } else {
     console.log('⏭  Skipping MonPadVesting (DEPLOY_VESTING != "1"). Audit V2.1-8: contract is non-binding.');
   }
@@ -172,17 +243,20 @@ async function main() {
       factory.addr,
       3600,                                  // distributeInterval = 1 hour
       ethers.parseEther('0.5'),              // minDistributeBalance = 0.5 MON
-    ]);
+    ], RESUME_HUB);
     deployed.stakingHub = hub.addr;
+    if (!RESUME_HUB) await sleep(INTER_DEPLOY_DELAY_MS);
 
     // 3b. PoolFactory: (hub, factory, monshi)  — V2.1 dropped the BUYBACK constructor arg.
     //     PoolFactory now reads buybackWallet live from factory.buybackWallet() at fee time.
-    const poolFactory = await deploy(wallet, 'MonPadPoolFactory', [hub.addr, factory.addr, MONSHI]);
+    const poolFactory = await deploy(wallet, 'MonPadPoolFactory', [hub.addr, factory.addr, MONSHI], RESUME_POOLFACTORY);
     deployed.poolFactory = poolFactory.addr;
+    if (!RESUME_POOLFACTORY) await sleep(INTER_DEPLOY_DELAY_MS);
 
     // 3c. Graduator (NEW in V2.1): (factory, npm, wmon)
-    const graduator = await deploy(wallet, 'MonPadGraduator', [factory.addr, NPM, WMON]);
+    const graduator = await deploy(wallet, 'MonPadGraduator', [factory.addr, NPM, WMON], RESUME_GRADUATOR);
     deployed.graduator = graduator.addr;
+    if (!RESUME_GRADUATOR) await sleep(INTER_DEPLOY_DELAY_MS);
 
     // 3d. Bootstrap factory: one-shot setter for graduator + rewardRouter + poolFactory.
     //     Skips the 24h timelock that gates these post-bootstrap.
