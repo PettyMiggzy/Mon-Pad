@@ -258,52 +258,106 @@ async function main() {
     deployed.graduator = graduator.addr;
     if (!RESUME_GRADUATOR) await sleep(INTER_DEPLOY_DELAY_MS);
 
-    // 3d. Bootstrap factory: one-shot setter for graduator + rewardRouter + poolFactory.
-    //     Skips the 24h timelock that gates these post-bootstrap.
-    console.log('🔧 Factory.bootstrapInit(graduator, hub, poolFactory) ...');
-    const tx1 = await factory.contract.bootstrapInit(graduator.addr, hub.addr, poolFactory.addr);
-    await tx1.wait();
-    console.log('   ✓ Done');
-
-    // 3e. Bootstrap hub: one-shot MONSHI token registration. After this, monshiToken is
-    //     locked forever — proposeSetMonshiToken will revert with MonshiAlreadySet.
-    console.log('🔧 Hub.bootstrapMonshi(MONSHI) ...');
-    const tx2 = await hub.contract.bootstrapMonshi(MONSHI);
-    await tx2.wait();
-    console.log('   ✓ Done');
-
-    // 3f. Create the MONSHI staking pool. burnsToCreator=true routes the early-unstake
-    //     burn vault to BUYBACK instead of dEaD (per DEPLOY-V2.md). adminCreatePool
-    //     enforces token == monshiToken when burnsToCreator=true (V2.1 lockdown).
-    //     creator = BUYBACK (NOT deployer — see DEPLOY-V2.md§6 explicit warning).
-    console.log('🔧 PoolFactory.adminCreatePool(MONSHI, BUYBACK, true) ...');
-    const tx3 = await poolFactory.contract.adminCreatePool(MONSHI, BUYBACK, true);
-    const receipt3 = await tx3.wait();
-    let monshiPoolAddr = null;
-    for (const log of receipt3.logs) {
-      try {
-        const parsed = poolFactory.contract.interface.parseLog(log);
-        if (parsed && parsed.name === 'PoolCreated') {
-          monshiPoolAddr = parsed.args.pool;
-          break;
+    // sendWithRetry: same retry-with-bumped-gas pattern as deploy(), applied to wiring
+    // contract calls. Public Monad RPC's "An existing transaction had higher priority"
+    // error happens on these single-tx wiring calls too, not just deploys.
+    const sendWithRetry = async (label, makeTx) => {
+      let lastError;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          let overrides;
+          if (attempt > 1) {
+            const feeData = await provider.getFeeData();
+            const mult = BigInt(attempt + 1);
+            overrides = {};
+            if (feeData.maxFeePerGas) {
+              overrides.maxFeePerGas = (feeData.maxFeePerGas * mult * 12n) / 10n;
+              overrides.maxPriorityFeePerGas = ((feeData.maxPriorityFeePerGas || feeData.maxFeePerGas) * mult * 12n) / 10n;
+            }
+            console.log(`   🔁 Retry ${attempt}/3 with bumped gas`);
+          }
+          const tx = await makeTx(overrides);
+          const receipt = await tx.wait();
+          return { tx, receipt };
+        } catch (e) {
+          lastError = e;
+          console.error(`   ⚠ ${label} attempt ${attempt}/3: ${e.shortMessage || e.message}`);
+          if (!isTransient(e) || attempt === 3) throw e;
+          console.error(`   ⏳ Transient RPC error — waiting 15s before retry...`);
+          await sleep(15000);
         }
-      } catch {}
+      }
+      throw lastError;
+    };
+
+    // 3d. Bootstrap factory (one-shot). Skip if already bootstrapped.
+    const isBootstrapped = await factory.contract.bootstrapped();
+    if (isBootstrapped) {
+      console.log('⏭  Factory.bootstrapInit already done, skipping');
+    } else {
+      console.log('🔧 Factory.bootstrapInit(graduator, hub, poolFactory) ...');
+      await sendWithRetry('bootstrapInit', (ov) =>
+        ov ? factory.contract.bootstrapInit(graduator.addr, hub.addr, poolFactory.addr, ov)
+           : factory.contract.bootstrapInit(graduator.addr, hub.addr, poolFactory.addr)
+      );
+      console.log('   ✓ Done');
+      await sleep(INTER_DEPLOY_DELAY_MS);
     }
-    if (!monshiPoolAddr) {
-      console.error('❌ Could not extract MONSHI pool address from PoolCreated event');
-      process.exit(1);
+
+    // 3e. Bootstrap hub MONSHI binding (one-shot). Skip if monshiToken already set.
+    const currentMonshi = await hub.contract.monshiToken();
+    if (currentMonshi !== '0x0000000000000000000000000000000000000000') {
+      console.log(`⏭  Hub already has monshiToken=${currentMonshi}, skipping bootstrapMonshi`);
+    } else {
+      console.log('🔧 Hub.bootstrapMonshi(MONSHI) ...');
+      await sendWithRetry('bootstrapMonshi', (ov) =>
+        ov ? hub.contract.bootstrapMonshi(MONSHI, ov)
+           : hub.contract.bootstrapMonshi(MONSHI)
+      );
+      console.log('   ✓ Done');
+      await sleep(INTER_DEPLOY_DELAY_MS);
+    }
+
+    // 3f. Create MONSHI staking pool. Skip if pool already exists for MONSHI in PoolFactory.
+    let monshiPoolAddr = await poolFactory.contract.tokenToPool(MONSHI);
+    if (monshiPoolAddr !== '0x0000000000000000000000000000000000000000') {
+      console.log(`⏭  MONSHI pool already exists at ${monshiPoolAddr}, skipping adminCreatePool`);
+    } else {
+      console.log('🔧 PoolFactory.adminCreatePool(MONSHI, BUYBACK, true) ...');
+      const { receipt: r3 } = await sendWithRetry('adminCreatePool', (ov) =>
+        ov ? poolFactory.contract.adminCreatePool(MONSHI, BUYBACK, true, ov)
+           : poolFactory.contract.adminCreatePool(MONSHI, BUYBACK, true)
+      );
+      monshiPoolAddr = null;
+      for (const log of r3.logs) {
+        try {
+          const parsed = poolFactory.contract.interface.parseLog(log);
+          if (parsed && parsed.name === 'PoolCreated') { monshiPoolAddr = parsed.args.pool; break; }
+        } catch {}
+      }
+      if (!monshiPoolAddr) {
+        console.error('❌ Could not extract MONSHI pool address from PoolCreated event');
+        process.exit(1);
+      }
+      console.log('   ✓ MONSHI pool:', monshiPoolAddr);
+      await sleep(INTER_DEPLOY_DELAY_MS);
     }
     deployed.monshiPool = monshiPoolAddr;
-    console.log('   ✓ MONSHI pool:', monshiPoolAddr);
 
-    // 3g. Set monshiStakingPool on factory. This setter is timelocked in V2.1, so we queue
-    //     here and the operator must execute after 24h. We log the queue tx so the operator
-    //     knows what to execute.
-    console.log('🔧 Factory.queueSetMonshiStakingPool(monshiPool) (24h timelock; execute later) ...');
-    const tx4 = await factory.contract.queueSetMonshiStakingPool(monshiPoolAddr);
-    await tx4.wait();
-    console.log('   ✓ Queued. After 24h, run:');
-    console.log(`      cast send ${factory.addr} "executeSetMonshiStakingPool(address)" ${monshiPoolAddr}`);
+    // 3g. Queue setMonshiStakingPool on factory (24h timelock).
+    //     Skip if already queued OR if the value is already set on the factory directly.
+    const currentFactoryMonshiPool = await factory.contract.monshiStakingPool();
+    if (currentFactoryMonshiPool === monshiPoolAddr) {
+      console.log(`⏭  Factory.monshiStakingPool already set to ${monshiPoolAddr}, skipping queue`);
+    } else {
+      console.log('🔧 Factory.queueSetMonshiStakingPool(monshiPool) (24h timelock; execute later) ...');
+      await sendWithRetry('queueSetMonshiStakingPool', (ov) =>
+        ov ? factory.contract.queueSetMonshiStakingPool(monshiPoolAddr, ov)
+           : factory.contract.queueSetMonshiStakingPool(monshiPoolAddr)
+      );
+      console.log('   ✓ Queued. After 24h, run:');
+      console.log(`      cast send ${factory.addr} "executeSetMonshiStakingPool(address)" ${monshiPoolAddr}`);
+    }
   }
 
   // ============================================================
