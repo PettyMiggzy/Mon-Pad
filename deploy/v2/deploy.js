@@ -109,18 +109,37 @@ function loadContract(name) {
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 // Detect transient RPC errors that should retry with bumped gas (vs hard errors that
-// should fail immediately).
+// should fail immediately). ethers wraps the upstream RPC error multiple levels deep,
+// so we check shortMessage + message + nested error.message + JSON-stringified subobjects.
 function isTransient(e) {
-  const msg = (e?.shortMessage || e?.message || '').toLowerCase();
+  if (!e) return false;
+  const candidates = [
+    e.shortMessage,
+    e.message,
+    e?.error?.message,
+    e?.info?.error?.message,
+    typeof e.error === 'object' ? JSON.stringify(e.error) : '',
+    typeof e.info === 'object' ? JSON.stringify(e.info) : '',
+  ].map(m => (m || '').toString().toLowerCase());
+
+  const transientPhrases = [
+    'higher priority',     // Monad mempool message
+    'underpriced',
+    'replacement',
+    'nonce too low',
+    'nonce already',
+    'already known',
+    'timeout',
+    'could not coalesce',  // ethers' wrapper around any upstream RPC error
+    'connection',
+  ];
+  if (candidates.some(m => transientPhrases.some(p => m.includes(p)))) return true;
+
   return (
-    msg.includes('higher priority') ||      // Monad-specific mempool message
-    msg.includes('underpriced') ||
-    msg.includes('replacement') ||
-    msg.includes('nonce') ||
-    msg.includes('timeout') ||
-    e?.code === 'NETWORK_ERROR' ||
-    e?.code === 'TIMEOUT' ||
-    e?.code === 'SERVER_ERROR'
+    e.code === 'NETWORK_ERROR' ||
+    e.code === 'TIMEOUT' ||
+    e.code === 'SERVER_ERROR' ||
+    e.code === 'UNKNOWN_ERROR'   // ethers maps -32603 RPC errors to this; usually retryable
   );
 }
 
