@@ -193,7 +193,7 @@ contract MonPadPoolFactory {
             poolCreator,
             false,
             owner,
-            IFactory(factory).treasuryWallet()
+            factory  // V2.1-10: pool reads treasuryWallet live from factory at claim time
         );
         pool = address(p);
 
@@ -240,7 +240,7 @@ contract MonPadPoolFactory {
             creator,
             burnsToCreator,
             owner,
-            IFactory(factory).treasuryWallet()
+            factory  // V2.1-10: pool reads treasuryWallet live from factory at claim time
         );
         pool = address(p);
 

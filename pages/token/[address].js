@@ -1,11 +1,47 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { useRouter } from 'next/router'
 import dynamic from 'next/dynamic'
 import { useAccount, useWriteContract, useWaitForTransactionReceipt, usePublicClient } from 'wagmi'
 import { parseEther, formatEther } from 'viem'
 import Layout from '../../components/Layout'
-import { CURVE_ABI, TOKEN_ABI, FACTORY_ADDRESS, FACTORY_ABI, GRADUATION_TARGET, fmtMON, fmtUSD, fmtAddr, fmtTokens, timeAgo, MONADSCAN, POOL_FACTORY_V2, BUYBACK_WALLET } from '../../lib/constants'
+import { CURVE_ABI, TOKEN_ABI, FACTORY_ADDRESS, FACTORY_ABI, GRADUATION_TARGET, MAX_SUPPLY, fmtMON, fmtUSD, fmtAddr, fmtTokens, timeAgo, MONADSCAN, POOL_FACTORY_V2, BUYBACK_WALLET } from '../../lib/constants'
 import { monad } from '../../lib/wagmi'
+
+// Curve x*y=k math, kept in sync with MonPadCurveV2.sol:
+//   currentMon    = vm + rm
+//   currentTokens = vt - (1B*1e18 - rt)
+//   buy:  monForBuy = monIn * (10000 - 200) / 10000  (2% buy fee total)
+//         tokensOut = currentTokens - (currentMon * currentTokens) / (currentMon + monForBuy)
+//   sell: tokensIn already in pool
+//         grossMonOut = currentMon - (currentMon * currentTokens) / (currentTokens + tokensIn)
+//         monOut      = grossMonOut * (10000 - 200) / 10000  (2% sell fee total)
+function estimateBuyOut(monIn, vm, vt, rm, rt) {
+  if (monIn === 0n) return 0n
+  const currentMon = vm + rm
+  const currentTokens = vt - (MAX_SUPPLY - rt)
+  const monForBuy = (monIn * 9800n) / 10000n
+  const newMon = currentMon + monForBuy
+  if (newMon === 0n) return 0n
+  const k = currentMon * currentTokens
+  const newTokens = k / newMon
+  return currentTokens > newTokens ? currentTokens - newTokens : 0n
+}
+function estimateSellOut(tokensIn, vm, vt, rm, rt) {
+  if (tokensIn === 0n) return 0n
+  const currentMon = vm + rm
+  const currentTokens = vt - (MAX_SUPPLY - rt)
+  const newTokens = currentTokens + tokensIn
+  if (newTokens === 0n) return 0n
+  const k = currentMon * currentTokens
+  const newMon = k / newTokens
+  const grossMonOut = currentMon > newMon ? currentMon - newMon : 0n
+  return (grossMonOut * 9800n) / 10000n
+}
+// Apply user slippage to expected output. slippagePct is 1..20 (integer).
+function withSlippage(expected, slippagePct) {
+  const bps = BigInt(Math.max(0, Math.min(10000, Math.floor(slippagePct * 100))))
+  return (expected * (10000n - bps)) / 10000n
+}
 
 const Chart = dynamic(() => import('react-apexcharts'), { ssr: false })
 
@@ -38,6 +74,11 @@ export default function TokenDetail() {
   const { writeContract, data: txHash, isPending } = useWriteContract()
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash: txHash })
 
+  // Two-step sell coordination: when allowance is insufficient, the first click
+  // approves; on approve confirm we automatically fire the sell. Without this, the
+  // user had to click Sell twice (and the UX gave no indication of the two-step).
+  const pendingSellRef = useRef(null) // { tokenAmt, minOut } | null
+
   useEffect(() => {
     if (!tokenAddr || !SERVER) return
     fetch(`${SERVER}/api/mon-price`).then(r => r.json()).then(d => setMonPrice(d.price || 0)).catch(() => {})
@@ -50,6 +91,21 @@ export default function TokenDetail() {
   useEffect(() => {
     if (isSuccess) { loadAll(); setAmount('') }
   }, [isSuccess])
+
+  // After approve confirms, automatically fire the queued sell.
+  useEffect(() => {
+    if (!isSuccess) return
+    const pending = pendingSellRef.current
+    if (!pending || !data?.curveAddress) return
+    pendingSellRef.current = null
+    writeContract({
+      address: data.curveAddress,
+      abi: CURVE_ABI,
+      functionName: 'sell',
+      args: [pending.tokenAmt, pending.minOut],
+      chainId: monad.id,
+    })
+  }, [isSuccess, data?.curveAddress, writeContract])
 
   async function loadAll() {
     if (!tokenAddr || !SERVER) return
@@ -78,14 +134,33 @@ export default function TokenDetail() {
     } catch (e) { console.warn(e) }
   }
 
+  // Read live curve reserves to compute slippage-adjusted minOut.
+  async function getReserves() {
+    if (!data?.curveAddress || !publicClient) throw new Error('no client')
+    const r = await publicClient.readContract({
+      address: data.curveAddress,
+      abi: CURVE_ABI,
+      functionName: 'getReserves',
+    })
+    return { vm: BigInt(r[0]), vt: BigInt(r[1]), rm: BigInt(r[2]), rt: BigInt(r[3]) }
+  }
+
   async function executeBuy() {
     if (!data || !amount || parseFloat(amount) <= 0) return
     const value = parseEther(amount.toString())
+    let minOut = 0n
+    try {
+      const { vm, vt, rm, rt } = await getReserves()
+      const expected = estimateBuyOut(value, vm, vt, rm, rt)
+      minOut = withSlippage(expected, slippage)
+    } catch (e) {
+      console.warn('reserve read failed; falling back to 0n minOut (NO slippage protection)', e)
+    }
     writeContract({
       address: data.curveAddress,
       abi: CURVE_ABI,
       functionName: 'buy',
-      args: [0n], // minOut — could calculate based on slippage
+      args: [minOut],
       value,
       chainId: monad.id,
     })
@@ -93,9 +168,16 @@ export default function TokenDetail() {
 
   async function executeSell() {
     if (!data || !amount || parseFloat(amount) <= 0) return
-    // First need to approve
     const tokenAmt = parseEther(amount.toString())
-    // Check allowance, approve if needed (simplified — should batch)
+    let minOut = 0n
+    try {
+      const { vm, vt, rm, rt } = await getReserves()
+      const expected = estimateSellOut(tokenAmt, vm, vt, rm, rt)
+      minOut = withSlippage(expected, slippage)
+    } catch (e) {
+      console.warn('reserve read failed; falling back to 0n minMonOut (NO slippage protection)', e)
+    }
+
     try {
       const allowance = await publicClient.readContract({
         address: tokenAddr,
@@ -104,21 +186,23 @@ export default function TokenDetail() {
         args: [wallet, data.curveAddress],
       })
       if (BigInt(allowance) < tokenAmt) {
-        await writeContract({
+        // Queue the sell; the useEffect on isSuccess will auto-fire it once the
+        // approve confirms. User clicks Sell once, confirms two wallet popups.
+        pendingSellRef.current = { tokenAmt, minOut }
+        writeContract({
           address: tokenAddr,
           abi: TOKEN_ABI,
           functionName: 'approve',
           args: [data.curveAddress, BigInt(2) ** BigInt(256) - BigInt(1)],
           chainId: monad.id,
         })
-        // Wait for approval — UX could be improved
         return
       }
       writeContract({
         address: data.curveAddress,
         abi: CURVE_ABI,
         functionName: 'sell',
-        args: [tokenAmt, 0n],
+        args: [tokenAmt, minOut],
         chainId: monad.id,
       })
     } catch (e) { console.error(e) }

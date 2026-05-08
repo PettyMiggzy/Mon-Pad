@@ -72,9 +72,8 @@ export default function Home() {
                 setLivePulse(p => ({ ...p, [addr]: Date.now() }))
               }
             }
-            if (msg.type === 'trade') {
-              setRecentBuys(prev => [msg, ...prev].slice(0, 30))
-            }
+            // (Removed: 'trade' handler was dead code — server.js only emits
+            //  'price_update'. setRecentBuys was never populated.)
           } catch {}
         }
         ws.onclose = () => { retry = setTimeout(connect, 3000) }
@@ -235,8 +234,8 @@ export default function Home() {
 
 function TrendingCard({ token: t, monPrice, onClick }) {
   const pct = Number(t.bondedBps) / 100
-  const meta = t.meta || {}
-  const banner = fixUrl(meta.bannerUrl || meta.pfpUrl)
+  // Server merges DB metadata flat onto each token (no `meta` sub-object). Read direct.
+  const banner = fixUrl(t.bannerUrl || t.pfpUrl)
   return (
     <div onClick={onClick} style={{flexShrink:0, width:240, scrollSnapAlign:'start', cursor:'pointer'}} className="card">
       <div style={{height:120, borderRadius:'var(--r)', overflow:'hidden', marginBottom:10, background:'linear-gradient(135deg, rgba(168,85,247,0.15), rgba(34,211,238,0.05))', display:'flex', alignItems:'center', justifyContent:'center'}}>
@@ -263,8 +262,8 @@ function TrendingCard({ token: t, monPrice, onClick }) {
 
 function TokenCard({ token: t, monPrice, isLive, onClick }) {
   const pct = Number(t.bondedBps) / 100
-  const meta = t.meta || {}
-  const pfp = fixUrl(meta.pfpUrl)
+  // Server merges DB metadata flat onto each token (no `meta` sub-object). Read direct.
+  const pfp = fixUrl(t.pfpUrl)
   return (
     <div onClick={onClick} className={`token-card ${isLive ? 'live' : ''} ${t.graduated ? 'graduated' : ''}`}>
       <div className="token-card-img">

@@ -134,7 +134,12 @@ export default function Portfolio() {
             <div style={{display:'flex', flexDirection:'column', gap:10}}>
               {holdings.map(h => {
                 const pnl = Number(h.realizedPnL || 0) + Number(h.unrealizedPnL || 0)
-                const pnlPct = h.costBasis > 0 ? (pnl / Number(h.costBasis) / 1e18) * 100 : 0
+                // h.costBasis is wei-string from server (`(remaining * 1e18).toString()`).
+                // pnl is in MON. Was previously divided by 1e18 twice (once via Number(wei),
+                // once explicitly), making every percentage 1e-18× too small. Compute MON
+                // first, then divide.
+                const costBasisMon = Number(h.costBasis || 0) / 1e18
+                const pnlPct = costBasisMon > 0 ? (pnl / costBasisMon) * 100 : 0
                 return (
                   <div key={h.tokenAddress} className="card" style={{cursor:'pointer'}} onClick={() => router.push(`/token/${h.tokenAddress}`)}>
                     <div className="flex justify-between items-center" style={{flexWrap:'wrap', gap:10}}>

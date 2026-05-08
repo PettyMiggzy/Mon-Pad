@@ -44,6 +44,14 @@ interface IStakingPool {
     function token() external view returns (address);
 }
 
+/// @notice V2.1-16: Hub queries curve.token() at setCurveAuthorized time and stores the
+///         binding. notifyReward then ignores the curve-supplied `token` arg in favor of
+///         this authoritative mapping, removing any chance of a hostile/buggy curve crediting
+///         volumeCache to the wrong token.
+interface ICurveExt {
+    function token() external view returns (address);
+}
+
 /* ------------------------------------------------------------------ */
 /*                          MonPadStakingHub                           */
 /* ------------------------------------------------------------------ */
@@ -70,6 +78,11 @@ contract MonPadStakingHub is ReentrancyGuard {
     /* --- Authorized callers --- */
     /// @notice Curves authorized to call `notifyReward`. Populated by factory at launch.
     mapping(address => bool) public isCurve;
+
+    /// @notice V2.1-16: authoritative curve→token binding. Populated at setCurveAuthorized
+    ///         time via ICurveExt(curve).token(). notifyReward uses this instead of the
+    ///         caller-supplied token, defending against a hostile/buggy curve.
+    mapping(address => address) public curveToken;
 
     /* --- Routing config --- */
     /// @notice Special token whose pool is excluded from volume-weighted distribution.
@@ -205,10 +218,20 @@ contract MonPadStakingHub is ReentrancyGuard {
     /* -------------------------- Curve registry ------------------------- */
 
     /// @notice Factory calls this on every curve launch to authorize the curve.
+    /// @dev V2.1-16: when authorizing, also pin curveToken[curve] = curve.token(). Without this
+    ///      binding, notifyReward had to trust the caller-supplied token argument, which a
+    ///      hostile authorized curve could spoof to credit volumeCache to the wrong bucket.
     function setCurveAuthorized(address curve, bool authorized) external {
         if (msg.sender != factory) revert NotFactory(msg.sender);
         if (curve == address(0)) revert ZeroAddress();
         isCurve[curve] = authorized;
+        if (authorized) {
+            address tok = ICurveExt(curve).token();
+            if (tok == address(0)) revert ZeroAddress();
+            curveToken[curve] = tok;
+        } else {
+            delete curveToken[curve];
+        }
         emit CurveRegistered(curve, authorized);
     }
 
@@ -223,10 +246,15 @@ contract MonPadStakingHub is ReentrancyGuard {
      *         excluded from `volumeCache` because the MONSHI pool is not a beneficiary of
      *         the others-distribution; it is funded by the buyback wallet instead.
      */
-    function notifyReward(address token) external payable nonReentrant {
+    function notifyReward(address /* tokenArg */) external payable nonReentrant {
         if (!isCurve[msg.sender]) revert NotCurve(msg.sender);
         if (msg.value == 0)       revert ZeroAmount();
-        if (token == address(0))  revert ZeroAddress();
+
+        // V2.1-16: trust the authoritative curve→token binding pinned at setCurveAuthorized,
+        // not the caller's argument. The function parameter is kept for ABI compatibility
+        // with the curve's encodeWithSignature("notifyReward(address)", token) call site.
+        address token = curveToken[msg.sender];
+        if (token == address(0)) revert ZeroAddress();
 
         // 40/60 split (defaults; adjustable under timelock)
         uint256 monshiPart = (msg.value * monshiShareBps) / BPS_DENOM;

@@ -34,14 +34,28 @@ interface IHub {
     function pendingReward(address pool) external view returns (uint256);
 }
 
+/// @notice V2.1-10: Pool reads treasuryWallet live from factory rather than caching an
+///         immutable copy at construction. This lets Factory.treasuryWallet rotation
+///         (24h timelocked on the factory side) propagate to all pools automatically.
+interface IFactoryRO_Pool {
+    function treasuryWallet() external view returns (address);
+}
+
 // ───────────────────────────── MonPadStakingPool ─────────────────────────────
 contract MonPadStakingPool is ReentrancyGuard {
     // ─── Immutable wiring ───
     IERC20  public immutable token;
     address public immutable hub;          // C3: hub is IMMUTABLE; migration = redeploy
     address public immutable monshiToken;
-    address public immutable treasuryWallet;
-    mapping(address => uint256) public treasuryPending;  // 2M-Monshi-gate dropout penalty check
+    /// @notice V2.1-10: factory address (NOT treasuryWallet). Pool resolves treasuryWallet
+    ///         live from factoryRO.treasuryWallet() at claim time so factory-side rotation
+    ///         propagates without per-pool migration. The factory's setTreasuryWallet is
+    ///         24h timelocked, so this read is cheap and predictable.
+    address public immutable factoryRO;
+    /// @notice V2.1-10: single uint accumulator (was a mapping keyed by the now-removed
+    ///         immutable treasuryWallet). All paid stake fees pile up here; whoever is
+    ///         the current factory.treasuryWallet at claim time pulls the lot.
+    uint256 public treasuryPending;
     bool    public immutable burnsToCreator;
 
     // ─── Roles ───
@@ -156,16 +170,16 @@ contract MonPadStakingPool is ReentrancyGuard {
         address _creator,
         bool    _burnsToCreator,
         address _owner,
-        address _treasury
+        address _factory
     ) {
-        if (_token == address(0) || _hub == address(0) || _monshiToken == address(0) || _creator == address(0) || _owner == address(0) || _treasury == address(0)) revert ZeroAddress();
+        if (_token == address(0) || _hub == address(0) || _monshiToken == address(0) || _creator == address(0) || _owner == address(0) || _factory == address(0)) revert ZeroAddress();
         token          = IERC20(_token);
         hub            = _hub;
         monshiToken    = _monshiToken;
         creator        = _creator;
         burnsToCreator = _burnsToCreator;
         owner           = _owner;
-        treasuryWallet  = _treasury;
+        factoryRO       = _factory;
 
         // V2.1 spec tier seed: all tiers use 10% early fee (1000 bps).
         // Tier 0: 30-day  / 1.0x  / 1000 bps early fee
@@ -239,7 +253,9 @@ contract MonPadStakingPool is ReentrancyGuard {
             if (msg.value != 0) revert UnexpectedValue();
         } else {
             if (msg.value < STAKE_FEE) revert FeeTooSmall(msg.value, STAKE_FEE);
-            treasuryPending[treasuryWallet] += msg.value;
+            // V2.1-10: single uint accumulator. Whoever is factory.treasuryWallet at
+            // claim time pulls the entire bucket via claimTreasury().
+            treasuryPending += msg.value;
             emit StakeFeeAccrued(msg.sender, msg.value);
         }
         if (amount == 0) revert ZeroAmount();
@@ -551,15 +567,19 @@ contract MonPadStakingPool is ReentrancyGuard {
     function stakesLength(address user) external view returns (uint256) { return stakes[user].length; }
 
     /// @notice Treasury wallet pulls accumulated paid-fee MON.
-    /// @dev Pull pattern keeps stake() simple and avoids gas-griefing via misconfigured treasury.
+    /// @dev V2.1-10: resolves treasury live from factory. After Factory.executeSetTreasuryWallet,
+    ///      the new treasury is the only address that can drain accumulated fees. Old treasury
+    ///      loses access automatically. Pull pattern keeps stake() simple.
     function claimTreasury() external nonReentrant {
-        if (msg.sender != treasuryWallet) revert NotTreasury();
-        uint256 amt = treasuryPending[treasuryWallet];
+        address t = IFactoryRO_Pool(factoryRO).treasuryWallet();
+        if (t == address(0)) revert ZeroAddress();
+        if (msg.sender != t) revert NotTreasury();
+        uint256 amt = treasuryPending;
         if (amt == 0) return;
-        treasuryPending[treasuryWallet] = 0;
-        (bool ok, ) = treasuryWallet.call{value: amt}("");
+        treasuryPending = 0;
+        (bool ok, ) = t.call{value: amt}("");
         if (!ok) revert TransferFailed();
-        emit TreasuryClaimed(treasuryWallet, amt);
+        emit TreasuryClaimed(t, amt);
     }
 
     /// @notice Returns the actual sum of raw token principals currently staked. (B7 fix)
