@@ -75,13 +75,27 @@ if (process.env.DEPLOY_STAKING === '1') {
   }
 }
 
+// Load a compiled contract artifact. Prefers hand-curated deploy/v2/build/*.json,
+// falls back to hardhat-test/artifacts/* (auto-populated by `npx hardhat compile`).
+// This means the user can either:
+//   (a) run `cd hardhat-test && npm install && npx hardhat compile` once, then `node deploy.js`
+//   (b) drop pre-compiled JSON files into deploy/v2/build/ manually
 function loadContract(name) {
-  const p = path.join(__dirname, 'build', name + '.json');
-  if (!fs.existsSync(p)) {
-    console.error(`❌ Missing build artifact: ${p}. Compile contracts first.`);
-    process.exit(1);
+  const candidates = [
+    path.join(__dirname, 'build', name + '.json'),
+    path.join(__dirname, '..', '..', 'hardhat-test', 'artifacts', 'contracts', name + '.sol', name + '.json'),
+  ];
+  for (const p of candidates) {
+    if (fs.existsSync(p)) {
+      const j = JSON.parse(fs.readFileSync(p, 'utf8'));
+      // Both legacy and hardhat formats expose .abi and .bytecode at the top level.
+      if (j && j.abi && j.bytecode) return j;
+    }
   }
-  return JSON.parse(fs.readFileSync(p, 'utf8'));
+  console.error(`❌ Missing build artifact for ${name}. Either:`);
+  console.error(`   (a) cd hardhat-test && npm install && npx hardhat compile`);
+  console.error(`   (b) drop a JSON file with {abi, bytecode} at deploy/v2/build/${name}.json`);
+  process.exit(1);
 }
 
 async function deploy(wallet, name, args = []) {
