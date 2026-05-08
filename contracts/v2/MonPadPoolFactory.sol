@@ -192,7 +192,7 @@ contract MonPadPoolFactory {
 
         // Deploy pool. createPool is ALWAYS burnsToCreator = false (B3/C16).
         MonPadStakingPool p = new MonPadStakingPool(
-            IERC20(token),
+            token,
             hub,
             monshiToken,
             poolCreator,
@@ -239,7 +239,7 @@ contract MonPadPoolFactory {
         }
 
         MonPadStakingPool p = new MonPadStakingPool(
-            IERC20(token),
+            token,
             hub,
             monshiToken,
             creator,
