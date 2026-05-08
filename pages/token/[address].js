@@ -254,16 +254,11 @@ export default function TokenDetail() {
             <div className="stat"><div className="stat-val">{data.launchedAt ? timeAgo(data.launchedAt) : '—'}</div><div className="stat-label">Age</div></div>
           </div>
 
-          {/* Graduation progress */}
-          <div className="mt-4">
-            <div className="flex justify-between text-xs mb-1">
-              <span className="text-t3">{pct.toFixed(2)}% to graduation</span>
-              <span className="font-mono text-t2">{fmtMON(data.monRaisedNet)} / {fmtMON(GRADUATION_TARGET)} MON</span>
-            </div>
-            <div className="token-card-progress" style={{height:8}}>
-              <div className="token-card-progress-fill" style={{width:`${Math.min(pct, 100)}%`}}></div>
-            </div>
-          </div>
+          {/* Graduation milestone bar (V2.1 UI beefup) */}
+          <GraduationMilestoneBar pct={pct} monRaised={data.monRaisedNet} target={GRADUATION_TARGET} />
+
+          {/* Buy/Sell pressure for last 24h */}
+          <BuyPressure trades={trades} />
         </div>
 
         {/* MAIN GRID — Chart + Terminal */}
@@ -367,6 +362,18 @@ export default function TokenDetail() {
           </div>
         </div>
 
+        {/* TOP TRADERS + LIVE ACTIVITY (V2.1 UI beefup) */}
+        <div style={{display:'grid', gridTemplateColumns:'1fr', gap:16, marginBottom:16}}>
+          <div className="card">
+            <div className="font-bold text-base mb-3">🔥 Top Traders</div>
+            <TopTradersList trades={trades} />
+          </div>
+          <div className="card">
+            <div className="font-bold text-base mb-3">📡 Live Activity</div>
+            <ActivityTicker trades={trades} />
+          </div>
+        </div>
+
         {/* STAKING WIDGET */}
         <StakingWidget tokenAddr={tokenAddr} symbol={data.symbol} />
 
@@ -466,7 +473,6 @@ function HoldersList({ holders, totalSupply }) {
 }
 
 function StakingWidget({ tokenAddr, symbol }) {
-  // Minimal staking card — links to /stake/[address] for full UI
   return (
     <div className="card mb-4" style={{background:'linear-gradient(135deg, rgba(168,85,247,0.08), rgba(34,211,238,0.04))', borderColor:'var(--bd2)'}}>
       <div className="flex justify-between items-center" style={{flexWrap:'wrap', gap:10}}>
@@ -476,6 +482,131 @@ function StakingWidget({ tokenAddr, symbol }) {
         </div>
         <a href={`/stake/${tokenAddr}`} className="btn btn-primary">Stake →</a>
       </div>
+    </div>
+  )
+}
+
+// ── V2.1 UI BEEFUP: graduation milestones, buy pressure, activity, top traders ──
+
+const GRAD_MILESTONES = [
+  { pct: 0,   emoji: '🌱' },
+  { pct: 25,  emoji: '🚀' },
+  { pct: 50,  emoji: '🔥' },
+  { pct: 75,  emoji: '⚡' },
+  { pct: 100, emoji: '🎓' },
+]
+
+function GraduationMilestoneBar({ pct, monRaised, target }) {
+  const clamped = Math.min(Math.max(pct, 0), 100)
+  return (
+    <div className="mt-4">
+      <div className="flex justify-between text-xs mb-2">
+        <span className="text-t3">{clamped.toFixed(2)}% to graduation</span>
+        <span className="font-mono text-t2">{fmtMON(monRaised)} / {fmtMON(target)} MON</span>
+      </div>
+      <div className="gradbar">
+        {GRAD_MILESTONES.map(m => (
+          <div key={m.pct}
+            className={`gradbar-milestone ${clamped >= m.pct ? 'reached' : ''}`}
+            style={{ left: `${m.pct}%` }}>
+            <span>{m.emoji}</span>
+            <span className="gradbar-milestone-pct">{m.pct === 100 ? 'GRAD' : `${m.pct}%`}</span>
+          </div>
+        ))}
+        <div className="gradbar-track">
+          <div className="gradbar-fill" style={{ width: `${clamped}%` }} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function BuyPressure({ trades }) {
+  // Last 24h buy vs sell volume share. Falls back to all-time if no recent activity.
+  if (!trades || trades.length === 0) return null
+  const now = Date.now() / 1000
+  const day = 86400
+  const recent = trades.filter(t => (Number(t.timestamp || t.ts) || 0) > now - day)
+  const window = recent.length > 0 ? recent : trades
+  let buyVol = 0, sellVol = 0
+  for (const t of window) {
+    const monAmt = Number(t.monAmount || t.value || 0) / 1e18 // wei → MON
+    if (t.type === 'buy') buyVol += monAmt
+    else if (t.type === 'sell') sellVol += monAmt
+  }
+  const total = buyVol + sellVol
+  if (total === 0) return null
+  const buyPct = (buyVol / total) * 100
+  const sellPct = 100 - buyPct
+  return (
+    <div className="pressure">
+      <span className="pressure-label-buy">{buyPct.toFixed(0)}% Buys</span>
+      <div className="pressure-bar">
+        <div className="pressure-buy" style={{ width: `${buyPct}%` }} />
+        <div className="pressure-sell" style={{ width: `${sellPct}%` }} />
+      </div>
+      <span className="pressure-label-sell">Sells {sellPct.toFixed(0)}%</span>
+    </div>
+  )
+}
+
+function ActivityTicker({ trades }) {
+  if (!trades || trades.length === 0) {
+    return <div className="text-center text-t3 text-sm" style={{padding:20}}>No trades yet</div>
+  }
+  const recent = trades.slice(0, 10)
+  return (
+    <div className="ticker">
+      {recent.map((t, i) => {
+        const isBuy = t.type === 'buy'
+        const mon = Number(t.monAmount || t.value || 0) / 1e18
+        const ts = Number(t.timestamp || t.ts) || 0
+        return (
+          <div key={i} className={`ticker-row ${isBuy ? 'buy' : 'sell'}`}>
+            <span className={`ticker-pill ${isBuy ? 'buy' : 'sell'}`}>{isBuy ? 'B' : 'S'}</span>
+            <span className="ticker-addr">{fmtAddr(t.who || t.user || t.addr || '')}</span>
+            <span className="ticker-amt">{mon.toFixed(mon >= 1 ? 2 : 4)} MON</span>
+            <span className="ticker-time">{ts ? timeAgo(ts) : '—'}</span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function TopTradersList({ trades }) {
+  if (!trades || trades.length === 0) {
+    return <div className="text-center text-t3 text-sm" style={{padding:20}}>No traders yet</div>
+  }
+  // Aggregate volume per wallet across all available trades
+  const byWallet = new Map()
+  for (const t of trades) {
+    const w = (t.who || t.user || t.addr || '').toLowerCase()
+    if (!w) continue
+    const mon = Number(t.monAmount || t.value || 0) / 1e18
+    byWallet.set(w, (byWallet.get(w) || 0) + mon)
+  }
+  const ranked = [...byWallet.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5)
+  if (ranked.length === 0) return <div className="text-center text-t3 text-sm" style={{padding:20}}>No traders yet</div>
+  const max = ranked[0][1] || 1
+  return (
+    <div className="toptraders">
+      {ranked.map(([w, vol], i) => {
+        const rankClass = i === 0 ? 'r1' : i === 1 ? 'r2' : i === 2 ? 'r3' : 'rN'
+        const pct = (vol / max) * 100
+        return (
+          <div key={w} className="toptrader">
+            <span className={`toptrader-rank ${rankClass}`}>{i + 1}</span>
+            <div style={{ minWidth: 0 }}>
+              <div className="font-mono" style={{ fontSize: 12 }}>{fmtAddr(w)}</div>
+              <div className="toptrader-volbar">
+                <div className="toptrader-volbar-fill" style={{ width: `${pct}%` }} />
+              </div>
+            </div>
+            <div className="font-mono font-bold" style={{ fontSize: 12 }}>{vol.toFixed(2)} MON</div>
+          </div>
+        )
+      })}
     </div>
   )
 }

@@ -262,8 +262,11 @@ function TrendingCard({ token: t, monPrice, onClick }) {
 
 function TokenCard({ token: t, monPrice, isLive, onClick }) {
   const pct = Number(t.bondedBps) / 100
-  // Server merges DB metadata flat onto each token (no `meta` sub-object). Read direct.
   const pfp = fixUrl(t.pfpUrl)
+  const change24h = Number(t.change24h || 0)
+  const buyers = Number(t.uniqueBuyers || 0)
+  const changeClass = change24h > 0.05 ? 'tcard-change-up' : change24h < -0.05 ? 'tcard-change-down' : 'tcard-change-flat'
+  const changeArrow = change24h > 0.05 ? '↗' : change24h < -0.05 ? '↘' : '→'
   return (
     <div onClick={onClick} className={`token-card ${isLive ? 'live' : ''} ${t.graduated ? 'graduated' : ''}`}>
       <div className="token-card-img">
@@ -272,18 +275,43 @@ function TokenCard({ token: t, monPrice, isLive, onClick }) {
         {isLive && !t.graduated && <span className="token-card-badge" style={{background:'var(--red)'}}>● LIVE</span>}
       </div>
       <div className="token-card-body">
-        <div className="token-card-name">{t.name}</div>
-        <div className="token-card-symbol">${t.symbol}</div>
-        <div className="token-card-stats">
-          <span className="text-t3 text-xs">MC</span>
-          <span className="token-card-mcap">{fmtUSD(t.marketCap || t.monRaisedNet, monPrice)}</span>
+        <div className="flex justify-between items-center" style={{gap:6}}>
+          <div style={{minWidth:0, flex:1}}>
+            <div className="token-card-name" style={{whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{t.name}</div>
+            <div className="token-card-symbol">${t.symbol}</div>
+          </div>
+          {buyers > 0 && (
+            <span className="tcard-buyers-pill" title={`${buyers} unique buyers`}>👥 {buyers > 999 ? `${(buyers/1000).toFixed(1)}k` : buyers}</span>
+          )}
         </div>
-        <div className="token-card-progress">
-          <div className="token-card-progress-fill" style={{width:`${Math.min(pct, 100)}%`}}></div>
+
+        <div className="tcard-stats">
+          <div>
+            <div className="tcard-stat-label">Mcap</div>
+            <div className="tcard-stat-val">{fmtUSD(t.marketCap || t.monRaisedNet, monPrice)}</div>
+          </div>
+          <div>
+            <div className="tcard-stat-label">24h Vol</div>
+            <div className="tcard-stat-val">{fmtMON(t.volumeMon || '0')}</div>
+          </div>
+          <div>
+            <div className="tcard-stat-label">24h</div>
+            <div className={`tcard-stat-val ${changeClass}`}>
+              {changeArrow} {change24h > 0 ? '+' : ''}{change24h.toFixed(1)}%
+            </div>
+          </div>
+          <div>
+            <div className="tcard-stat-label">Price</div>
+            <div className="tcard-stat-val">{fmtMON(t.priceWeiPerToken || '0')}</div>
+          </div>
         </div>
-        <div className="text-xs text-t4 mt-1 flex justify-between">
-          <span className="font-mono">{pct.toFixed(1)}%</span>
-          <span>to grad</span>
+
+        <div className="tcard-progress" title={`${pct.toFixed(1)}% bonded toward graduation`}>
+          <div className="tcard-progress-fill" style={{width:`${Math.min(pct, 100)}%`}}></div>
+        </div>
+        <div className="text-xs text-t4 mt-1 flex justify-between font-mono">
+          <span>{pct.toFixed(1)}% bonded</span>
+          <span>{t.graduated ? '🎓 graduated' : '→ 425K'}</span>
         </div>
       </div>
     </div>
