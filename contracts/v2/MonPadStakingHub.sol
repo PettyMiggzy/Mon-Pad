@@ -489,6 +489,19 @@ contract MonPadStakingHub is ReentrancyGuard {
         emit MonshiTokenSet(t);
     }
 
+    /// @notice One-shot bootstrap for the very first MONSHI token assignment (skips 24h timelock).
+    ///         Deploy ergonomics: the staking system needs `monshiToken` set immediately, otherwise
+    ///         every sell of any token credits volumeCache for MONSHI sells too (since the
+    ///         `token != monshiToken` branch never triggers when monshiToken == 0). After this is
+    ///         called once, monshiToken is locked forever — no path can change it (mirrors
+    ///         proposeSetMonshiToken's MonshiAlreadySet guard). Owner-only.
+    function bootstrapMonshi(address t) external onlyOwner {
+        if (monshiToken != address(0)) revert MonshiAlreadySet();
+        if (t == address(0))           revert ZeroAddress();
+        monshiToken = t;
+        emit MonshiTokenSet(t);
+    }
+
     /* --------------------------- Ownership ----------------------------- */
 
     function transferOwnership(address newOwner) external onlyOwner {

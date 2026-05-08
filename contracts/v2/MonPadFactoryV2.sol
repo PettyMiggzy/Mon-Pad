@@ -34,7 +34,12 @@ contract MonPadFactoryV2 {
     // ── ECONOMICS (all tunable) ───────────────
     uint256 public creationFee = 100 ether;
     uint256 public maxDevBuyBps = 200;          // 2% of supply max
-    uint256 public minDevBuyMon = 100 ether;
+    // V2.1-3 fix: default to 0. The previous default of 100 ether was mathematically
+    // incompatible with maxDevBuyBps=200 at launch reserves (Vm=30, Vt=1.073B): 100 MON
+    // buys ~82.5% of supply, far above the 2% cap, so any non-zero devBuy reverted.
+    // Setting min to 0 means the only constraint is the 2% supply cap (~0.6 MON ceiling
+    // at launch reserves). Owner can raise via timelocked queueSetMinDevBuyMon if desired.
+    uint256 public minDevBuyMon = 0;
     uint256 public graduationTarget = 425_000 ether;
     uint256 public graduationLP = 400_000 ether;
     uint256 public graduationCreatorReward = 25_000 ether;

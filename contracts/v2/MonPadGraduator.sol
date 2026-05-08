@@ -396,14 +396,18 @@ contract MonPadGraduator is ReentrancyGuard, IERC721Receiver {
     /* ------------------------------ Sweep ------------------------------ */
 
     /**
-     * @notice Open sweep for stuck assets. Cannot touch graduated tokens or the in-flight token.
+     * @notice Owner-only sweep for stuck assets. Cannot touch graduated tokens or the in-flight token.
      *         WMON is generally fine to sweep — if a graduation succeeded fully there should be
      *         no leftover WMON on this contract.
+     *
+     *         V2.1-7 fix: was permissionless. Native MON had no graduation guard at all,
+     *         so anyone could drain forced-transferred MON or any leftover from a partially-
+     *         failed flow. Now gated behind onlyOwner.
      * @param asset  ERC-20 to sweep (address(0) = native MON)
      * @param to     Recipient
      * @param amount Amount to sweep
      */
-    function sweep(address asset, address to, uint256 amount) external nonReentrant {
+    function sweep(address asset, address to, uint256 amount) external nonReentrant onlyOwner {
         if (to == address(0)) revert ZeroAddress();
 
         // Block sweeping anything tied to an active or completed graduation.

@@ -54,9 +54,17 @@ contract MonPadCurveV2 {
     uint256 public devTokenAmount;     // tokens dev got at launch
     
     // Fees collected — public for stats
-    uint256 public totalCreatorFees;   // total MON sent to creator
+    uint256 public totalCreatorFees;   // total MON earned by creator (paid + pending)
     uint256 public totalPlatformFees;  // total MON sent to platform
     uint256 public totalStakingFees;   // total MON sent to staking/buyback
+
+    // V2.1-5: pull-pattern accumulator for creator buy/sell fees.
+    // Eliminates the reentrancy surface where a malicious-creator contract reentered
+    // buy/sell mid-flow (push happened before reserve state updates). Buy/sell now credit
+    // creatorPending, which the creator withdraws via claimCreatorRewards().
+    // Note: graduation reward (25k MON) is still pushed directly because graduated=true
+    // is set before that push, blocking notGraduated reentry into buy/sell/_graduate.
+    uint256 public creatorPending;
     
     bool public graduated;
     bool public pauseBuys;
@@ -149,10 +157,10 @@ contract MonPadCurveV2 {
         uint256 bufferFee = isDev ? 0 : (monIn * f.buyFeeBufferBps()) / 10000;
         uint256 monForBuy = monIn - creatorFee - bufferFee;
         
-        // Pay creator fee instantly
+        // V2.1-5: accrue creator fee to pull-payment accumulator instead of pushing.
+        // Creator withdraws via claimCreatorRewards(). No external call here, no reentrancy.
         if (creatorFee > 0) {
-            (bool ok, ) = creator.call{value: creatorFee}("");
-            require(ok, "creator fee fail");
+            creatorPending += creatorFee;
             totalCreatorFees += creatorFee;
             emit FeeCollected("creator-buy", creator, creatorFee);
         }
@@ -242,9 +250,9 @@ contract MonPadCurveV2 {
     }
     
     function _distributeSellFees(uint256 creatorFee, uint256 stakingFee, uint256 platformFee, IFactory f) internal {
+        // V2.1-5: accrue creator fee to pull-payment accumulator (see _buy comment).
         if (creatorFee > 0) {
-            (bool ok, ) = creator.call{value: creatorFee}("");
-            require(ok, "creator fee fail");
+            creatorPending += creatorFee;
             totalCreatorFees += creatorFee;
             emit FeeCollected("creator-sell", creator, creatorFee);
         }
@@ -303,7 +311,10 @@ contract MonPadCurveV2 {
         require(grad != address(0), "!graduator");
         uint256 lpTokens = IToken(token).balanceOf(address(this));
         require(lpTokens > 0, "no lp tokens");
-        uint256 lpMon = address(this).balance;
+        // V2.1-5: subtract creatorPending so the creator's accrued buy/sell fees stay in
+        // the curve for them to claim post-graduation. Without this, claimCreatorRewards()
+        // would underflow / fail because the entire balance went to the graduator.
+        uint256 lpMon = address(this).balance - creatorPending;
         require(lpMon > 0, "no lp mon");
         _safeTransfer(token, grad, lpTokens);
         IGraduator(grad).onGraduate{value: lpMon}(token);
@@ -311,6 +322,20 @@ contract MonPadCurveV2 {
         emit Graduated(lpMon, creatorReward, platformGets);
     }
     
+    // ── CREATOR PULL PAYMENT (V2.1-5) ─────────
+    /// @notice Withdraw all accrued creator fees from buys and sells.
+    ///         Callable any time, including post-graduation (creatorPending was excluded
+    ///         from the LP transfer in _graduate so it stays available for the creator).
+    function claimCreatorRewards() external {
+        require(msg.sender == creator, "!creator");
+        uint256 amt = creatorPending;
+        require(amt > 0, "0");
+        creatorPending = 0;
+        (bool ok, ) = creator.call{value: amt}("");
+        require(ok, "claim fail");
+        emit FeeCollected("creator-claim", creator, amt);
+    }
+
     // ── ADMIN (owner of factory) ──────────────
     function setPauseBuys(bool v) external {
         require(msg.sender == IFactory(factory).owner(), "!owner");
