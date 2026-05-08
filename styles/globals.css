@@ -887,6 +887,7 @@ input[type="range"]::-moz-range-thumb {
 .ticker-amt { font-family: var(--mono); font-weight: 700; }
 .ticker-time { color: var(--t4); font-size: 10px; font-family: var(--mono); }
 @keyframes slidein { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes livePulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.55; transform: scale(0.85); } }
 
 /* Top traders leaderboard (compact) */
 .toptraders { display: flex; flex-direction: column; gap: 6px; }

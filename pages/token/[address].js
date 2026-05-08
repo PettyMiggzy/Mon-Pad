@@ -79,12 +79,75 @@ export default function TokenDetail() {
   // user had to click Sell twice (and the UX gave no indication of the two-step).
   const pendingSellRef = useRef(null) // { tokenAmt, minOut } | null
 
+  // Live-chart WS connection state. Connected = green pulsing dot on the chart header.
+  const [wsLive, setWsLive] = useState(false)
+
   useEffect(() => {
     if (!tokenAddr || !SERVER) return
     fetch(`${SERVER}/api/mon-price`).then(r => r.json()).then(d => setMonPrice(d.price || 0)).catch(() => {})
     loadAll()
-    const iv = setInterval(loadAll, 8000)
+    // Slow poll as a safety net — WS does the live work, but if WS drops we still update.
+    const iv = setInterval(loadAll, 30000)
     return () => clearInterval(iv)
+  }, [tokenAddr])
+
+  // Live updates via WebSocket. Server broadcasts:
+  //   { type: 'price_update', tokenAddress, ... } on every event-detection tick (~3s)
+  //   { type: 'trade', tokenAddress, ts, tradeType, price, volume, addr } on each new trade
+  // We filter for events matching the current token, append trades to the list, and refetch
+  // candles when a price_update comes in for this token. No more 8s poll-only flow.
+  useEffect(() => {
+    if (!tokenAddr || !SERVER) return
+    const wsUrl = SERVER.replace('https://', 'wss://').replace('http://', 'ws://')
+    let ws
+    let retry
+    function connect() {
+      try {
+        ws = new WebSocket(wsUrl)
+        ws.onopen = () => setWsLive(true)
+        ws.onclose = () => { setWsLive(false); retry = setTimeout(connect, 3000) }
+        ws.onerror = () => { try { ws.close() } catch {} }
+        ws.onmessage = e => {
+          try {
+            const msg = JSON.parse(e.data)
+            const ta = (msg.tokenAddress || '').toLowerCase()
+            if (ta !== String(tokenAddr).toLowerCase()) return
+            if (msg.type === 'trade') {
+              // Prepend to local trades list (newest first to match server's /trades response).
+              const monWei = BigInt(Math.floor((msg.volume || 0) * 1e18)).toString()
+              const tokQty = msg.price > 0 ? (msg.volume / msg.price) : 0
+              const tokWei = BigInt(Math.floor(tokQty * 1e18)).toString()
+              setTrades(prev => [{
+                timestamp: msg.ts, ts: msg.ts,
+                type: msg.tradeType,
+                monAmount: monWei, value: monWei,
+                tokenAmount: tokWei,
+                who: msg.addr, user: msg.addr, addr: msg.addr,
+                price: msg.price,
+              }, ...prev].slice(0, 100))
+              // Refresh candle data so the chart's last bucket animates with the new trade.
+              fetch(`${SERVER}/api/token/${tokenAddr}/candles?interval=5m&limit=200`)
+                .then(r => r.ok ? r.json() : null)
+                .then(c => { if (Array.isArray(c)) setCandles(c) })
+                .catch(() => {})
+            } else if (msg.type === 'price_update') {
+              // Quick top-bar refresh — pulls the latest mcap, raised, bondedBps from server.
+              fetch(`${SERVER}/api/token/${tokenAddr}`)
+                .then(r => r.ok ? r.json() : null)
+                .then(t => { if (t) setData(prev => ({ ...prev, ...t,
+                  monRaisedNet: BigInt(t.monRaisedNet || '0'),
+                  marketCap: BigInt(t.marketCap || '0'),
+                  bondedBps: BigInt(t.bondedBps || '0'),
+                  priceWeiPerToken: BigInt(t.priceWeiPerToken || '0'),
+                })) })
+                .catch(() => {})
+            }
+          } catch {}
+        }
+      } catch {}
+    }
+    connect()
+    return () => { if (ws) try { ws.close() } catch {}; clearTimeout(retry); setWsLive(false) }
   }, [tokenAddr])
 
   // Reload on successful tx
@@ -264,10 +327,15 @@ export default function TokenDetail() {
         {/* MAIN GRID — Chart + Terminal */}
         <div style={{display:'grid', gridTemplateColumns:'1fr', gap:16, marginBottom:16}}>
           <div className="card" style={{padding:0, overflow:'hidden'}}>
-            <div className="flex" style={{borderBottom:'1px solid var(--bd)'}}>
+            <div className="flex items-center" style={{borderBottom:'1px solid var(--bd)'}}>
               <button onClick={() => setTab('chart')} className={`flex-1 ${tab === 'chart' ? 'text-t1' : 'text-t3'}`} style={{padding:'12px', fontWeight:700, fontSize:13, borderBottom: tab==='chart' ? '2px solid var(--p)' : '2px solid transparent'}}>📊 Chart</button>
               <button onClick={() => setTab('trades')} className={`flex-1 ${tab === 'trades' ? 'text-t1' : 'text-t3'}`} style={{padding:'12px', fontWeight:700, fontSize:13, borderBottom: tab==='trades' ? '2px solid var(--p)' : '2px solid transparent'}}>💱 Trades ({trades.length})</button>
               <button onClick={() => setTab('holders')} className={`flex-1 ${tab === 'holders' ? 'text-t1' : 'text-t3'}`} style={{padding:'12px', fontWeight:700, fontSize:13, borderBottom: tab==='holders' ? '2px solid var(--p)' : '2px solid transparent'}}>👥 Holders ({holders.length})</button>
+              <span title={wsLive ? 'Live updates connected' : 'Live updates disconnected — falling back to 30s poll'}
+                style={{padding:'0 14px', display:'inline-flex', alignItems:'center', gap:6, fontSize:10, fontWeight:800, letterSpacing:1, color: wsLive ? 'var(--green)' : 'var(--t4)'}}>
+                <span style={{ width:8, height:8, borderRadius:'50%', background: wsLive ? 'var(--green)' : 'var(--t4)', boxShadow: wsLive ? '0 0 8px var(--green)' : 'none', animation: wsLive ? 'livePulse 1.4s ease-in-out infinite' : 'none' }} />
+                {wsLive ? 'LIVE' : 'OFFLINE'}
+              </span>
             </div>
 
             {tab === 'chart' && <PriceChart candles={candles} monPrice={monPrice} />}

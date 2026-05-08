@@ -302,4 +302,91 @@ describe("MonPad V2.1 — audit invariants", function () {
     const afterNew = await ethers.provider.getBalance(ctx.newTreasury.address);
     expect(afterNew - beforeNew + r2.gasUsed * r2.gasPrice).to.equal(ethers.parseEther("100"));
   });
+
+  // ─────────────────────────────────────────────────────────────
+  // POOL→HUB CLAIM END-TO-END
+  // Catches the V2.1 blocker where Pool._pullFromHubInternal called Hub with the
+  // pool address instead of the token address, making every claim revert and stranding
+  // every reward in the Hub forever.
+  it("Pool can pull distributed rewards from Hub (end-to-end claim)", async function () {
+    const ctx = await deployAll();
+
+    // 1. Launch a token, register a pool for it via PoolFactory.
+    const { tokenAddr, curveAddr } = await launchToken(ctx, ctx.alice);
+    const curve = await ethers.getContractAt("MonPadCurveV2", curveAddr);
+    const token = await ethers.getContractAt("MonPadTokenV2", tokenAddr);
+
+    // Public createPool requires either 1M MONSHI or 100 MON. Use the paid path.
+    await ctx.poolFactory.connect(ctx.alice).createPool(tokenAddr, {
+      value: ethers.parseEther("100"),
+    });
+    const poolAddr = await ctx.poolFactory.tokenToPool(tokenAddr);
+    const pool = await ethers.getContractAt("MonPadStakingPool", poolAddr);
+
+    // Confirm the hub registered it
+    expect(await ctx.hub.tokenToPool(tokenAddr)).to.equal(poolAddr);
+
+    // 2. Bob buys, then sells — sell-tax 0.5% routes to Hub.notifyReward via the curve.
+    //    (Curve was auto-authorized in Hub at launch via V2.1-1.)
+    await curve.connect(ctx.bob).buy(0, { value: ethers.parseEther("100") });
+    const bobBal = await token.balanceOf(ctx.bob.address);
+    await token.connect(ctx.bob).approve(curveAddr, bobBal);
+    await curve.connect(ctx.bob).sell(bobBal / 2n, 0);
+
+    // 3. Hub should now have non-zero volumeCache for this token AND non-zero balance.
+    expect(await ctx.hub.volumeCache(tokenAddr)).to.be.gt(0);
+    const hubAddr = await ctx.hub.getAddress();
+    const hubBalanceBefore = await ethers.provider.getBalance(hubAddr);
+    expect(hubBalanceBefore).to.be.gt(0);
+
+    // 4. Advance time past distributeInterval and trigger _distribute.
+    await ethers.provider.send("evm_increaseTime", [3601]);
+    await ethers.provider.send("evm_mine", []);
+    await ctx.hub.distribute();
+
+    // 5. Hub should have credited pendingReward[token] (NOT pendingReward[poolAddr]).
+    const pendingByToken = await ctx.hub.pendingReward(tokenAddr);
+    const pendingByPool = await ctx.hub.pendingReward(poolAddr);
+    expect(pendingByToken).to.be.gt(0);
+    expect(pendingByPool).to.equal(0);
+
+    // 6. Stake some tokens so the pool has non-zero totalWeightedStaked
+    //    (otherwise pullFromHub's _accrue() takes the "hold" branch).
+    //    Free path requires 2M MONSHI; use the paid path with 100 MON fee.
+    await curve.connect(ctx.bob).buy(0, { value: ethers.parseEther("10") });
+    const stakeAmt = await token.balanceOf(ctx.bob.address);
+    await token.connect(ctx.bob).approve(poolAddr, stakeAmt);
+    // pool.stake takes (tierId, amount, paidFee) and msg.value is the 100 MON paid-fee
+    await pool.connect(ctx.bob).stake(0, stakeAmt, true, {
+      value: ethers.parseEther("100"),
+    });
+
+    // 7. NOW pull from Hub. Pre-fix this would revert with PoolNotRegistered.
+    //    Post-fix it must succeed and move MON from Hub → Pool.
+    const poolBalBefore = await ethers.provider.getBalance(poolAddr);
+    const hubPendingBefore = await ctx.hub.pendingReward(tokenAddr);
+    expect(hubPendingBefore).to.be.gt(0);
+
+    await pool.pullFromHub();
+
+    const poolBalAfter = await ethers.provider.getBalance(poolAddr);
+    const hubPendingAfter = await ctx.hub.pendingReward(tokenAddr);
+
+    // Hub credit was zeroed
+    expect(hubPendingAfter).to.equal(0);
+    // Pool received the MON
+    expect(poolBalAfter - poolBalBefore).to.equal(hubPendingBefore);
+
+    // 8. Bob claims his reward share.
+    const stakeIdx = 0;
+    const earned = await pool.pending(ctx.bob.address, stakeIdx);
+    expect(earned).to.be.gt(0);
+
+    const bobBalBefore = await ethers.provider.getBalance(ctx.bob.address);
+    const tx = await pool.connect(ctx.bob).claim(stakeIdx);
+    const receipt = await tx.wait();
+    const bobBalAfter = await ethers.provider.getBalance(ctx.bob.address);
+    const gasCost = receipt.gasUsed * receipt.gasPrice;
+    expect(bobBalAfter - bobBalBefore + gasCost).to.equal(earned);
+  });
 });

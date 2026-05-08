@@ -29,9 +29,14 @@ interface IERC20 {
     function totalSupply() external view returns (uint256);
 }
 
+/// @notice Hub interface. NOTE: both functions take a TOKEN address (not a pool address).
+///         Hub looks up `tokenToPool[token]` and gates msg.sender against the result.
+///         An earlier revision of this file had the param named `pool` and the call sites
+///         passing `address(this)`, which made every claim revert PoolNotRegistered.
+///         Always pass `address(token)` from this contract.
 interface IHub {
-    function claimReward(address pool) external;
-    function pendingReward(address pool) external view returns (uint256);
+    function claimReward(address token) external;
+    function pendingReward(address token) external view returns (uint256);
 }
 
 /// @notice V2.1-10: Pool reads treasuryWallet live from factory rather than caching an
@@ -198,15 +203,20 @@ contract MonPadStakingPool is ReentrancyGuard {
 
     // ────────────────── Reward accounting ──────────────────
     /// @notice Pull any pending MON rewards owed by the Hub. Permissionless (C4).
-    /// @dev Calls IHub.claimReward(address(this)). Hub will forward MON via call. Then accrues delta.
+    /// @dev Calls IHub.claimReward(address(token)). Hub keys pendingReward by token address
+    ///      (NOT pool address) — passing address(this) would silently fail PoolNotRegistered
+    ///      and strand all rewards in the Hub forever. Tested in v21-flow.js end-to-end claim.
     function pullFromHub() external nonReentrant {
         _pullFromHubInternal();
     }
 
     function _pullFromHubInternal() internal {
-        uint256 owed = IHub(hub).pendingReward(address(this));
+        // V2.1 BLOCKER FIX: Hub keys pendingReward + tokenToPool by TOKEN address, not pool.
+        // Was incorrectly calling with address(this), which always returned 0 / reverted.
+        address tok = address(token);
+        uint256 owed = IHub(hub).pendingReward(tok);
         if (owed > 0) {
-            IHub(hub).claimReward(address(this));
+            IHub(hub).claimReward(tok);
             emit PulledFromHub(owed);
         }
         _accrue();
