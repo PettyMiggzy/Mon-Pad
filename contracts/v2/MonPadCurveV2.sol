@@ -277,14 +277,30 @@ contract MonPadCurveV2 {
     }
     
     // ── GRADUATION ────────────────────────────
+    /// @dev Sanity floor that the graduator's LP_MON_MIN must not exceed. Kept in sync with
+    ///      MonPadGraduator.LP_MON_MIN (1 ether). If the graduator's floor is ever raised,
+    ///      this constant must move with it.
+    uint256 internal constant GRAD_LP_FLOOR = 1 ether;
+
     function _graduate() internal {
         require(!graduated, "already");
         IFactory f = IFactory(factory);
-        graduated = true;
-        
-        uint256 lpAmt = f.graduationLP();
+
         uint256 creatorReward = f.graduationCreatorReward();
         uint256 platformGets = buyBuffer; // accumulated buffer
+
+        // V2.1-14 defensive check: confirm the curve has enough MON to make all upcoming
+        // payouts BEFORE we start pushing them out and BEFORE we set graduated=true.
+        // Without this, a misconfigured graduationCreatorReward (raised above what the curve
+        // has spare) would revert mid-flow and bounce the triggering buy with a confusing
+        // error from creator.call or graduator.onGraduate. Now we fail upfront with a clear
+        // message; owner can restore via timelocked queueSetGraduationCreatorReward.
+        // We also reserve creatorPending (V2.1-5) so the creator can claim their accrued
+        // buy/sell fees post-graduation, and require >= GRAD_LP_FLOOR for the graduator.
+        uint256 minNeeded = creatorReward + platformGets + creatorPending + GRAD_LP_FLOOR;
+        require(address(this).balance >= minNeeded, "insufficient for grad");
+
+        graduated = true;
         
         // Pay creator reward
         if (creatorReward > 0 && creator != address(0)) {
