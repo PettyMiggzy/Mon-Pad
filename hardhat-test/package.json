@@ -1,15 +1,14 @@
 {
   "name": "hardhat-test",
   "version": "1.0.0",
-  "description": "",
+  "description": "Hardhat smoke tests for the V2.1 audit-fix invariants. See test/v21-flow.js.",
   "main": "hardhat.config.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "hardhat test",
+    "compile": "hardhat compile"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
     "hardhat": "^2.28.6"
   }
 }

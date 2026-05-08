@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+interface IFactoryExt {
+    function maxDevBuyBps() external view returns (uint256);
+}
+
 interface IFactory {
     function platformWallet() external view returns (address);
     function getRewardRecipient() external view returns (address);
@@ -16,6 +20,11 @@ interface IFactory {
     function pauseAllSells() external view returns (bool);
     function blocked(address tok) external view returns (bool);
     function owner() external view returns (address);
+    function graduator() external view returns (address);
+}
+
+interface IGraduator {
+    function onGraduate(address token) external payable;
 }
 
 interface IToken {
@@ -45,9 +54,17 @@ contract MonPadCurveV2 {
     uint256 public devTokenAmount;     // tokens dev got at launch
     
     // Fees collected — public for stats
-    uint256 public totalCreatorFees;   // total MON sent to creator
+    uint256 public totalCreatorFees;   // total MON earned by creator (paid + pending)
     uint256 public totalPlatformFees;  // total MON sent to platform
     uint256 public totalStakingFees;   // total MON sent to staking/buyback
+
+    // V2.1-5: pull-pattern accumulator for creator buy/sell fees.
+    // Eliminates the reentrancy surface where a malicious-creator contract reentered
+    // buy/sell mid-flow (push happened before reserve state updates). Buy/sell now credit
+    // creatorPending, which the creator withdraws via claimCreatorRewards().
+    // Note: graduation reward (25k MON) is still pushed directly because graduated=true
+    // is set before that push, blocking notGraduated reentry into buy/sell/_graduate.
+    uint256 public creatorPending;
     
     bool public graduated;
     bool public pauseBuys;
@@ -124,6 +141,9 @@ contract MonPadCurveV2 {
         require(msg.sender == factory, "!factory");
         require(launchedAt == block.timestamp, "after launch");
         uint256 tokensOut = _buy(dev, msg.value, 0, true);
+        // Enforce dev cap: tokens received <= maxDevBuyBps of total supply
+        uint256 maxBps = uint256(IFactoryExt(factory).maxDevBuyBps());
+        require(tokensOut <= (1_000_000_000 ether * maxBps) / 10000, "dev buy > max %");
         devTokenAmount = tokensOut;
         emit DevBuy(dev, msg.value, tokensOut);
         return tokensOut;
@@ -137,10 +157,10 @@ contract MonPadCurveV2 {
         uint256 bufferFee = isDev ? 0 : (monIn * f.buyFeeBufferBps()) / 10000;
         uint256 monForBuy = monIn - creatorFee - bufferFee;
         
-        // Pay creator fee instantly
+        // V2.1-5: accrue creator fee to pull-payment accumulator instead of pushing.
+        // Creator withdraws via claimCreatorRewards(). No external call here, no reentrancy.
         if (creatorFee > 0) {
-            (bool ok, ) = creator.call{value: creatorFee}("");
-            require(ok, "creator fee fail");
+            creatorPending += creatorFee;
             totalCreatorFees += creatorFee;
             emit FeeCollected("creator-buy", creator, creatorFee);
         }
@@ -230,9 +250,9 @@ contract MonPadCurveV2 {
     }
     
     function _distributeSellFees(uint256 creatorFee, uint256 stakingFee, uint256 platformFee, IFactory f) internal {
+        // V2.1-5: accrue creator fee to pull-payment accumulator (see _buy comment).
         if (creatorFee > 0) {
-            (bool ok, ) = creator.call{value: creatorFee}("");
-            require(ok, "creator fee fail");
+            creatorPending += creatorFee;
             totalCreatorFees += creatorFee;
             emit FeeCollected("creator-sell", creator, creatorFee);
         }
@@ -257,14 +277,30 @@ contract MonPadCurveV2 {
     }
     
     // ── GRADUATION ────────────────────────────
+    /// @dev Sanity floor that the graduator's LP_MON_MIN must not exceed. Kept in sync with
+    ///      MonPadGraduator.LP_MON_MIN (1 ether). If the graduator's floor is ever raised,
+    ///      this constant must move with it.
+    uint256 internal constant GRAD_LP_FLOOR = 1 ether;
+
     function _graduate() internal {
         require(!graduated, "already");
         IFactory f = IFactory(factory);
-        graduated = true;
-        
-        uint256 lpAmt = f.graduationLP();
+
         uint256 creatorReward = f.graduationCreatorReward();
         uint256 platformGets = buyBuffer; // accumulated buffer
+
+        // V2.1-14 defensive check: confirm the curve has enough MON to make all upcoming
+        // payouts BEFORE we start pushing them out and BEFORE we set graduated=true.
+        // Without this, a misconfigured graduationCreatorReward (raised above what the curve
+        // has spare) would revert mid-flow and bounce the triggering buy with a confusing
+        // error from creator.call or graduator.onGraduate. Now we fail upfront with a clear
+        // message; owner can restore via timelocked queueSetGraduationCreatorReward.
+        // We also reserve creatorPending (V2.1-5) so the creator can claim their accrued
+        // buy/sell fees post-graduation, and require >= GRAD_LP_FLOOR for the graduator.
+        uint256 minNeeded = creatorReward + platformGets + creatorPending + GRAD_LP_FLOOR;
+        require(address(this).balance >= minNeeded, "insufficient for grad");
+
+        graduated = true;
         
         // Pay creator reward
         if (creatorReward > 0 && creator != address(0)) {
@@ -281,22 +317,41 @@ contract MonPadCurveV2 {
             buyBuffer = 0;
         }
         
-        // Send LP MON + remaining tokens to platform wallet to handle LP creation
-        // (Real implementation would call NPM directly; for upgradeability we let platform handle it)
-        uint256 remainingMon = address(this).balance;
-        uint256 remainingTokens = IToken(token).balanceOf(address(this));
-        
-        if (remainingMon > 0) {
-            (bool ok, ) = f.platformWallet().call{value: remainingMon}("");
-            require(ok, "lp mon fail");
-        }
-        if (remainingTokens > 0) {
-            IToken(token).transfer(f.platformWallet(), remainingTokens);
-        }
-        
-        emit Graduated(lpAmt, creatorReward, platformGets);
+        // V2.1-6 fix: send the curve's *entire remaining balance* to the Graduator instead of a
+        // hardcoded 400_000 ether. The hardcoded value (a) made graduationLP admin-tunable in name
+        // only, (b) bricked graduation if creatorReward was raised above what the curve had spare,
+        // and (c) permanently stranded any overshoot MON in the curve when monRaisedNet exceeded
+        // graduationTarget on the triggering buy. Graduator now accepts any amount >= LP_MON_MIN.
+        // Sequence: safeTransfer tokens FIRST, then onGraduate{value: lpMon}.
+        address grad = f.graduator();
+        require(grad != address(0), "!graduator");
+        uint256 lpTokens = IToken(token).balanceOf(address(this));
+        require(lpTokens > 0, "no lp tokens");
+        // V2.1-5: subtract creatorPending so the creator's accrued buy/sell fees stay in
+        // the curve for them to claim post-graduation. Without this, claimCreatorRewards()
+        // would underflow / fail because the entire balance went to the graduator.
+        uint256 lpMon = address(this).balance - creatorPending;
+        require(lpMon > 0, "no lp mon");
+        _safeTransfer(token, grad, lpTokens);
+        IGraduator(grad).onGraduate{value: lpMon}(token);
+
+        emit Graduated(lpMon, creatorReward, platformGets);
     }
     
+    // ── CREATOR PULL PAYMENT (V2.1-5) ─────────
+    /// @notice Withdraw all accrued creator fees from buys and sells.
+    ///         Callable any time, including post-graduation (creatorPending was excluded
+    ///         from the LP transfer in _graduate so it stays available for the creator).
+    function claimCreatorRewards() external {
+        require(msg.sender == creator, "!creator");
+        uint256 amt = creatorPending;
+        require(amt > 0, "0");
+        creatorPending = 0;
+        (bool ok, ) = creator.call{value: amt}("");
+        require(ok, "claim fail");
+        emit FeeCollected("creator-claim", creator, amt);
+    }
+
     // ── ADMIN (owner of factory) ──────────────
     function setPauseBuys(bool v) external {
         require(msg.sender == IFactory(factory).owner(), "!owner");
@@ -312,4 +367,12 @@ contract MonPadCurveV2 {
     }
     
     receive() external payable {}
+
+    /// @dev Minimal SafeERC20-style transfer (OZ-free).
+    function _safeTransfer(address tok, address to, uint256 amt) internal {
+        (bool ok, bytes memory data) = tok.call(
+            abi.encodeWithSelector(IToken.transfer.selector, to, amt)
+        );
+        require(ok && (data.length == 0 || abi.decode(data, (bool))), "safeTransfer fail");
+    }
 }

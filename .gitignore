@@ -10,8 +10,11 @@ tsconfig.tsbuildinfo
 *.log
 .cache
 
-# Hardhat workspace
-hardhat-test/
+# Hardhat workspace — track sources + tests, ignore generated artifacts
+hardhat-test/node_modules/
+hardhat-test/artifacts/
+hardhat-test/cache/
+hardhat-test/typechain-types/
 compile.js
 
 # Deploy secrets

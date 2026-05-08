@@ -27,6 +27,9 @@
 //
 // Optional env:
 //   DEPLOY_STAKING   - "1" to deploy Hub + PoolFactory + Graduator + MONSHI pool wiring
+//   DEPLOY_VESTING   - "1" to deploy MonPadVesting. Default OFF: the contract is non-binding
+//                      (beneficiary can self-revoke). See audit V2.1-8. Don't enable unless
+//                      you've replaced the revoke logic.
 //   DEPLOY_SWAP      - "1" to deploy MonPadSwap wrapper (separate flow)
 //   DEX_ROUTER       - existing Uniswap V2-style router (only if DEPLOY_SWAP=1)
 //
@@ -126,10 +129,16 @@ async function main() {
   deployed.factory = factory.addr;
 
   // ============================================================
-  // 2. Vesting (no constructor args)
+  // 2. Vesting (no constructor args) — opt-in only.
+  //    The contract is non-binding (beneficiary can self-revoke). Audit V2.1-8.
+  //    Default OFF. Set DEPLOY_VESTING=1 to ship anyway.
   // ============================================================
-  const vesting = await deploy(wallet, 'MonPadVesting');
-  deployed.vesting = vesting.addr;
+  if (process.env.DEPLOY_VESTING === '1') {
+    const vesting = await deploy(wallet, 'MonPadVesting');
+    deployed.vesting = vesting.addr;
+  } else {
+    console.log('⏭  Skipping MonPadVesting (DEPLOY_VESTING != "1"). Audit V2.1-8: contract is non-binding.');
+  }
 
   // ============================================================
   // 3. Staking system (Hub + PoolFactory + Graduator + bootstrap + MONSHI pool)
