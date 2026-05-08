@@ -149,51 +149,64 @@ contract MonPadCurveV2 {
         return tokensOut;
     }
     
+    /// @dev Stack-too-deep avoidance: pack curve-math locals into a struct so the function
+    ///      compiles cleanly without requiring `viaIR` on every consumer's toolchain.
+    ///      Mirrors the SellLocals pattern already used by sell().
+    struct BuyLocals {
+        uint256 creatorFee;
+        uint256 bufferFee;
+        uint256 monForBuy;
+        uint256 currentMon;
+        uint256 currentTokens;
+        uint256 newMonReserve;
+        uint256 newTokenReserve;
+        uint256 mcap;
+    }
+
     function _buy(address buyer, uint256 monIn, uint256 minOut, bool isDev) internal returns (uint256 tokensOut) {
         IFactory f = IFactory(factory);
-        
+        BuyLocals memory L;
+
         // Take fees off the top
-        uint256 creatorFee = isDev ? 0 : (monIn * f.buyFeeCreatorBps()) / 10000;
-        uint256 bufferFee = isDev ? 0 : (monIn * f.buyFeeBufferBps()) / 10000;
-        uint256 monForBuy = monIn - creatorFee - bufferFee;
-        
+        L.creatorFee = isDev ? 0 : (monIn * f.buyFeeCreatorBps()) / 10000;
+        L.bufferFee  = isDev ? 0 : (monIn * f.buyFeeBufferBps()) / 10000;
+        L.monForBuy  = monIn - L.creatorFee - L.bufferFee;
+
         // V2.1-5: accrue creator fee to pull-payment accumulator instead of pushing.
         // Creator withdraws via claimCreatorRewards(). No external call here, no reentrancy.
-        if (creatorFee > 0) {
-            creatorPending += creatorFee;
-            totalCreatorFees += creatorFee;
-            emit FeeCollected("creator-buy", creator, creatorFee);
+        if (L.creatorFee > 0) {
+            creatorPending   += L.creatorFee;
+            totalCreatorFees += L.creatorFee;
+            emit FeeCollected("creator-buy", creator, L.creatorFee);
         }
-        
+
         // Buffer stays in curve until grad
-        if (bufferFee > 0) buyBuffer += bufferFee;
-        
+        if (L.bufferFee > 0) buyBuffer += L.bufferFee;
+
         // Curve math: x*y=k constant product on virtual reserves
-        uint256 newMonReserve = virtualMonReserve + realMonReserve + monForBuy;
-        uint256 totalTokens = virtualTokenReserve;
-        uint256 currentMon = virtualMonReserve + realMonReserve;
-        uint256 currentTokens = totalTokens - (1_000_000_000 ether - realTokenReserve);
-        uint256 k = currentMon * currentTokens;
-        uint256 newTokenReserve = k / newMonReserve;
-        tokensOut = currentTokens - newTokenReserve;
-        
+        L.currentMon      = virtualMonReserve + realMonReserve;
+        L.currentTokens   = virtualTokenReserve - (1_000_000_000 ether - realTokenReserve);
+        L.newMonReserve   = L.currentMon + L.monForBuy;
+        L.newTokenReserve = (L.currentMon * L.currentTokens) / L.newMonReserve;
+        tokensOut         = L.currentTokens - L.newTokenReserve;
+
         require(tokensOut >= minOut, "slippage");
         require(tokensOut <= realTokenReserve, "no liquidity");
-        
-        realMonReserve += monForBuy;
+
+        realMonReserve   += L.monForBuy;
         realTokenReserve -= tokensOut;
-        monRaised += monIn;
-        monRaisedNet += monForBuy;
-        
+        monRaised        += monIn;
+        monRaisedNet     += L.monForBuy;
+
         // Update ATH
-        uint256 mcap = (priceWeiPerToken() * 1_000_000_000 ether) / 1e18;
-        if (mcap > ath) ath = mcap;
-        
+        L.mcap = (priceWeiPerToken() * 1_000_000_000 ether) / 1e18;
+        if (L.mcap > ath) ath = L.mcap;
+
         // Send tokens to buyer
         IToken(token).transfer(buyer, tokensOut);
-        
+
         emit Buy(buyer, monIn, tokensOut, priceWeiPerToken());
-        
+
         // Auto-graduate
         if (monRaisedNet >= f.graduationTarget()) {
             _graduate();
