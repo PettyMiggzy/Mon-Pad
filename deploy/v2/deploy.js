@@ -75,26 +75,31 @@ if (process.env.DEPLOY_STAKING === '1') {
   }
 }
 
-// Load a compiled contract artifact. Prefers hand-curated deploy/v2/build/*.json,
-// falls back to hardhat-test/artifacts/* (auto-populated by `npx hardhat compile`).
-// This means the user can either:
-//   (a) run `cd hardhat-test && npm install && npx hardhat compile` once, then `node deploy.js`
-//   (b) drop pre-compiled JSON files into deploy/v2/build/ manually
+// Load a compiled contract artifact. PREFERS hardhat-test/artifacts/* (which is
+// auto-populated by `npx hardhat compile` and guaranteed to match the source on `main`),
+// falls back to deploy/v2/build/*.json only if hardhat artifacts are missing.
+//
+// IMPORTANT: the legacy deploy/v2/build/*.json files in the repo predate the V2.1 audit
+// fixes (different ABI, different bytecode). If those are loaded by accident, you deploy
+// the OLD vulnerable V2 contracts at the V2.1 wallet's expense. Hardhat-first prevents this.
 function loadContract(name) {
   const candidates = [
-    path.join(__dirname, 'build', name + '.json'),
     path.join(__dirname, '..', '..', 'hardhat-test', 'artifacts', 'contracts', name + '.sol', name + '.json'),
+    path.join(__dirname, 'build', name + '.json'),
   ];
   for (const p of candidates) {
     if (fs.existsSync(p)) {
       const j = JSON.parse(fs.readFileSync(p, 'utf8'));
-      // Both legacy and hardhat formats expose .abi and .bytecode at the top level.
-      if (j && j.abi && j.bytecode) return j;
+      if (j && j.abi && j.bytecode) {
+        // Sanity check: warn if loading from the legacy build/ dir (likely stale)
+        if (p.includes(path.join('deploy', 'v2', 'build'))) {
+          console.warn(`⚠  Loaded ${name} from deploy/v2/build/ (legacy). If you didn't intend this, run \`cd hardhat-test && npx hardhat compile\` to refresh artifacts.`);
+        }
+        return j;
+      }
     }
   }
-  console.error(`❌ Missing build artifact for ${name}. Either:`);
-  console.error(`   (a) cd hardhat-test && npm install && npx hardhat compile`);
-  console.error(`   (b) drop a JSON file with {abi, bytecode} at deploy/v2/build/${name}.json`);
+  console.error(`❌ Missing build artifact for ${name}. Run: cd hardhat-test && npm install && npx hardhat compile`);
   process.exit(1);
 }
 
