@@ -293,17 +293,22 @@ contract MonPadCurveV2 {
             buyBuffer = 0;
         }
         
-        // Hand off LP MON + LP tokens to Graduator (Q1: graduator read each call from factory)
-        // Sequence is locked: safeTransfer tokens FIRST, then onGraduate{value: 400_000 ether}.
-        // The 400_000 MON value is exact; if curve balance is short the call reverts. That is correct behavior.
+        // V2.1-6 fix: send the curve's *entire remaining balance* to the Graduator instead of a
+        // hardcoded 400_000 ether. The hardcoded value (a) made graduationLP admin-tunable in name
+        // only, (b) bricked graduation if creatorReward was raised above what the curve had spare,
+        // and (c) permanently stranded any overshoot MON in the curve when monRaisedNet exceeded
+        // graduationTarget on the triggering buy. Graduator now accepts any amount >= LP_MON_MIN.
+        // Sequence: safeTransfer tokens FIRST, then onGraduate{value: lpMon}.
         address grad = f.graduator();
         require(grad != address(0), "!graduator");
         uint256 lpTokens = IToken(token).balanceOf(address(this));
         require(lpTokens > 0, "no lp tokens");
+        uint256 lpMon = address(this).balance;
+        require(lpMon > 0, "no lp mon");
         _safeTransfer(token, grad, lpTokens);
-        IGraduator(grad).onGraduate{value: 400_000 ether}(token);
-        
-        emit Graduated(400_000 ether, creatorReward, platformGets);
+        IGraduator(grad).onGraduate{value: lpMon}(token);
+
+        emit Graduated(lpMon, creatorReward, platformGets);
     }
     
     // ── ADMIN (owner of factory) ──────────────

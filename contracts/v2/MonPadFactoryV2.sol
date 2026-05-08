@@ -4,6 +4,12 @@ pragma solidity ^0.8.24;
 import "./MonPadCurveV2.sol";
 import "./MonPadTokenV2.sol";
 
+/// @notice Minimal interface for MonPadStakingHub.setCurveAuthorized.
+///         Match Hub.setCurveAuthorized(address,bool) signature exactly.
+interface IStakingHub {
+    function setCurveAuthorized(address curve, bool authorized) external;
+}
+
 /// @title MonPadFactoryV2
 /// @notice Launches new tokens with bonding curves. All economics admin-tunable.
 contract MonPadFactoryV2 {
@@ -97,7 +103,15 @@ contract MonPadFactoryV2 {
         ));
         
         MonPadTokenV2(token).setCurve(curve);
-        
+
+        // V2.1-1 fix: authorize this curve in the staking hub so its sell-tax notifyReward calls
+        // are accepted. Skipped when rewardRouter is unset (pre-bootstrapInit) or is an EOA
+        // (e.g. buyback wallet during pre-staking phase) — in those cases sell-tax goes to a
+        // wallet via a plain transfer and no Hub authorization is needed.
+        if (rewardRouter != address(0) && rewardRouter.code.length > 0) {
+            IStakingHub(rewardRouter).setCurveAuthorized(curve, true);
+        }
+
         // Pay creation fee to treasury
         (bool ok, ) = treasuryWallet.call{value: creationFee}("");
         require(ok, "treasury pay failed");
@@ -209,6 +223,21 @@ contract MonPadFactoryV2 {
         sellFeePlatformBps = _sellPlatform;
     }
     
+    // ── ADMIN: BACK-FILL CURVE AUTHORIZATION (V2.1-1 companion) ──
+    /// @notice Bulk authorize existing curves in the current rewardRouter (Hub).
+    ///         Use after a rewardRouter rotation, or for any curves that were launched before
+    ///         bootstrapInit set rewardRouter for the first time.
+    /// @dev    Hub.setCurveAuthorized's onlyFactory modifier means only this contract can
+    ///         perform the call; this exposes that capability behind onlyOwner.
+    function backfillCurveAuthorization(address[] calldata curves) external onlyOwner {
+        require(rewardRouter != address(0), "!rewardRouter");
+        require(rewardRouter.code.length > 0, "!hub contract");
+        IStakingHub hub = IStakingHub(rewardRouter);
+        for (uint256 i = 0; i < curves.length; i++) {
+            hub.setCurveAuthorized(curves[i], true);
+        }
+    }
+
     // ── ADMIN: PAUSES ─────────────────────────
     function setPauseNewLaunches(bool v) external onlyOwner { pauseNewLaunches = v; }
     function setPauseAllBuys(bool v) external onlyOwner { pauseAllBuys = v; }

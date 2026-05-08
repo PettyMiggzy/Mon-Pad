@@ -109,6 +109,8 @@ interface INonfungiblePositionManager {
 
 interface IMonPadFactory {
     function graduator() external view returns (address);
+    /// @notice Required for V2.1-2 caller authentication: maps token => its bonding curve.
+    function tokToCurve(address token) external view returns (address);
 }
 
 /* ------------------------------------------------------------------ */
@@ -130,8 +132,14 @@ contract MonPadGraduator is ReentrancyGuard, IERC721Receiver {
     /// @dev Mint deadline buffer added to block.timestamp.
     uint256 public constant MINT_DEADLINE_BUFFER = 600;
 
-    /// @dev Total LP-side MON committed by the curve on graduation.
-    uint256 public constant LP_MON_AMOUNT = 400_000 ether;
+    /// @dev Minimum LP-side MON the curve must send on graduation. Sanity floor only.
+    ///      Set generously low (1 MON) so creatorReward / graduationCreatorReward rotations
+    ///      cannot brick graduation. See V2.1-6: previously this was a strict equality
+    ///      against a hardcoded 400_000 ether, which made `graduationLP` decorative AND
+    ///      stranded any monRaisedNet overshoot in the curve forever.
+    ///      Auth (V2.1-2: msg.sender == factory.tokToCurve(token)) is what protects against
+    ///      attacker-controlled tiny LPs; this floor is just dust-prevention for operator error.
+    uint256 public constant LP_MON_MIN = 1 ether;
 
     /* ---------------------------- Immutables --------------------------- */
 
@@ -186,7 +194,7 @@ contract MonPadGraduator is ReentrancyGuard, IERC721Receiver {
 
     error NotCurve();
     error AlreadyGraduated(address token);
-    error WrongMonAmount(uint256 provided, uint256 expected);
+    error WrongMonAmount(uint256 provided, uint256 minRequired);
     error NoTokenBalance(address token);
     error PoolAlreadyInitialized(address pool);
     error MintFailed();
@@ -244,8 +252,21 @@ contract MonPadGraduator is ReentrancyGuard, IERC721Receiver {
     function onGraduate(address token) external payable nonReentrant {
         // ---- 1. Basic preconditions
         if (token == address(0))            revert ZeroAddress();
+
+        // V2.1-2 auth: only the factory-registered curve for this exact token may call.
+        // Without this, anyone with `monAmt` MON + a few wei of token can pre-graduate any
+        // MonPad token and permanently brick its real graduation.
+        address registeredCurve = monpadFactory.tokToCurve(token);
+        if (registeredCurve == address(0) || msg.sender != registeredCurve) revert NotCurve();
+
         if (graduated[token])               revert AlreadyGraduated(token);
-        if (msg.value != LP_MON_AMOUNT)     revert WrongMonAmount(msg.value, LP_MON_AMOUNT);
+
+        // V2.1-6: accept any msg.value above the sanity floor. The curve sends its full
+        // post-fee balance (which is monRaisedNet - creatorReward, plus any overshoot above
+        // graduationTarget). Strict equality here previously bricked graduation any time the
+        // curve's balance didn't land exactly on 400_000 ether.
+        uint256 monAmt = msg.value;
+        if (monAmt < LP_MON_MIN)            revert WrongMonAmount(monAmt, LP_MON_MIN);
 
         uint256 amountToken = IToken(token).balanceOf(address(this));
         if (amountToken == 0)               revert NoTokenBalance(token);
@@ -254,7 +275,7 @@ contract MonPadGraduator is ReentrancyGuard, IERC721Receiver {
         _tokenInFlight = token;
 
         // ---- 2. Wrap MON → WMON
-        wmon.deposit{value: msg.value}();
+        wmon.deposit{value: monAmt}();
 
         // ---- 3. Resolve token0/token1 ordering
         address tokenA = token;
@@ -266,10 +287,10 @@ contract MonPadGraduator is ReentrancyGuard, IERC721Receiver {
         if (token0 == tokenA) {
             // token is token0, wmon is token1
             amount0Desired = amountToken;
-            amount1Desired = LP_MON_AMOUNT;
+            amount1Desired = monAmt;
         } else {
             // wmon is token0, token is token1
-            amount0Desired = LP_MON_AMOUNT;
+            amount0Desired = monAmt;
             amount1Desired = amountToken;
         }
 
@@ -296,7 +317,7 @@ contract MonPadGraduator is ReentrancyGuard, IERC721Receiver {
 
         bool okW0 = wmon.approve(address(npm), 0);
         if (!okW0) revert WmonApproveFailed();
-        bool okW  = wmon.approve(address(npm), LP_MON_AMOUNT);
+        bool okW  = wmon.approve(address(npm), monAmt);
         if (!okW)  revert WmonApproveFailed();
 
         // ---- 7. Mint full-range position to this contract (so we can immediately burn it)
@@ -336,7 +357,7 @@ contract MonPadGraduator is ReentrancyGuard, IERC721Receiver {
             pool,
             nftId,
             amountToken,
-            LP_MON_AMOUNT,
+            monAmt,
             liquidity,
             sqrtPriceX96
         );
