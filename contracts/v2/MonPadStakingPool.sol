@@ -47,21 +47,26 @@ interface IFactoryRO_Pool {
 }
 
 // ───────────────────────────── MonPadStakingPool ─────────────────────────────
+/// @dev EIP-1167 minimal-proxy design: this contract is deployed ONCE as an implementation
+///      by MonPadPoolFactory. Each pool launch is a clone initialized via initialize().
+///      Cloning costs ~50K gas vs ~3M for `new MonPadStakingPool` and is what kept the
+///      pool factory under EIP-170's 24,576-byte deployed-code limit.
 contract MonPadStakingPool is ReentrancyGuard {
-    // ─── Immutable wiring ───
-    IERC20  public immutable token;
-    address public immutable hub;          // C3: hub is IMMUTABLE; migration = redeploy
-    address public immutable monshiToken;
+    // ─── Wiring (was immutable; moved to storage so clones can populate via initialize) ───
+    IERC20  public token;
+    address public hub;
+    address public monshiToken;
     /// @notice V2.1-10: factory address (NOT treasuryWallet). Pool resolves treasuryWallet
     ///         live from factoryRO.treasuryWallet() at claim time so factory-side rotation
-    ///         propagates without per-pool migration. The factory's setTreasuryWallet is
-    ///         24h timelocked, so this read is cheap and predictable.
-    address public immutable factoryRO;
+    ///         propagates without per-pool migration.
+    address public factoryRO;
     /// @notice V2.1-10: single uint accumulator (was a mapping keyed by the now-removed
     ///         immutable treasuryWallet). All paid stake fees pile up here; whoever is
     ///         the current factory.treasuryWallet at claim time pulls the lot.
     uint256 public treasuryPending;
-    bool    public immutable burnsToCreator;
+    bool    public burnsToCreator;
+    /// @dev Init guard. True on impl (set in constructor); clones start false, factory sets true via initialize.
+    bool    private _initialized;
 
     // ─── Roles ───
     address public owner;
@@ -167,8 +172,17 @@ contract MonPadStakingPool is ReentrancyGuard {
     modifier onlyCreator() { if (msg.sender != creator) revert NotCreator(msg.sender); _; }
     modifier whenNotPaused() { if (paused) revert Paused(); _; }
 
-    // ────────────────── Constructor ──────────────────
-    constructor(
+    // ────────────────── Constructor / Initialize ──────────────────
+    /// @notice Locks the implementation. Clones start with _initialized=false and are
+    ///         initialized atomically by MonPadPoolFactory in createPool / adminCreatePool.
+    constructor() {
+        _initialized = true;
+    }
+
+    /// @notice Per-clone initializer. Same args as the old constructor. PoolFactory calls
+    ///         this immediately after Clones.clone(impl) in the same tx, so any revert
+    ///         here also unwinds the clone deployment.
+    function initialize(
         address _token,
         address _hub,
         address _monshiToken,
@@ -176,21 +190,20 @@ contract MonPadStakingPool is ReentrancyGuard {
         bool    _burnsToCreator,
         address _owner,
         address _factory
-    ) {
+    ) external {
+        require(!_initialized, "init");
         if (_token == address(0) || _hub == address(0) || _monshiToken == address(0) || _creator == address(0) || _owner == address(0) || _factory == address(0)) revert ZeroAddress();
+        _initialized = true;
+
         token          = IERC20(_token);
         hub            = _hub;
         monshiToken    = _monshiToken;
         creator        = _creator;
         burnsToCreator = _burnsToCreator;
-        owner           = _owner;
-        factoryRO       = _factory;
+        owner          = _owner;
+        factoryRO      = _factory;
 
-        // V2.1 spec tier seed: all tiers use 10% early fee (1000 bps).
-        // Tier 0: 30-day  / 1.0x  / 1000 bps early fee
-        // Tier 1: 90-day  / 1.5x  / 1000 bps early fee
-        // Tier 2: 180-day / 2.5x  / 1000 bps early fee
-        // Tier 3: 365-day / 4.0x  / 1000 bps early fee
+        // V2.1 tier seed: 30/90/180/365-day with 1.0/1.5/2.5/4.0x multipliers, all 10% early fee.
         tiers.push(Tier({duration: 30  days, multiplierBps: 10_000, earlyFeeBps: 1000, enabled: true}));
         tiers.push(Tier({duration: 90  days, multiplierBps: 15_000, earlyFeeBps: 1000, enabled: true}));
         tiers.push(Tier({duration: 180 days, multiplierBps: 25_000, earlyFeeBps: 1000, enabled: true}));

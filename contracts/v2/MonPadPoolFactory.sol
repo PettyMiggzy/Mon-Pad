@@ -35,6 +35,38 @@ interface IERC20Min {
     function totalSupply() external view returns (uint256);
 }
 
+/// @notice Minimal interface for MonPadStakingPool.initialize. Pool's full ABI exposes too
+///         much surface; PoolFactory only needs to call initialize() right after cloning.
+interface IPoolInit {
+    function initialize(
+        address _token,
+        address _hub,
+        address _monshiToken,
+        address _creator,
+        bool    _burnsToCreator,
+        address _owner,
+        address _factory
+    ) external;
+}
+
+/// @notice EIP-1167 minimal-proxy clone factory. Pool's full creation code (~17KB) is
+///         embedded in PoolFactory if we use `new MonPadStakingPool(...)`, pushing the
+///         factory over EIP-170's 24,576-byte deployed-code cap. Cloning a pre-deployed
+///         impl keeps PoolFactory tiny and per-pool deploy cheap (~50K gas vs ~3M).
+library Clones {
+    function clone(address impl) internal returns (address result) {
+        bytes20 implBytes = bytes20(impl);
+        assembly {
+            let ptr := mload(0x40)
+            mstore(ptr, 0x3d602d80600a3d3981f3363d3d373d3d3d363d73000000000000000000000000)
+            mstore(add(ptr, 0x14), implBytes)
+            mstore(add(ptr, 0x28), 0x5af43d82803e903d91602b57fd5bf30000000000000000000000000000000000)
+            result := create(0, ptr, 0x37)
+        }
+        require(result != address(0), "clone failed");
+    }
+}
+
 /* --------------------------- contract --------------------------- */
 
 contract MonPadPoolFactory {
@@ -47,6 +79,9 @@ contract MonPadPoolFactory {
     address public immutable hub;
     address public immutable factory;
     address public monshiToken; // mutable via timelocked setter (C9)
+    /// @notice EIP-1167 implementation template for MonPadStakingPool. Deployed once in
+    ///         this factory's constructor; createPool / adminCreatePool clone it per pool.
+    address public immutable poolImpl;
 
     /* -------- params -------- */
     uint256 public freePoolMonshiThreshold = 1_000_000 ether;
@@ -126,6 +161,10 @@ contract MonPadPoolFactory {
         hub         = _hub;
         factory     = _factory;
         monshiToken = _monshi;
+
+        // Deploy the Pool implementation template once. Its constructor sets _initialized=true
+        // so the impl itself can never be initialize()'d directly — only clones can.
+        poolImpl = address(new MonPadStakingPool());
     }
 
     /* ============================================================
@@ -190,17 +229,19 @@ contract MonPadPoolFactory {
             poolCreator = msg.sender;
         }
 
-        // Deploy pool. createPool is ALWAYS burnsToCreator = false (B3/C16).
-        MonPadStakingPool p = new MonPadStakingPool(
+        // Clone the Pool template and initialize. createPool is ALWAYS burnsToCreator=false (B3/C16).
+        // Atomic: any revert in initialize unwinds the clone. Pool reads treasuryWallet live
+        // from factory at claim time (V2.1-10), so we pass the factory address here.
+        pool = Clones.clone(poolImpl);
+        IPoolInit(pool).initialize(
             token,
             hub,
             monshiToken,
             poolCreator,
             false,
             owner,
-            factory  // V2.1-10: pool reads treasuryWallet live from factory at claim time
+            factory
         );
-        pool = address(p);
 
         tokenToPool[token] = pool;
         allPools.push(pool);
@@ -238,16 +279,17 @@ contract MonPadPoolFactory {
             revert NotERC20(token);
         }
 
-        MonPadStakingPool p = new MonPadStakingPool(
+        // Clone + initialize. Same atomic pattern as createPool.
+        pool = Clones.clone(poolImpl);
+        IPoolInit(pool).initialize(
             token,
             hub,
             monshiToken,
             creator,
             burnsToCreator,
             owner,
-            factory  // V2.1-10: pool reads treasuryWallet live from factory at claim time
+            factory
         );
-        pool = address(p);
 
         tokenToPool[token] = pool;
         allPools.push(pool);

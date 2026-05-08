@@ -10,6 +10,26 @@ interface IStakingHub {
     function setCurveAuthorized(address curve, bool authorized) external;
 }
 
+/// @notice EIP-1167 minimal-proxy clone factory. Each clone is a tiny ~45-byte proxy that
+///         delegate-calls into a fixed implementation address. The factory deploys ONE impl
+///         of Curve + Token at construction; createLaunch then clones each per launch
+///         instead of `new`-ing them, which keeps the factory's deployed code under EIP-170's
+///         24,576-byte limit (was 35KB pre-refactor — Curve+Token bytecode embedded in the
+///         factory pushed it over).
+library Clones {
+    function clone(address impl) internal returns (address result) {
+        bytes20 implBytes = bytes20(impl);
+        assembly {
+            let ptr := mload(0x40)
+            mstore(ptr, 0x3d602d80600a3d3981f3363d3d373d3d3d363d73000000000000000000000000)
+            mstore(add(ptr, 0x14), implBytes)
+            mstore(add(ptr, 0x28), 0x5af43d82803e903d91602b57fd5bf30000000000000000000000000000000000)
+            result := create(0, ptr, 0x37)
+        }
+        require(result != address(0), "clone failed");
+    }
+}
+
 /// @title MonPadFactoryV2
 /// @notice Launches new tokens with bonding curves. All economics admin-tunable.
 contract MonPadFactoryV2 {
@@ -69,6 +89,11 @@ contract MonPadFactoryV2 {
 
     // Graduator address (read by curves at graduation; set post-deploy)
     address public graduator;
+
+    /// @notice EIP-1167 implementation templates. Deployed once in this factory's constructor.
+    ///         createLaunch clones each per launch.
+    address public immutable curveImpl;
+    address public immutable tokenImpl;
     
     // ── EVENTS ────────────────────────────────
     event Launched(address indexed token, address indexed curve, address indexed creator, address referrer, uint256 devAmt, string name, string symbol);
@@ -84,6 +109,13 @@ contract MonPadFactoryV2 {
         platformWallet = _platform;
         treasuryWallet = _treasury;
         buybackWallet = _buyback;
+
+        // Deploy the implementation templates once. Their constructors run, locking
+        // their `_initialized` flag so no one can call initialize() on the impl directly —
+        // clones are the only path that can populate per-launch state.
+        curveImpl = address(new MonPadCurveV2());
+        tokenImpl = address(new MonPadTokenV2());
+
         emit OwnershipTransferred(address(0), msg.sender);
     }
     
@@ -98,15 +130,15 @@ contract MonPadFactoryV2 {
         require(msg.value >= creationFee, "insufficient fee");
         if (devBuy > 0) require(devBuy >= minDevBuyMon, "dev buy < min");
         
-        // Deploy token + curve
-        token = address(new MonPadTokenV2(name, symbol, maxSupply));
-        curve = address(new MonPadCurveV2(
-            token,
-            msg.sender,
-            referrer,
-            address(this)
-        ));
-        
+        // Clone token + curve from the pre-deployed templates. Each clone is a tiny
+        // EIP-1167 proxy (~45 bytes) that delegate-calls into the impl. Per-launch state
+        // is set via initialize() right after the clone, all atomic in this single tx.
+        token = Clones.clone(tokenImpl);
+        MonPadTokenV2(token).initialize(name, symbol, maxSupply);
+
+        curve = Clones.clone(curveImpl);
+        MonPadCurveV2(payable(curve)).initialize(token, msg.sender, referrer, address(this));
+
         MonPadTokenV2(token).setCurve(curve);
 
         // V2.1-1 fix: authorize this curve in the staking hub so its sell-tax notifyReward calls

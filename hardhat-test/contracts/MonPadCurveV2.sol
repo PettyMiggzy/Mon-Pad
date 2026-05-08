@@ -40,11 +40,21 @@ interface IRewardRouter {
 
 /// @title MonPadCurveV2
 /// @notice Bonding curve with admin-tunable fees. One per token.
+/// @dev EIP-1167 minimal-proxy design: this contract is deployed ONCE as an implementation
+///      template. The factory then creates one clone (a tiny proxy that delegate-calls into
+///      this code) per token launch. Cloning costs ~50K gas vs ~3M for `new MonPadCurveV2`,
+///      and the factory's bytecode no longer embeds the curve's full creation code (which is
+///      what was pushing factory over EIP-170's 24,576-byte limit).
+///
+///      Because clones don't run the implementation's constructor, all per-launch state is
+///      set in `initialize(...)`. The implementation's own constructor sets `_initialized=true`
+///      so the impl itself can never be initialized — only its clones can.
 contract MonPadCurveV2 {
-    address public immutable token;
-    address public immutable creator;
-    address public immutable referrer;
-    address public immutable factory;
+    // Was immutable. Moved to storage so each clone can populate them via `initialize`.
+    address public token;
+    address public creator;
+    address public referrer;
+    address public factory;
     
     uint256 public monRaised;          // gross MON in (before fees)
     uint256 public monRaisedNet;       // net MON in curve toward grad
@@ -70,6 +80,9 @@ contract MonPadCurveV2 {
     bool public pauseBuys;
     bool public pauseSells;
     bool public delisted;
+    /// @dev Init guard — once true, initialize() reverts. Set true on the impl by its
+    ///      constructor; clones start with false and are initialized by the factory.
+    bool private _initialized;
     
     // Bonding curve constants
     uint256 public constant CURVE_K = 1e36;  // virtual reserve constant
@@ -85,19 +98,35 @@ contract MonPadCurveV2 {
     event FeeCollected(string kind, address to, uint256 amount);
     
     modifier notGraduated() { require(!graduated, "grad"); _; }
-    
-    constructor(address _token, address _creator, address _ref, address _factory) {
+
+    /// @notice Lock the implementation. Clones start with _initialized=false and call
+    ///         initialize() exactly once (factory does this atomically in createLaunch).
+    constructor() {
+        _initialized = true;
+    }
+
+    /// @notice Per-clone initializer. Called by MonPadFactoryV2.createLaunch right after cloning.
+    ///         Idempotent guard prevents re-initialization or grief by an arbitrary caller
+    ///         post-clone (factory calls this in the same tx as the clone, atomically).
+    function initialize(
+        address _token,
+        address _creator,
+        address _ref,
+        address _factory
+    ) external {
+        require(!_initialized, "init");
+        require(_token != address(0) && _factory != address(0), "addr0");
+        _initialized = true;
+
         token = _token;
         creator = _creator;
         referrer = _ref;
         factory = _factory;
         launchedAt = block.timestamp;
-        
-        // Initialize virtual reserves for bonding curve
-        // Standard pump.fun-ish: virtual MON = 30 (so curve starts cheap), virtual tokens = supply
-        // priceWei = monReserve * 1e18 / tokenReserve
+
+        // Standard pump.fun-ish virtual reserves; same constants every launch.
         virtualMonReserve = 30 ether;
-        virtualTokenReserve = 1_073_000_191 ether; // adjusted so curve graduates near target
+        virtualTokenReserve = 1_073_000_191 ether;
         realTokenReserve = 1_000_000_000 ether;
     }
     
