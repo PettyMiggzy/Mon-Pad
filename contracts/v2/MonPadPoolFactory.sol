@@ -20,7 +20,12 @@ interface IFactory {
     function treasuryWallet() external view returns (address);
 }
 
-interface IHub {
+/// @notice Hub interface used here. Renamed from IHub to avoid a name collision with the
+///         IHub declared inside MonPadStakingPool.sol (which has different methods —
+///         claimReward/pendingReward — for the staker-side pull flow). Both interfaces
+///         end up in the same compilation unit because PoolFactory imports StakingPool
+///         to deploy it via `new`, so the two would collide if both were named IHub.
+interface IHubAdmin {
     function registerPool(address token, address pool) external;
     function setPoolFactory(address pf) external;
 }
@@ -201,7 +206,7 @@ contract MonPadPoolFactory {
         allPools.push(pool);
 
         // Hub registration MUST succeed (A11/B7) — no try/catch
-        IHub(hub).registerPool(token, pool);
+        IHubAdmin(hub).registerPool(token, pool);
 
         emit PoolCreated(token, pool, poolCreator, false, free);
     }
@@ -247,7 +252,7 @@ contract MonPadPoolFactory {
         tokenToPool[token] = pool;
         allPools.push(pool);
 
-        IHub(hub).registerPool(token, pool);
+        IHubAdmin(hub).registerPool(token, pool);
 
         emit PoolCreated(token, pool, creator, burnsToCreator, true);
     }
