@@ -7,9 +7,9 @@ import type { Address } from 'viem';
 export const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as const;
 
 // --- Wallets (SPEC §8) ----------------------------------------------------
-export const PLATFORM_WALLET = '0x57C8A5AeC1c172fE41416A2FAE6eBDD92b552A16' as const;
-export const TREASURY_WALLET = '0x5dD4bF19C42d45FD414930eFE78D602c5975FFfd' as const;
-export const BUYBACK_WALLET = TREASURY_WALLET; // buyback = same as treasury per spec
+export const PLATFORM_WALLET = (process.env.NEXT_PUBLIC_PLATFORM_WALLET ?? ZERO_ADDRESS) as Address;
+export const TREASURY_WALLET = (process.env.NEXT_PUBLIC_TREASURY_WALLET ?? ZERO_ADDRESS) as Address;
+export const BUYBACK_WALLET = (process.env.NEXT_PUBLIC_BUYBACK_WALLET ?? TREASURY_WALLET) as Address; // buyback defaults to treasury per V2.1 spec; split via env when needed
 export const MONSHI_TOKEN = '0xB744F5CDb792d8187640214C4A1c9aCE29af7777' as const;
 export const WMON = '0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A' as const;
 export const UNISWAP_V3_NPM = '0xa9f6B6656e32F223d778b01642F32D00F5310526' as const;
