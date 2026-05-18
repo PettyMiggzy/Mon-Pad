@@ -169,6 +169,11 @@ contract MonPadStakingHub is ReentrancyGuard {
     error ChangeNotReady(bytes32 kind, uint256 readyAt);
     error ChangeKindMismatch(bytes32 expected, bytes32 found);
     error TransferFailed();
+    error PoolStillRegistered(address token);
+    error NoStrandedReward(address token);
+
+    event StrandedRewardSwept(address indexed token, uint256 amount);
+    event AdminForceDistributed(address indexed by);
 
     /* ----------------------------- Modifier ---------------------------- */
 
@@ -266,6 +271,13 @@ contract MonPadStakingHub is ReentrancyGuard {
         }
 
         // Others portion -> volume-weighted bucket, but MONSHI's own token does NOT
+        // Audit H-1: orphan-routed tokens (no registered pool) credit buyback, not volumeCache.
+        // Hits the pre-registration window AND any post-unregister notifyReward racing in.
+        if (othersPart > 0 && token != monshiToken && tokenToPool[token] == address(0)) {
+            buybackPending += othersPart;
+            othersPart = 0; // for event clarity (existing volumeCache branch already guarded by othersPart > 0)
+        }
+
         // contribute to volumeCache (MONSHI pool is not in the others distribution).
         if (othersPart > 0 && token != monshiToken) {
             volumeCache[token] += othersPart;
@@ -560,6 +572,39 @@ contract MonPadStakingHub is ReentrancyGuard {
         PendingChange memory c = pendingChanges[kind];
         return (c.valueA, c.valueB, c.readyAt, c.pending);
     }
+
+    /* -------------------- Audit H-6 / M-3 / Admin recovery -------------------- */
+
+    /// @notice Audit H-6: sweep stranded pendingReward for a token whose pool was unregistered.
+    /// @dev Owner-only. Routes the stranded amount to buybackPending (pull-claimable by buybackWallet),
+    ///      preserving the no-direct-transfer invariant. Token MUST be currently unregistered
+    ///      (tokenToPool[token] == address(0)) so live pools cannot have their share confiscated.
+    function adminSweepStrandedReward(address token) external onlyOwner nonReentrant {
+        if (token == address(0)) revert ZeroAddress();
+        if (tokenToPool[token] != address(0)) revert PoolStillRegistered(token);
+        uint256 stranded = pendingReward[token];
+        if (stranded == 0) revert NoStrandedReward(token);
+        pendingReward[token] = 0;
+        totalPendingReward -= stranded; // safe: stranded was counted in totalPendingReward at distribute time
+        buybackPending += stranded;
+        emit StrandedRewardSwept(token, stranded);
+    }
+
+    /// @notice Owner-only emergency force-distribute. Bypasses the distributeInterval timer
+    ///         and minDistributeBalance floor so reward state can be flushed for migrations / recovery.
+    /// @dev    Calls the same internal _distribute() that the public distribute() uses, so
+    ///         all CEI / pendingReward invariants are preserved.
+    function adminForceDistribute() external onlyOwner nonReentrant {
+        _distribute();
+        emit AdminForceDistributed(msg.sender);
+    }
+
+    /// @notice Returns the full allPools array. Complements the index-only auto-getter
+    ///         and the existing poolCount() view; convenience for off-chain indexers.
+    function allPoolsView() external view returns (address[] memory) {
+        return allPools;
+    }
+
 
     /* -------------------------- MON entry rules ------------------------ */
 

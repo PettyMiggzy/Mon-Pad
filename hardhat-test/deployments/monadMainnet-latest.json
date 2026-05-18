@@ -1,0 +1,34 @@
+{
+  "version": "v2.1",
+  "network": "monadMainnet",
+  "chainId": "143",
+  "deployedAt": "2026-05-18T07:46:30.866Z",
+  "deployer": "0xB9d4B73bE18914c6d64Bee65a806648370be467f",
+  "block": 75355935,
+  "addresses": {
+    "factory": "0x776af5A5FC3037cAEe3aA02B50443358b68984aE",
+    "stakingHub": "0xc214F6c83D014E468f88B4c3F61A0FC179036188",
+    "poolFactory": "0xe80DfA4E68655D824487DFe3Ed90e6162183e669",
+    "graduator": "0x700b6C3B7A82b564606342406F58b294747C3486",
+    "swap": null,
+    "curveImpl": "0xeDc43eB0c387A6DEa54e8B1B75797B9a75A8B1Db",
+    "tokenImpl": "0xB51708c45e9dD339d048c88310718D9d02b84D6b",
+    "poolImpl": "0xaB3f0F30b1457F96Bc684724031b34c5f5122295"
+  },
+  "config": {
+    "platform": "0x57C8A5AeC1c172fE41416A2FAE6eBDD92b552A16",
+    "treasury": "0x5dD4bF19C42d45FD414930eFE78D602c5975FFfd",
+    "buyback": "0x5dD4bF19C42d45FD414930eFE78D602c5975FFfd",
+    "wmon": "0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A",
+    "npm": "0xa9f6B6656e32F223d778b01642F32D00F5310526",
+    "monshi": "0xB744F5CDb792d8187640214C4A1c9aCE29af7777"
+  },
+  "transactions": {
+    "factory": "0x083d7afab9fc1b88db5f750fffd357e16542b46c97ca3140d5043f1adac719d0",
+    "hub": "0xbadfd616bf8b7a1ea1bc8a4740d74bbff794ff7c1c4539066b0ea7c207d4d45e",
+    "poolFactory": "0x62d151ef9a6dfbf725a4020a31621cf8280b8693492e22984f1311ae2f7ad325",
+    "graduator": "0x0de839c44dd79c2e199033c69d42aadd343fe4550e5defb54f8c890b9bb8194c",
+    "bootstrap": "0x2da8488c857f5e79f66dcd3a15243c401ae9ad3cd0622c7f7e482d4d4bcf6aaf",
+    "monshiPin": "0x13ef93c4e311c822de956dbdf074bafd4d668e0e989ea5cc55141d80f9e47a5a"
+  }
+}

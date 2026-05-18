@@ -49,7 +49,6 @@ contract MonPadFactoryV2 {
     address public rewardRouter;       // when set, sell-tax 0.5% routes here instead of buyback
     address public poolFactory;        // authoritative source for Hub.onlyPoolFactory check
     bool    public bootstrapped;        // one-shot flag for bootstrapInit
-    address public monshiStakingPool;  // MONSHI's pool (for buyback fallback)
     
     // ── ECONOMICS (all tunable) ───────────────
     uint256 public creationFee = 100 ether;
@@ -61,9 +60,7 @@ contract MonPadFactoryV2 {
     // at launch reserves). Owner can raise via timelocked queueSetMinDevBuyMon if desired.
     uint256 public minDevBuyMon = 0;
     uint256 public graduationTarget = 425_000 ether;
-    uint256 public graduationLP = 400_000 ether;
     uint256 public graduationCreatorReward = 25_000 ether;
-    uint256 public maxSupply = 1_000_000_000 ether;
     
     // Fee splits in BPS (10000 = 100%)
     uint16 public buyFeeCreatorBps = 100;       // 1% to creator on buy
@@ -96,7 +93,7 @@ contract MonPadFactoryV2 {
     address public immutable tokenImpl;
     
     // ── EVENTS ────────────────────────────────
-    event Launched(address indexed token, address indexed curve, address indexed creator, address referrer, uint256 devAmt, string name, string symbol);
+    event Launched(address indexed token, address indexed curve, address indexed creator, uint256 devAmt, string name, string symbol);
     event ParamChanged(string indexed param, uint256 oldValue, uint256 newValue);
     event WalletChanged(string indexed wallet, address oldAddr, address newAddr);
     event Bootstrapped(address graduator, address rewardRouter, address poolFactory);
@@ -122,8 +119,7 @@ contract MonPadFactoryV2 {
     // ── LAUNCH ────────────────────────────────
     function createLaunch(
         string calldata name,
-        string calldata symbol,
-        address referrer
+        string calldata symbol
     ) external payable returns (address token, address curve) {
         require(!pauseNewLaunches, "launches paused");
         uint256 devBuy = msg.value > creationFee ? msg.value - creationFee : 0;
@@ -134,10 +130,10 @@ contract MonPadFactoryV2 {
         // EIP-1167 proxy (~45 bytes) that delegate-calls into the impl. Per-launch state
         // is set via initialize() right after the clone, all atomic in this single tx.
         token = Clones.clone(tokenImpl);
-        MonPadTokenV2(token).initialize(name, symbol, maxSupply);
+        MonPadTokenV2(token).initialize(name, symbol, 1_000_000_000 ether /* M-8 audit: was fake-mutable storage var, inlined */);
 
         curve = Clones.clone(curveImpl);
-        MonPadCurveV2(payable(curve)).initialize(token, msg.sender, referrer, address(this));
+        MonPadCurveV2(payable(curve)).initialize(token, msg.sender, address(this));
 
         MonPadTokenV2(token).setCurve(curve);
 
@@ -163,7 +159,7 @@ contract MonPadFactoryV2 {
         tokToCurve[token] = curve;
         isLaunched[token] = true;
         
-        emit Launched(token, curve, msg.sender, referrer, devBuy, name, symbol);
+        emit Launched(token, curve, msg.sender, devBuy, name, symbol);
     }
     
     // ── REWARD ROUTER (the magic switch) ──────
@@ -176,6 +172,20 @@ contract MonPadFactoryV2 {
     function _applySetRewardRouter(address _router) internal {
         emit RewardRouterChanged(rewardRouter, _router);
         rewardRouter = _router;
+
+        // H-2 (V2.1 audit): atomic rotation safety.
+        // After flipping rewardRouter to the new hub, re-authorize all known curves on it
+        // so existing curves keep working immediately. Skip when _router == address(0)
+        // (rotation disable) or when there are no curves yet. Bounded by 200 to keep gas
+        // sane; if you exceed it, owner must use backfillCurveAuthorization() in chunks.
+        uint256 n = allCurves.length;
+        if (_router != address(0) && n > 0) {
+            if (n > 200) revert TooManyCurvesForAtomicRotation(n);
+            IStakingHub hub = IStakingHub(_router);
+            for (uint256 i = 0; i < n; i++) {
+                hub.setCurveAuthorized(allCurves[i], true);
+            }
+        }
     }
     
     // ── ADMIN: WALLETS ────────────────────────
@@ -205,11 +215,6 @@ contract MonPadFactoryV2 {
         poolFactory = pf;
         emit WalletChanged("poolFactory", old, pf);
     }
-    function _applySetMonshiStakingPool(address p) internal {
-        emit WalletChanged("monshiPool", monshiStakingPool, p);
-        monshiStakingPool = p;
-    }
-    
     // ── ADMIN: ECONOMICS (timelocked for critical) ────
     function _applySetCreationFee(uint256 v) internal {
         emit ParamChanged("creationFee", creationFee, v);
@@ -225,13 +230,9 @@ contract MonPadFactoryV2 {
         minDevBuyMon = v;
     }
     function _applySetGraduationTarget(uint256 v) internal {
-        require(v >= graduationLP + graduationCreatorReward, "target < LP+reward");
+        require(v >= 400_000 ether /* M-8: was fake-mutable storage var, inlined */ + graduationCreatorReward, "target < LP+reward");
         emit ParamChanged("graduationTarget", graduationTarget, v);
         graduationTarget = v;
-    }
-    function _applySetGraduationLP(uint256 v) internal {
-        emit ParamChanged("graduationLP", graduationLP, v);
-        graduationLP = v;
     }
     function _applySetGraduationCreatorReward(uint256 v) internal {
         emit ParamChanged("graduationCreatorReward", graduationCreatorReward, v);
@@ -338,12 +339,10 @@ contract MonPadFactoryV2 {
     bytes32 public constant OP_BUYBACK_WALLET      = keccak256("setBuybackWallet");
     bytes32 public constant OP_GRADUATOR           = keccak256("setGraduator");
     bytes32 public constant OP_POOL_FACTORY      = keccak256("setPoolFactory");
-    bytes32 public constant OP_MONSHI_STAKING_POOL = keccak256("setMonshiStakingPool");
     bytes32 public constant OP_CREATION_FEE        = keccak256("setCreationFee");
     bytes32 public constant OP_MAX_DEV_BUY_BPS     = keccak256("setMaxDevBuyBps");
     bytes32 public constant OP_MIN_DEV_BUY_MON     = keccak256("setMinDevBuyMon");
     bytes32 public constant OP_GRADUATION_TARGET   = keccak256("setGraduationTarget");
-    bytes32 public constant OP_GRADUATION_LP       = keccak256("setGraduationLP");
     bytes32 public constant OP_GRADUATION_CR       = keccak256("setGraduationCreatorReward");
     bytes32 public constant OP_FEE_SPLITS          = keccak256("setFeeSplits");
 
@@ -354,6 +353,7 @@ contract MonPadFactoryV2 {
     error OpNotReady(bytes32 key, uint64 readyAt, uint64 nowTs);
     error OpNotFound(bytes32 key);
     error OpValueMismatch(bytes32 key);
+    error TooManyCurvesForAtomicRotation(uint256 count);
 
     /// @notice Owner cancels a queued op by key, zeroing the pending slot.
     function cancelOp(bytes32 key) external onlyOwner {
@@ -395,8 +395,6 @@ contract MonPadFactoryV2 {
     function queueSetPoolFactory(address v) external onlyOwner { _queue(OP_POOL_FACTORY, abi.encode(v)); }
     function executeSetPoolFactory(address v) external onlyOwner { _consume(OP_POOL_FACTORY, abi.encode(v)); _applySetPoolFactory(v); }
 
-    function queueSetMonshiStakingPool(address v) external onlyOwner { _queue(OP_MONSHI_STAKING_POOL, abi.encode(v)); }
-    function executeSetMonshiStakingPool(address v) external onlyOwner { _consume(OP_MONSHI_STAKING_POOL, abi.encode(v)); _applySetMonshiStakingPool(v); }
 
     // ─── uint256 setters ─────────────────────────────────────
     function queueSetCreationFee(uint256 v) external onlyOwner { _queue(OP_CREATION_FEE, abi.encode(v)); }
@@ -411,8 +409,6 @@ contract MonPadFactoryV2 {
     function queueSetGraduationTarget(uint256 v) external onlyOwner { _queue(OP_GRADUATION_TARGET, abi.encode(v)); }
     function executeSetGraduationTarget(uint256 v) external onlyOwner { _consume(OP_GRADUATION_TARGET, abi.encode(v)); _applySetGraduationTarget(v); }
 
-    function queueSetGraduationLP(uint256 v) external onlyOwner { _queue(OP_GRADUATION_LP, abi.encode(v)); }
-    function executeSetGraduationLP(uint256 v) external onlyOwner { _consume(OP_GRADUATION_LP, abi.encode(v)); _applySetGraduationLP(v); }
 
     function queueSetGraduationCreatorReward(uint256 v) external onlyOwner { _queue(OP_GRADUATION_CR, abi.encode(v)); }
     function executeSetGraduationCreatorReward(uint256 v) external onlyOwner { _consume(OP_GRADUATION_CR, abi.encode(v)); _applySetGraduationCreatorReward(v); }
@@ -452,7 +448,7 @@ contract MonPadFactoryV2 {
         require(_rewardRouter != address(0), "!rewardRouter");
         require(_poolFactory  != address(0), "!poolFactory");
         graduator    = _graduator;
-        rewardRouter = _rewardRouter;
+        _applySetRewardRouter(_rewardRouter); // N-2: route through auth-propagation helper
         poolFactory  = _poolFactory;
         bootstrapped = true;
         emit Bootstrapped(_graduator, _rewardRouter, _poolFactory);

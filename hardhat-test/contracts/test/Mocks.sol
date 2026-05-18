@@ -22,7 +22,7 @@ contract MockGraduator {
 
     function setRevert(bool v) external { revertOnGraduate = v; }
 
-    function onGraduate(address token) external payable {
+    function onGraduate(address token, uint256 /*lpTokens*/) external payable {
         require(!revertOnGraduate, "MockGraduator: forced revert");
         lastMonReceived[token] = msg.value;
         lastTokensReceived[token] = IToken(token).balanceOf(address(this));
@@ -106,4 +106,37 @@ contract MockERC20 {
         emit Transfer(from, to, amount);
         return true;
     }
+}
+
+
+// --- V2.1 BATCH 4: Malicious reward router for T17 reentrancy test ---
+interface ICurveSell {
+    function sell(uint256 tokensIn, uint256 minMonOut) external returns (uint256);
+}
+
+contract MaliciousRewardRouter {
+    address public target;
+    bool public reentryAttempted;
+    bool public reentryReverted;
+    uint256 public lastReentryAttemptTokens;
+
+    function setTarget(address t) external { target = t; }
+
+    // Stub IStakingHub.setCurveAuthorized so factory _applySetRewardRouter does not revert
+    function setCurveAuthorized(address /*c*/, bool /*ok*/) external pure {}
+
+    // Matches the signature curve calls: notifyReward(address)
+    function notifyReward(address /*token*/) external payable {
+        if (target == address(0)) return;
+        reentryAttempted = true;
+        lastReentryAttemptTokens = 1;
+        // Try to reenter sell with 1 wei tokensIn. Expect revert from nonReentrant.
+        try ICurveSell(target).sell(1, 0) returns (uint256) {
+            reentryReverted = false;
+        } catch {
+            reentryReverted = true;
+        }
+    }
+
+    receive() external payable {}
 }

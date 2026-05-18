@@ -144,6 +144,7 @@ contract MonPadStakingPool is ReentrancyGuard {
     event PulledFromHub(uint256 amount);
     event StakeFeeAccrued(address indexed staker, uint256 amount);
     event TreasuryClaimed(address indexed wallet, uint256 amount);
+    event AdminEmergencyUnstaked(address indexed user, uint256 indexed stakeId, uint256 principal);
 
     // ─── Errors ───
     error NotOwner(address caller);
@@ -167,10 +168,13 @@ contract MonPadStakingPool is ReentrancyGuard {
     error FeeTooSmall(uint256 sent, uint256 required);
     error UnexpectedValue();
     error NotTreasury();
+    error OwnershipCannotBeRenounced();
+    error NotPaused();
 
     modifier onlyOwner() { if (msg.sender != owner) revert NotOwner(msg.sender); _; }
     modifier onlyCreator() { if (msg.sender != creator) revert NotCreator(msg.sender); _; }
     modifier whenNotPaused() { if (paused) revert Paused(); _; }
+    modifier whenPaused()    { if (!paused) revert NotPaused(); _; }
 
     // ────────────────── Constructor / Initialize ──────────────────
     /// @notice Locks the implementation. Clones start with _initialized=false and are
@@ -286,7 +290,6 @@ contract MonPadStakingPool is ReentrancyGuard {
         Tier memory t = tiers[tierId];
         if (!t.enabled) revert TierDisabled(tierId);
         Stake[] storage userStakes = stakes[msg.sender];
-        if (userStakes.length >= MAX_STAKES_PER_USER) revert MaxStakesReached(MAX_STAKES_PER_USER);
 
         // C5: auto-pull rewards before mutating accounting state.
         _pullFromHubInternal();
@@ -297,28 +300,65 @@ contract MonPadStakingPool is ReentrancyGuard {
 
         uint256 weighted = (amount * t.multiplierBps) / 10_000;
         if (weighted == 0) revert ZeroAmount();
+        // N-6: bounds checks before uint128 casts
+        require(amount   <= type(uint128).max, "amount overflow");
+        require(weighted <= type(uint128).max, "weighted overflow");
 
         // If this is the first staker (totalWeightedStaked was 0), the held delta carries forward:
         // Roll lastRewardBalance forward AFTER setting totalWeightedStaked so first staker captures it.
-        userStakes.push(Stake({
-            amount:     uint128(amount),
-            weighted:   uint128(weighted),
-            startTs:    uint64(block.timestamp),
-            unlockTs:   uint64(block.timestamp + t.duration),
-            tierId:     uint64(tierId),
-            flags:      0,
-            paidFee:    paidFee, // free-tier (false) is subject to 2M-MONSHI dropout penalty
-            rewardDebt: 0 // will set after we know the new rewardPerWeightedStored
-        }));
-        uint256 stakeId = userStakes.length - 1;
+        // Audit H-5: prefer reusing a closed slot (amount == 0) to bound storage growth.
+        //   - unstake() zeros amount/weighted/rewardDebt and sets flags=1, leaving the slot recyclable.
+        //   - all 8 Stake fields are overwritten on reuse so no stale state leaks across users
+        //     (slot is per-user via userStakes mapping, but reusing avoids unbounded array growth).
+        uint256 stakeId;
+        {
+            uint256 nSlots = userStakes.length;
+            bool reused = false;
+            for (uint256 i = 0; i < nSlots; i++) {
+                if (userStakes[i].amount == 0) {
+                    Stake storage rs = userStakes[i];
+                    rs.amount     = uint128(amount);
+                    rs.weighted   = uint128(weighted);
+                    rs.startTs    = uint64(block.timestamp);
+                    rs.unlockTs   = uint64(block.timestamp + t.duration);
+                    rs.tierId     = uint64(tierId);
+                    rs.flags      = 0;
+                    rs.paidFee    = paidFee;
+                    rs.rewardDebt = 0; // will set after we know the new rewardPerWeightedStored
+                    stakeId = i;
+                    reused = true;
+                    break;
+                }
+            }
+            if (!reused) {
+                // N-3: cap check moved here so reuse path bypasses cap
+                if (userStakes.length >= MAX_STAKES_PER_USER) revert MaxStakesReached(MAX_STAKES_PER_USER);
+                userStakes.push(Stake({
+                    amount: uint128(amount),
+                    weighted: uint128(weighted),
+                    startTs: uint64(block.timestamp),
+                    unlockTs: uint64(block.timestamp + t.duration),
+                    tierId: uint64(tierId),
+                    flags: 0,
+                    paidFee: paidFee,
+                    rewardDebt: 0 // will set after we know the new rewardPerWeightedStored
+                }));
+                stakeId = userStakes.length - 1;
+            }
+        }
 
         bool wasEmpty = (totalWeightedStaked == 0);
         totalWeightedStaked += weighted;
         totalRawStaked      += amount;
 
+        // Snapshot rewardDebt at PRE-absorption rewardPerWeightedStored so first staker
+        // captures the C1-absorbed delta as earnings (not as pre-paid debt). For non-first
+        // stakers, this is identical to setting after C1 since the C1 block does not run.
+        userStakes[stakeId].rewardDebt = (uint256(weighted) * rewardPerWeightedStored) / SCALE;
+
         if (wasEmpty) {
             // C1 first-staker absorption: account any held delta against new totalWeightedStaked.
-            uint256 bal   = address(this).balance;
+            uint256 bal  = address(this).balance;
             uint256 delta = bal - lastRewardBalance;
             if (delta > 0) {
                 rewardPerWeightedStored += (delta * SCALE) / totalWeightedStaked;
@@ -326,9 +366,6 @@ contract MonPadStakingPool is ReentrancyGuard {
                 emit RewardAccrued(delta, rewardPerWeightedStored);
             }
         }
-
-        // Set rewardDebt at current rewardPerWeightedStored so this stake earns only future accrual.
-        userStakes[stakeId].rewardDebt = (uint256(weighted) * rewardPerWeightedStored) / SCALE;
 
         emit Staked(msg.sender, stakeId, amount, weighted, uint64(block.timestamp + t.duration), uint64(tierId), paidFee);
     }
@@ -579,10 +616,9 @@ contract MonPadStakingPool is ReentrancyGuard {
     }
 
     function renounceOwnership() external onlyOwner {
-        address prev = owner;
-        owner = address(0);
-        pendingOwner = address(0);
-        emit OwnershipTransferred(prev, address(0));
+        // M-9 (V2.1-audit): renouncing ownership of this contract would brick admin paths
+        // (tier mgmt, pause, treasury access). Explicitly disabled to prevent footgun.
+        revert OwnershipCannotBeRenounced();
     }
 
     // ────────────────── Views ──────────────────
@@ -634,6 +670,47 @@ contract MonPadStakingPool is ReentrancyGuard {
     function getTier(uint256 tierId) external view returns (Tier memory) {
         if (tierId >= tiers.length) revert InvalidTier(tierId);
         return tiers[tierId];
+    }
+
+
+    /* -------------------- Audit Admin recovery -------------------- */
+
+    /// @notice Owner-only emergency unstake. Returns the principal to the user without
+    ///         the unlock check or claim flow; pool MUST be paused so this only runs
+    ///         during a halted state (e.g., security incident or migration).
+    /// @dev    Zeros ALL Stake fields (amount, weighted, rewardDebt, startTs, unlockTs,
+    ///         tierId, paidFee) and sets flags=1 (closed marker). This makes the slot
+    ///         recyclable by the H-5 scan-then-reuse path on the next stake() and ensures
+    ///         no stale state can leak. Reward accounting is decremented atomically.
+    function adminEmergencyUnstake(address user, uint256 stakeId) external onlyOwner whenPaused nonReentrant {
+        if (user == address(0)) revert ZeroAddress();
+        Stake[] storage userStakes = stakes[user];
+        if (stakeId >= userStakes.length) revert StakeNotFound(stakeId);
+        Stake storage s = userStakes[stakeId];
+        uint256 principal = uint256(s.amount);
+        if (principal == 0) revert StakeNotFound(stakeId); // already closed
+        uint256 weightedAmt = uint256(s.weighted);
+
+        // Decrement pool-wide accumulators (mirror unstake()).
+        totalWeightedStaked -= weightedAmt;
+        totalRawStaked      -= principal;
+
+        // Zero ALL Stake fields (per H-5 cross-reference: amount==0 makes slot reusable;
+        // other fields zeroed for hygiene so the next staker into this slot sees clean state).
+        s.amount     = 0;
+        s.weighted   = 0;
+        s.rewardDebt = 0;
+        s.startTs    = 0;
+        s.unlockTs   = 0;
+        s.tierId     = 0;
+        s.paidFee    = false;
+        s.flags      = 1; // closed marker for off-chain indexers (matches unstake())
+
+        // Return principal tokens. No fee, no penalty, no reward payout: this is recovery, not claim.
+        bool okT = token.transfer(user, principal);
+        if (!okT) revert TokenTransferFailed();
+
+        emit AdminEmergencyUnstaked(user, stakeId, principal);
     }
 
     // ────────────────── Receive / Fallback (A16) ──────────────────

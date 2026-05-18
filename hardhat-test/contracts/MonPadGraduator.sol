@@ -111,6 +111,7 @@ interface IMonPadFactory {
     function graduator() external view returns (address);
     /// @notice Required for V2.1-2 caller authentication: maps token => its bonding curve.
     function tokToCurve(address token) external view returns (address);
+    function treasuryWallet() external view returns (address);
 }
 
 /* ------------------------------------------------------------------ */
@@ -189,6 +190,7 @@ contract MonPadGraduator is ReentrancyGuard, IERC721Receiver {
     event Swept(address indexed asset, address indexed to, uint256 amount, bool isEth);
     event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner);
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+    event PreDepositSwept(address indexed token, uint256 amount, address indexed treasury);
 
     /* ------------------------------ Errors ----------------------------- */
 
@@ -205,6 +207,8 @@ contract MonPadGraduator is ReentrancyGuard, IERC721Receiver {
     error PlainMonRejected();
     error UnknownCall();
     error WmonApproveFailed();
+    error PoolPreInitWithBadPrice(address pool, uint160 expected, uint160 actual);
+    error InsufficientTokenBalance(uint256 have, uint256 need);
     error TokenApproveFailed();
 
     /* ----------------------------- Modifier ---------------------------- */
@@ -249,7 +253,11 @@ contract MonPadGraduator is ReentrancyGuard, IERC721Receiver {
      *
      * @param token Address of the graduating MonPad token.
      */
-    function onGraduate(address token) external payable nonReentrant {
+    /// @notice Graduation entry point. Called by curve once graduation conditions hit.
+    /// @dev If the V3 pool was pre-initialized at a price > 1%% from the curve's computed
+    ///      price, this call reverts. Failure is griefing-only — attacker cannot profit.
+    ///      Recovery is out-of-band (e.g. wait for arbitrage, or community migration).
+    function onGraduate(address token, uint256 lpTokens) external payable nonReentrant {
         // ---- 1. Basic preconditions
         if (token == address(0))            revert ZeroAddress();
 
@@ -268,8 +276,18 @@ contract MonPadGraduator is ReentrancyGuard, IERC721Receiver {
         uint256 monAmt = msg.value;
         if (monAmt < LP_MON_MIN)            revert WrongMonAmount(monAmt, LP_MON_MIN);
 
-        uint256 amountToken = IToken(token).balanceOf(address(this));
-        if (amountToken == 0)               revert NoTokenBalance(token);
+        // C-2 fix: use caller-supplied lpTokens, sweep any excess to treasury.
+        uint256 actualBalance = IToken(token).balanceOf(address(this));
+        if (actualBalance < lpTokens) revert InsufficientTokenBalance(actualBalance, lpTokens);
+        if (actualBalance > lpTokens) {
+            uint256 excess = actualBalance - lpTokens;
+            address tre = IMonPadFactory(monpadFactory).treasuryWallet();
+            if (tre == address(0)) revert ZeroAddress();
+            bool okSweep = IToken(token).transfer(tre, excess);
+            if (!okSweep) revert TokenApproveFailed();
+            emit PreDepositSwept(token, excess, tre);
+        }
+        uint256 amountToken = lpTokens;
 
         // Reserve the in-flight slot so an open sweep cannot steal the asset mid-call.
         _tokenInFlight = token;
@@ -306,6 +324,15 @@ contract MonPadGraduator is ReentrancyGuard, IERC721Receiver {
         if (existingSqrtPriceX96 == 0) {
             IUniswapV3Pool(pool).initialize(sqrtPriceX96);
             emit PoolCreated(token, pool, sqrtPriceX96);
+        } else {
+            // C-1 fix: pool was pre-initialized. Require existing price within 1%
+            // of computed price, else revert. Griefing-only failure mode.
+            uint256 expected = uint256(sqrtPriceX96);
+            uint256 actual   = uint256(existingSqrtPriceX96);
+            uint256 diff     = expected > actual ? expected - actual : actual - expected;
+            if (diff * 1000 > expected) { // N-1: 0.1% sqrt-price (~0.2% real-price) tolerance
+                revert PoolPreInitWithBadPrice(pool, sqrtPriceX96, existingSqrtPriceX96);
+            }
         }
 
         // ---- 6. Approve NPM for both sides (manual approve(0) then approve(amount))

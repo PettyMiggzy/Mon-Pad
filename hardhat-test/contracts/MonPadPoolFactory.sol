@@ -413,24 +413,6 @@ contract MonPadPoolFactory {
         emit ParamChanged("poolCreationFee", old, newVal);
     }
 
-    /* ---- setHub (factory's hub reference; existing pools keep their immutable hub) ---- */
-    bytes32 private constant SEL_HUB = keccak256("setHub(address)");
-
-    function queueSetHub(address newHub) external onlyOwner returns (bytes32) {
-        if (newHub == address(0)) revert ZeroAddress();
-        return _queue(SEL_HUB, abi.encode(newHub));
-    }
-    function executeSetHub(bytes32 opId, address newHub) external onlyOwner {
-        if (newHub == address(0)) revert ZeroAddress();
-        Op memory op = ops[opId];
-        if (keccak256(op.data) != keccak256(abi.encode(newHub))) revert OpNotFound(opId);
-        _consume(opId, SEL_HUB);
-        // NOTE: `hub` is immutable on this contract per V2.1 lockdown; this setter is reserved
-        // for a future upgrade where `hub` becomes mutable. Currently reverts.
-        // Keeping the queue/execute scaffolding for a future redeploy with mutable hub.
-        revert("hub immutable in this version");
-    }
-
     /* ---- setMonshiToken (mutable, timelocked) ---- */
     bytes32 private constant SEL_MONSHI_TOKEN = keccak256("setMonshiToken(address)");
 
@@ -449,5 +431,17 @@ contract MonPadPoolFactory {
     }
 
     /* -------- receive / fallback -------- */
+    // --- V2.1 BATCH 3: ADMIN POOL MAPPING CLEAR ---
+    /// @notice Emergency: clear PoolFactory's tokenToPool entry so a fresh pool can be created
+    ///         for a token that was unregistered on the Hub. Owner-only, no timelock
+    ///         (consistent with adminSweepStrandedReward emergency recovery pattern).
+    event TokenPoolCleared(address indexed token, address indexed oldPool);
+    function adminClearTokenPool(address token) external onlyOwner {
+        address oldPool = tokenToPool[token];
+        require(oldPool != address(0), "no pool");
+        delete tokenToPool[token];
+        emit TokenPoolCleared(token, oldPool);
+    }
+
     receive() external payable {}
 }
