@@ -1,28 +1,69 @@
-.next
-node_modules
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Next.js
+.next/
+out/
+.vercel
+
+# Production builds
+build/
+dist/
+
+# Env files
 .env
 .env.local
-.env.production
-.vercel
-.DS_Store
-*.tsbuildinfo
-tsconfig.tsbuildinfo
-*.log
-.cache
+.env.development.local
+.env.test.local
+.env.production.local
 
-# Hardhat workspace — track sources + tests, ignore generated artifacts
-hardhat-test/node_modules/
+# Hardhat
 hardhat-test/artifacts/
 hardhat-test/cache/
+hardhat-test/coverage/
 hardhat-test/typechain-types/
-compile.js
+hardhat-test/.env
 
-# Deploy secrets
-deploy/v2/.env
-deploy/v2/deployed.json
+# Project housekeeping - backup directories from rebuilds
+lib/_bak/
+lib/_bak_DELETEME/
+components/_bak/
+pages.bak/
 
-# OS
-Thumbs.db
+# Abandoned legacy contract tree (canonical lives in hardhat-test/contracts/)
+contracts/
 
-# operational notes / leak shielding
-hide/
+# Abandoned legacy Foundry deploy tree
+deploy/
+
+# Interim editing backups
+*.bak
+*.bak2
+*.bak3
+*.bak4
+*.bak5
+
+# Audit deliverables (binary artifacts, reproducible from source)
+_audit_archive/
+*.tar.gz
+
+# Test scratchpads
+hardhat-test/.buy_body.txt
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# TypeScript incremental build cache
+*.tsbuildinfo
