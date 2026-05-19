@@ -12,7 +12,7 @@ export default function PromoBanner() {
         loop
         muted
         playsInline
-        poster="/monpad-splash.jpg"
+        poster="/monpad-text-logo.png"
         className="absolute inset-0 w-full h-full object-cover"
       >
         <source src="/launch-banner.mp4" type="video/mp4" />
@@ -26,7 +26,7 @@ export default function PromoBanner() {
             Launch Your Coin on Mon-Pad
           </h2>
           <p className="text-sm md:text-base text-white/85 mt-2">
-            Fair launch. 1.5% royalties forever. Real graduation to Uniswap V3.
+            Fair launch. 2% royalties forever. Real graduation to Uniswap V3.
           </p>
         </div>
         <Link

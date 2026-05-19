@@ -20,7 +20,7 @@ const FAQ = [
   },
   {
     q: "How is this different from nad.fun?",
-    a: "We focus on creator economics (1.5% fee revenue forever per token), deeper DeFi integration (staking, MONSHI tie-ins), and fair-launch ethos. Pricing is the same range for users.",
+    a: "We focus on creator economics (2% fee revenue forever per token), deeper DeFi integration (staking, MONSHI tie-ins), and fair-launch ethos. Pricing is the same range for users.",
   },
   {
     q: "When can I unstake?",
