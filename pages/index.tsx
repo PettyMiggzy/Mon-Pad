@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import LiveTicker from '@/components/LiveTicker';
+import PromoBanner from '@/components/PromoBanner';
 import TokenGrid from '@/components/TokenGrid';
 import HomeRail from '@/components/HomeRail';
 import { api, type TokenSummary } from '@/lib/api';
@@ -55,6 +56,11 @@ export default function Home() {
     <>
       {/* Live trade ticker at the very top */}
       <LiveTicker />
+
+      {/* Promo banner */}
+      <div className="max-w-7xl mx-auto px-4">
+        <PromoBanner />
+      </div>
 
       {/* Hero strip */}
       <section
