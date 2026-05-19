@@ -23,18 +23,25 @@ export default function App({ Component, pageProps }: AppProps) {
   return (
     <>
       <Head>
-        <title>MonPad — Fair Launch on Monad</title>
+        <title>Mon-Pad — Fair Launch on Monad</title>
         <meta
           name="description"
-          content="Fair token launches on Monad. 100 MON to launch, 425k to graduate. Devs earn 2% forever."
+          content="Fair token launches on Monad. 100 MON to launch, 425k to graduate. Devs earn 1.5% forever."
         />
-        <meta property="og:title" content="MonPad — Fair Launch on Monad" />
+        <meta property="og:title" content="Mon-Pad — Fair Launch on Monad" />
         <meta
           property="og:description"
-          content="Fair token launches on Monad. 100 MON to launch, 425k to graduate. Devs earn 2% forever."
+          content="Fair token launches on Monad. 100 MON to launch, 425k to graduate. Devs earn 1.5% forever."
         />
+        <meta property="og:image" content="https://www.monpad.net/monpad-splash.jpg" />
+        <meta property="og:image:width" content="1280" />
+        <meta property="og:image:height" content="960" />
         <meta property="og:type" content="website" />
-        <meta property="og:image" content="/monpad-splash.jpg" />
+        <meta property="og:url" content="https://www.monpad.net" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Mon-Pad — Fair Launch on Monad" />
+        <meta name="twitter:description" content="Fair token launches on Monad. 100 MON to launch, 425k to graduate. Devs earn 1.5% forever." />
+        <meta name="twitter:image" content="https://www.monpad.net/monpad-splash.jpg" />
         <link rel="icon" href="/Pad.png" />
         <link rel="apple-touch-icon" href="/Pad.png" />
         <link rel="manifest" href="/manifest.json" />

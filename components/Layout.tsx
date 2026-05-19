@@ -79,17 +79,18 @@ export function Layout({ children }: { children: ReactNode }) {
           }}
         >
           <Link
-            href="/"
-            style={{
-              fontWeight: 700,
-              fontSize: 18,
-              letterSpacing: '-0.01em',
-              color: 'var(--p2, #C4B5FD)',
-              textDecoration: 'none',
-            }}
-          >
-            Mon<span style={{ color: 'var(--p, #A855F7)' }}>{'\u00B7'}</span>Pad
-          </Link>
+          href="/"
+          className="flex items-center"
+          aria-label="Mon-Pad home"
+          style={{ textDecoration: 'none' }}
+        >
+          <img
+            src="/monpad-text-logo.png"
+            alt="Mon-Pad"
+            className="h-8 w-auto md:h-10 select-none"
+            draggable={false}
+          />
+        </Link>
           <nav className="mp-desktop-nav" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             {PRIMARY_NAV.map((n) => (
               <NavLink key={n.href} href={n.href} active={router.pathname === n.href}>
