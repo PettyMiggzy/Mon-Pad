@@ -1,12 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { useAccount } from 'wagmi';
 import { motion } from 'framer-motion';
 import LiveTicker from '@/components/LiveTicker';
 import TokenGrid from '@/components/TokenGrid';
 import HomeRail from '@/components/HomeRail';
 import { api, type TokenSummary } from '@/lib/api';
-import { isAdmin, contractsConfigured } from '@/lib/constants';
+import { contractsConfigured } from '@/lib/constants';
 
 type FilterKey = 'all' | 'trending' | 'near-graduation' | 'graduated';
 
@@ -18,7 +17,6 @@ const FILTERS: { key: FilterKey; label: string; apiValue: string | undefined }[]
 ];
 
 export default function Home() {
-  const { address } = useAccount();
   const [filter, setFilter] = useState<FilterKey>('all');
   const [tokens, setTokens] = useState<TokenSummary[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -260,37 +258,6 @@ export default function Home() {
           </aside>
         </div>
       </div>
-
-      {/* Footer */}
-      <footer
-        style={{
-          marginTop: 64,
-          padding: '48px 16px',
-          textAlign: 'center',
-          fontSize: 12,
-          color: 'var(--p3, rgba(220, 215, 240, 0.4))',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          gap: 16,
-        }}
-      >
-        <span>Mon-Pad — Built on Monad. Audited and live.</span>
-        <span style={{ color: 'var(--p3, rgba(220, 215, 240, 0.4))' }}>·</span>
-        <span style={{ color: 'var(--brand, #8B5CF6)', fontWeight: 600 }}>A King Petty Build</span>
-        {isAdmin(address) && (
-          <Link
-            href="/admin"
-            style={{
-              color: 'var(--brand, #8B5CF6)',
-              textDecoration: 'none',
-              fontWeight: 600,
-            }}
-          >
-            Admin
-          </Link>
-        )}
-      </footer>
     </>
   );
 }

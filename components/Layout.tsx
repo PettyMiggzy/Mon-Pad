@@ -2,15 +2,17 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAccount } from 'wagmi';
-import { Home, Plus, ArrowLeftRight, User, Shield } from 'lucide-react';
+import { Home, Plus, ArrowLeftRight, User, Shield, BookOpen, FileText } from 'lucide-react';
 import { isAdmin } from '@/lib/constants';
 import { AddressGuard } from './AddressGuard';
 import type { ReactNode } from 'react';
 
 const PRIMARY_NAV = [
-  { href: '/', label: 'Home', icon: Home },
-  { href: '/create', label: 'Create', icon: Plus },
-  { href: '/swap', label: 'Swap', icon: ArrowLeftRight },
+  { href: '/', label: 'Home', icon: Home, desktopOnly: false },
+  { href: '/create', label: 'Create', icon: Plus, desktopOnly: false },
+  { href: '/swap', label: 'Swap', icon: ArrowLeftRight, desktopOnly: false },
+  { href: '/how-it-works', label: 'How it works', icon: BookOpen, desktopOnly: true },
+  { href: '/docs', label: 'Docs', icon: FileText, desktopOnly: true },
 ] as const;
 
 function NavLink({
@@ -127,7 +129,7 @@ export function Layout({ children }: { children: ReactNode }) {
           gridTemplateColumns: admin ? 'repeat(5, 1fr)' : 'repeat(4, 1fr)',
         }}
       >
-        {PRIMARY_NAV.map((n) => {
+        {PRIMARY_NAV.filter((n) => !n.desktopOnly).map((n) => {
           const Icon = n.icon;
           const active = router.pathname === n.href;
           return (
@@ -218,6 +220,22 @@ export function Layout({ children }: { children: ReactNode }) {
           }
         }
       `}</style>
+    <footer className="border-t border-border mt-16">
+      <div className="max-w-7xl mx-auto px-4 py-8 flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="text-sm text-white/50">
+          Mon-Pad — Built on Monad. Audited and live. · A King Petty Build
+        </div>
+        <div className="flex flex-wrap items-center gap-4 text-sm">
+          <a href="https://t.me/MonshiUtilitySupport" target="_blank" rel="noopener noreferrer" className="text-white/70 hover:text-brand-purple transition-colors">Support</a>
+          <span className="text-white/20">·</span>
+          <a href="https://t.me/monpadlounge" target="_blank" rel="noopener noreferrer" className="text-white/70 hover:text-brand-purple transition-colors">Lounge</a>
+          <span className="text-white/20">·</span>
+          <Link href="/how-it-works" className="text-white/70 hover:text-brand-purple transition-colors">How it works</Link>
+          <span className="text-white/20">·</span>
+          <Link href="/docs" className="text-white/70 hover:text-brand-purple transition-colors">Docs</Link>
+        </div>
+      </div>
+    </footer>
     </div>
   );
 }
