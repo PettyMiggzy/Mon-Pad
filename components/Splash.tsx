@@ -35,12 +35,19 @@ export default function Splash() {
         background: 'radial-gradient(circle at 50% 40%, rgba(20,16,42,0.95), rgba(0,0,0,0.98))',
       }}
     >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src="/splash.png"
-        alt="MonPad splash"
+      {/* Boot splash plays /splash.mp4. Fades out when video ends OR after safety timeout. */}
+      <video
+        autoPlay
+        muted
+        playsInline
+        onEnded={() => {
+          setFading(true);
+          setTimeout(() => setVisible(false), 400);
+        }}
         style={{ maxWidth: '60vw', maxHeight: '60vh', objectFit: 'contain' }}
-      />
+      >
+        <source src="/splash.mp4" type="video/mp4" />
+      </video>
     </div>
   );
 }
