@@ -1,4 +1,5 @@
 import { useRouter } from 'next/router';
+import Image from 'next/image';
 import type { GetServerSideProps, GetServerSidePropsContext } from 'next';
 import Head from 'next/head';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -160,7 +161,18 @@ export default function TokenDetailPage({ addrParam, initialToken }: TokenDetail
 function TokenHeader({ token }: { token: TokenSummary }) {
   return (
     <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-      {token.imageUrl && <img src={token.imageUrl} alt={token.symbol} style={{ width: 64, height: 64, borderRadius: 8, objectFit: 'cover' }} />}
+      {token.imageUrl ? (
+          <Image
+            src={token.imageUrl}
+            alt={token.symbol}
+            width={64}
+            height={64}
+            priority
+            unoptimized
+            style={{ borderRadius: '50%', objectFit: 'cover' }}
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+          />
+        ) : null}
       <div style={{ flex: 1 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
           <h1 style={{ margin: 0, fontSize: 22 }}>{token.name}</h1>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import Image from 'next/image';
 import { useAccount, useReadContract, useReadContracts, useSendTransaction, useWaitForTransactionReceipt, useWriteContract } from 'wagmi';
 import { ArrowDownUp, ChevronDown, RefreshCw } from 'lucide-react';
 import TokenPicker from '@/components/TokenPicker';
@@ -60,7 +61,17 @@ function TokenInput({ label, token, setToken, amount, setAmount, readOnly, onPic
           onClick={onPickerOpen}
           style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', background: 'rgba(168,85,247,0.15)', border: '1px solid rgba(168,85,247,0.4)', color: '#fff', borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}
         >
-          {token.imageUrl ? <img src={token.imageUrl} alt={token.symbol} style={{ width: 20, height: 20, borderRadius: '50%' }} /> : null}
+          {token.imageUrl ? (
+        <Image
+          src={token.imageUrl}
+          alt={token.symbol}
+          width={20}
+          height={20}
+          unoptimized
+          style={{ borderRadius: '50%', objectFit: 'cover' }}
+          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+        />
+      ) : null}
           {token.symbol}
           <ChevronDown size={14} />
         </button>

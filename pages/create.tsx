@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/router';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseEther, type Address } from 'viem';
@@ -109,7 +110,17 @@ export default function CreatePage() {
           <label style={{ fontSize: 13, color: '#aaa' }}>Image</label>
           <input type="file" accept="image/*" onChange={onFileChange} style={{ display: 'block', marginTop: 4, color: '#aaa' }} />
           {uploading && <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>uploading...</div>}
-          {imageUrl && <img src={imageUrl} alt="preview" style={{ marginTop: 8, width: 80, height: 80, borderRadius: 8, objectFit: 'cover' }} />}
+          {imageUrl ? (
+          <Image
+            src={imageUrl}
+            alt="preview"
+            width={80}
+            height={80}
+            unoptimized
+            style={{ marginTop: 8, borderRadius: 8, objectFit: 'cover' }}
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+          />
+        ) : null}
         </div>
         <Field label="Description" value={description} onChange={setDescription} placeholder="What’s this token about?" multiline />
         <Field label="Twitter" value={twitter} onChange={setTwitter} placeholder="https://x.com/..." />
