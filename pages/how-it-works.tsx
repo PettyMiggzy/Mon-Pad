@@ -25,7 +25,7 @@ const FAQ = [
   },
   {
     q: "When can I unstake?",
-    a: "Anytime, but if before your lock period ends you eat a 10% penalty. After the lock, you can claim and unstake with zero penalty.",
+    a: "Anytime, but unstaking before your lock ends charges the tier's early fee (varies by tier, see the Staking page). Free-tier stakers who fall below 2M MONSHI before unstake also pay a 20% dropout penalty.",
   },
   {
     q: "What's MONSHI?",
@@ -168,8 +168,8 @@ export default function HowItWorks() {
               </tr>
               <tr className="border-t border-border">
                 <td className="px-4 py-3 font-medium">Early unstake</td>
-                <td className="px-4 py-3">10%</td>
-                <td className="px-4 py-3">Penalty for breaking lock</td>
+                <td className="px-4 py-3">Varies</td>
+                <td className="px-4 py-3">Per-tier early fee + 20% dropout penalty if free staker</td>
               </tr>
             </tbody>
           </table>
@@ -205,7 +205,7 @@ export default function HowItWorks() {
       <section className="mt-16">
         <h2 className="text-3xl font-bold text-white mb-6">Staking</h2>
         <p className="text-base text-white/70 leading-relaxed mb-4">
-          Token holders can stake to earn a share of sell fees from the tokens they back. Lock durations: <strong className="text-white">7 / 30 / 90 / 180 days</strong> (longer locks earn more rewards weight). 2% stake fee, waived if you hold MONSHI. 10% penalty for unstaking before the lock ends.
+          Token holders can stake to earn a share of sell fees from the tokens they back. Lock durations: <strong className="text-white">7 / 30 / 90 / 180 days</strong> (longer locks earn more rewards weight). 2% stake fee, waived if you hold MONSHI. Early unstake charges the tier's early fee (set per tier by Mon-Pad governance). Free-tier stakers who fall below 2M MONSHI before unstake also pay a 20% dropout penalty.
         </p>
         <p className="text-base text-white/70 leading-relaxed">
           MONSHI stakers get bonus rewards — 40% of platform sell fees flow to MONSHI buyback.
