@@ -73,5 +73,5 @@ export const CURVE = {
   CREATOR_GRADUATION_REWARD: CREATOR_GRADUATION_REWARD_MON * 10n ** 18n,
 } as const;
 
-export const MONORAIL_API = process.env.NEXT_PUBLIC_MONORAIL_API || 'https://pathfinder.monorail.io';
+export const MONORAIL_API = process.env.NEXT_PUBLIC_MONORAIL_API || 'https://pathfinder.monorail.xyz';
 export const MONORAIL_PARTNER_ID = process.env.NEXT_PUBLIC_MONORAIL_PARTNER_ID || '1176408161626';

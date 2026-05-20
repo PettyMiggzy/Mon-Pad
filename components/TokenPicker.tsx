@@ -13,13 +13,18 @@ export type TokenOption = {
   decimals: number;
   name?: string;
   imageUrl?: string;
+  // Route hints (used by lib/swapRouter.ts)
+  // isMonPadToken: token deployed via the Mon-Pad factory (has a curve)
+  // graduated: curve has graduated to Uniswap (no longer priced on curve)
+  isMonPadToken: boolean;
+  graduated: boolean;
 };
 
 const COMMON_TOKENS: TokenOption[] = [
-  { symbol: 'MON', name: 'Monad', address: '0x0000000000000000000000000000000000000000', decimals: 18, imageUrl: '/monad.png' },
-  { symbol: 'WMON', name: 'Wrapped Monad', address: '0x760AfE86e5de5fa0Ee542fc7B7B713e1c5425701', decimals: 18, imageUrl: '/monad.png' },
+  { symbol: 'MON', name: 'Monad', address: '0x0000000000000000000000000000000000000000', decimals: 18, imageUrl: '/monad.png', isMonPadToken: false, graduated: true },
+  { symbol: 'WMON', name: 'Wrapped Monad', address: '0x760AfE86e5de5fa0Ee542fc7B7B713e1c5425701', decimals: 18, imageUrl: '/monad.png', isMonPadToken: false, graduated: true },
   // TODO: Replace with proper MONSHI logo when partnership assets land
-  { symbol: 'MONSHI', name: 'Monshi', address: '0xB744F5CDb792d8187640214C4A1c9aCE29af7777', decimals: 18, imageUrl: '/Pad.png' },
+  { symbol: 'MONSHI', name: 'Monshi', address: '0xB744F5CDb792d8187640214C4A1c9aCE29af7777', decimals: 18, imageUrl: '/Pad.png', isMonPadToken: false, graduated: true },
 ];
 
 type Props = {
@@ -55,6 +60,8 @@ export default function TokenPicker({ open, onClose, onSelect, currentSelected }
       decimals: 18,
       name: t.name,
       imageUrl: t.imageUrl,
+      isMonPadToken: true,
+      graduated: t.graduated,
     }));
 
   const all = [...COMMON_TOKENS, ...apiAsOptions];

@@ -1,95 +1,349 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useAccount, useSendTransaction, useWaitForTransactionReceipt } from 'wagmi';
-import { ArrowDownUp, ChevronDown } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useAccount, useReadContract, useReadContracts, useSendTransaction, useWaitForTransactionReceipt, useWriteContract } from 'wagmi';
+import { ArrowDownUp, ChevronDown, RefreshCw } from 'lucide-react';
 import TokenPicker from '@/components/TokenPicker';
-import { parseEther, formatEther, type Address } from 'viem';
-import { MONORAIL_API, MONORAIL_PARTNER_ID } from '@/lib/constants';
+import type { TokenOption } from '@/components/TokenPicker';
+import { parseEther, parseUnits, formatUnits, type Address } from 'viem';
+import { CONTRACTS, ZERO_ADDRESS, MONORAIL_API } from '@/lib/constants';
+import { curveAbi, factoryAbi, tokenAbi } from '@/lib/abis';
+import { getMonorailQuote, toExecutable, quoteSummary, type MonorailQuote } from '@/lib/monorail';
+import {
+  previewBuy, previewSell, applySlippage,
+  preflightBuy, preflightSell, needsApprove, MAX_UINT256,
+  type CurveReserves, type CurveFees, type PreflightState, type PreflightResult
+} from '@/lib/curveSwap';
+import { routeForSwap, checkCrossCurve, type Route } from '@/lib/swapRouter';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 
 type TxState = { status: 'idle' | 'pending' | 'success' | 'error'; message?: string };
 
-type TokenOption = { symbol: string; address: string; decimals: number; name?: string; imageUrl?: string };
-
-const COMMON_TOKENS: TokenOption[] = [
-  { symbol: 'MON', name: 'Monad', address: '0x0000000000000000000000000000000000000000', decimals: 18 },
-  { symbol: 'WMON', name: 'Wrapped Monad', address: '0x760AfE86e5de5fa0Ee542fc7B7B713e1c5425701', decimals: 18 },
-  { symbol: 'MONSHI', name: 'Monshi', address: '0xB744F5CDb792d8187640214C4A1c9aCE29af7777', decimals: 18 }, // TODO: replace with real MONSHI addr
-];
-
 function StatusPill({ state }: { state: TxState }) {
   if (state.status === 'idle') return null;
-  const color = state.status === 'pending' ? '#888' : state.status === 'success' ? 'var(--ok, #4ADE80)' : 'var(--err, #F87171)';
-  return <div style={{ marginTop: 12, padding: '8px 12px', borderRadius: 6, border: `1px solid ${color}`, color, fontSize: 13 }}>{state.message || state.status}</div>;
+  const bg = state.status === 'success' ? '#0a5' : state.status === 'error' ? '#a30' : '#555';
+  return (
+    <div style={{ marginTop: 12, padding: '8px 12px', background: bg, color: '#fff', borderRadius: 6, fontSize: 13 }}>
+      {state.message || state.status}
+    </div>
+  );
 }
 
+function RouteLabel({ route, disabledReason }: { route: Route; disabledReason: string | null }) {
+  const text = disabledReason ? disabledReason : route === 'curve' ? 'Routed via Mon-Pad curve' : 'Routed via Monorail';
+  const color = disabledReason ? '#f93' : '#888';
+  return <div style={{ marginTop: 6, fontSize: 11, color }}>{text}</div>;
+}
+
+function TokenInput({ label, token, setToken, amount, setAmount, readOnly, onPickerOpen }: {
+  label: string;
+  token: TokenOption;
+  setToken: (t: TokenOption) => void;
+  amount: string;
+  setAmount: (v: string) => void;
+  readOnly?: boolean;
+  onPickerOpen: () => void;
+}) {
+  return (
+    <div style={{ padding: 12, background: 'rgba(255,255,255,0.04)', borderRadius: 10, marginBottom: 6 }}>
+      <div style={{ fontSize: 11, color: '#888', marginBottom: 6 }}>{label}</div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <input
+          type="text"
+          inputMode="decimal"
+          value={amount}
+          onChange={(e) => !readOnly && setAmount(e.target.value)}
+          placeholder="0.0"
+          readOnly={readOnly}
+          style={{ flex: 1, background: 'transparent', border: 'none', color: '#fff', fontSize: 22, outline: 'none', minWidth: 0 }}
+        />
+        <button
+          onClick={onPickerOpen}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', background: 'rgba(168,85,247,0.15)', border: '1px solid rgba(168,85,247,0.4)', color: '#fff', borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}
+        >
+          {token.imageUrl ? <img src={token.imageUrl} alt={token.symbol} style={{ width: 20, height: 20, borderRadius: '50%' }} /> : null}
+          {token.symbol}
+          <ChevronDown size={14} />
+        </button>
+        <input type="hidden" value={token.address} onChange={() => {}} aria-hidden />
+        <input type="hidden" value={setToken.length} onChange={() => {}} aria-hidden />
+      </div>
+    </div>
+  );
+}
+
+const DEFAULT_FROM: TokenOption = { symbol: 'MON', name: 'Monad', address: '0x0000000000000000000000000000000000000000', decimals: 18, imageUrl: '/monad.png', isMonPadToken: false, graduated: true };
+const DEFAULT_TO: TokenOption = { symbol: 'WMON', name: 'Wrapped Monad', address: '0x760AfE86e5de5fa0Ee542fc7B7B713e1c5425701', decimals: 18, imageUrl: '/monad.png', isMonPadToken: false, graduated: true };
+
 export default function SwapPage() {
-  const router = useRouter();
-  const canonical = `https://www.monpad.net${router.asPath.split('?')[0]}`;
   const { address } = useAccount();
-  const [from, setFrom] = useState<TokenOption>(COMMON_TOKENS[0]);
-  const [to, setTo] = useState<TokenOption>(COMMON_TOKENS[1]);
-  const [pickerOpen, setPickerOpen] = useState<'from' | 'to' | null>(null);
+  const router = useRouter();
+  const canonical = useMemo(() => {
+    if (typeof window !== 'undefined') return `${window.location.origin}${router.asPath.split('?')[0]}`;
+    return 'https://monpad.fun/swap';
+  }, [router.asPath]);
+
+  const [from, setFrom] = useState<TokenOption>(DEFAULT_FROM);
+  const [to, setTo] = useState<TokenOption>(DEFAULT_TO);
   const [amountIn, setAmountIn] = useState('');
   const [slippageBps, setSlippageBps] = useState(500);
-  const [quote, setQuote] = useState<any>(null);
-  const [loadingQuote, setLoadingQuote] = useState(false);
-  const [tx, setTx] = useState<TxState>({ status: 'idle' });
-  const { sendTransactionAsync } = useSendTransaction();
-  const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
-  const { isSuccess } = useWaitForTransactionReceipt({ hash: txHash });
+  const [pickerOpen, setPickerOpen] = useState<'from' | 'to' | null>(null);
+  const [refreshTick, setRefreshTick] = useState(0);
 
-  useEffect(() => { if (isSuccess) setTx({ status: 'success', message: 'swap confirmed' }); }, [isSuccess]);
+  // Route decision
+  const route: Route = useMemo(() => routeForSwap(from, to), [from, to]);
+  const crossCurve = useMemo(() => checkCrossCurve(from, to), [from, to]);
 
-  // Debounced quote fetch
+  // ----- Factory reads (cached at mount, refreshed every 5 min) -----
+  const factoryAddr = CONTRACTS.factoryV2 as Address;
+  const factoryReads = (useReadContracts as any)({
+    contracts: (factoryAddr !== ZERO_ADDRESS ? [
+      { address: factoryAddr, abi: factoryAbi as any, functionName: 'buyFeeCreatorBps' },
+      { address: factoryAddr, abi: factoryAbi as any, functionName: 'buyFeeBufferBps' },
+      { address: factoryAddr, abi: factoryAbi as any, functionName: 'sellFeeCreatorBps' },
+      { address: factoryAddr, abi: factoryAbi as any, functionName: 'sellFeeStakingBps' },
+      { address: factoryAddr, abi: factoryAbi as any, functionName: 'sellFeePlatformBps' },
+      { address: factoryAddr, abi: factoryAbi as any, functionName: 'pauseAllBuys' },
+      { address: factoryAddr, abi: factoryAbi as any, functionName: 'pauseAllSells' },
+    ] : []) as any,
+  });
+
+  const fees: CurveFees | null = useMemo(() => {
+    const d = factoryReads.data;
+    if (!d || d.length < 5 || d[0].status !== 'success') return null;
+    return {
+      buyCreatorBps: Number(d[0].result as bigint),
+      buyBufferBps: Number(d[1].result as bigint),
+      sellCreatorBps: Number(d[2].result as bigint),
+      sellStakingBps: Number(d[3].result as bigint),
+      sellPlatformBps: Number(d[4].result as bigint),
+    };
+  }, [factoryReads.data]);
+  const pauseAllBuys = (factoryReads.data?.[5]?.result as boolean | undefined) ?? false;
+  const pauseAllSells = (factoryReads.data?.[6]?.result as boolean | undefined) ?? false;
+
+  // ----- Determine curve target token (for curve route) -----
+  // For BUY: user spends MON to acquire a Mon-Pad token -> curve token = `to`
+  // For SELL: user spends a Mon-Pad token to receive MON -> curve token = `from`
+  const isBuy = from.address === ZERO_ADDRESS && to.isMonPadToken;
+  const isSell = from.isMonPadToken && to.address === ZERO_ADDRESS;
+  const curveTokenAddr: Address | null = route === 'curve'
+    ? ((isBuy ? to.address : isSell ? from.address : null) as Address | null)
+    : null;
+
+  // Resolve curve address from token.curve()
+  const curveOfToken = useReadContract({
+    address: (curveTokenAddr ?? undefined) as Address | undefined,
+    abi: tokenAbi as any,
+    functionName: 'curve',
+    query: { enabled: !!curveTokenAddr },
+  });
+  const curveAddr = curveOfToken.data as Address | undefined;
+
+  // ----- Per-curve reads (reserves + pause + blocked + graduated) -----
+  const curveReads = (useReadContracts as any)({
+    contracts: (curveAddr && curveTokenAddr ? [
+      { address: curveAddr, abi: curveAbi as any, functionName: 'getReserves' },
+      { address: curveAddr, abi: curveAbi as any, functionName: 'pauseBuys' },
+      { address: curveAddr, abi: curveAbi as any, functionName: 'pauseSells' },
+      { address: curveAddr, abi: curveAbi as any, functionName: 'graduated' },
+      { address: factoryAddr, abi: factoryAbi as any, functionName: 'blocked', args: [curveTokenAddr] },
+    ] : []) as any,
+    query: { enabled: !!curveAddr && !!curveTokenAddr, refetchInterval: 8_000 },
+  });
+
+  const reserves: CurveReserves | null = useMemo(() => {
+    const r = curveReads.data?.[0]?.result;
+    if (!r) return null;
+    const tuple = r as readonly [bigint, bigint, bigint, bigint];
+    return {
+      virtualMonReserve: tuple[0],
+      virtualTokenReserve: tuple[1],
+      realMonReserve: tuple[2],
+      realTokenReserve: tuple[3],
+    };
+  }, [curveReads.data]);
+
+  const preflightState: PreflightState | null = useMemo(() => {
+    const d = curveReads.data;
+    if (!d || d.length < 5) return null;
+    return {
+      pauseAllBuys,
+      pauseAllSells,
+      pauseBuys: Boolean(d[1]?.result),
+      pauseSells: Boolean(d[2]?.result),
+      graduated: Boolean(d[3]?.result),
+      blocked: Boolean(d[4]?.result),
+    };
+  }, [curveReads.data, pauseAllBuys, pauseAllSells]);
+
+  // ----- Curve preview (300ms debounce, local math) -----
+  const [curveOut, setCurveOut] = useState<bigint | null>(null);
+  const [curveDecimals, setCurveDecimals] = useState(18);
+  const [preflight, setPreflight] = useState<PreflightResult | null>(null);
+
   useEffect(() => {
-    if (!amountIn || isNaN(Number(amountIn)) || Number(amountIn) <= 0) { setQuote(null); return; }
+    if (route !== 'curve') { setCurveOut(null); setPreflight(null); return; }
+    if (!reserves || !fees || !preflightState) return;
+    if (!amountIn || isNaN(Number(amountIn)) || Number(amountIn) <= 0) { setCurveOut(null); return; }
+    const handle = setTimeout(() => {
+      const pre = isBuy ? preflightBuy(preflightState) : preflightSell(preflightState);
+      setPreflight(pre);
+      if (!pre.ok) { setCurveOut(null); return; }
+      try {
+        if (isBuy) {
+          const monIn = parseEther(amountIn);
+          setCurveOut(previewBuy(monIn, reserves, fees));
+          setCurveDecimals(to.decimals);
+        } else if (isSell) {
+          const tokensIn = parseUnits(amountIn, from.decimals);
+          setCurveOut(previewSell(tokensIn, reserves, fees));
+          setCurveDecimals(18);
+        }
+      } catch { setCurveOut(null); }
+    }, 300);
+    return () => clearTimeout(handle);
+  }, [amountIn, route, reserves, fees, preflightState, isBuy, isSell, from.decimals, to.decimals, refreshTick]);
+
+  // ----- Monorail quote (5s debounce, remote) -----
+  const [mQuote, setMQuote] = useState<MonorailQuote | null>(null);
+  const [loadingQuote, setLoadingQuote] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (route !== 'monorail') { setMQuote(null); return; }
+    if (!amountIn || isNaN(Number(amountIn)) || Number(amountIn) <= 0) { setMQuote(null); return; }
+    abortRef.current?.abort();
     const ctrl = new AbortController();
-    const t = setTimeout(async () => {
+    abortRef.current = ctrl;
+    const handle = setTimeout(async () => {
       setLoadingQuote(true);
       try {
-        const params = new URLSearchParams({
-          from: from.address,
-          to: to.address,
-          amount: parseEther(amountIn).toString(),
-          sender: address || '0x0000000000000000000000000000000000000000',
-          slippage: String(slippageBps),
-          ...(MONORAIL_PARTNER_ID ? { partner: MONORAIL_PARTNER_ID } : {}),
+        const q = await getMonorailQuote({
+          fromAddress: from.address,
+          toAddress: to.address,
+          amount: amountIn,
+          slippageBps,
+          sender: (address ?? '0x0000000000000000000000000000000000000001') as `0x${string}`,
+          signal: ctrl.signal,
         });
-        const res = await fetch(`${MONORAIL_API}/quote?${params}`, { signal: ctrl.signal });
-        if (!res.ok) throw new Error(`quote http ${res.status}`);
-        setQuote(await res.json());
-      } catch (e: any) {
-        if (e.name !== 'AbortError') setQuote(null);
-      } finally {
-        setLoadingQuote(false);
-      }
-    }, 350);
-    return () => { ctrl.abort(); clearTimeout(t); };
-  }, [amountIn, from.address, to.address, address, slippageBps]);
+        setMQuote(q);
+      } catch (e: unknown) {
+        if ((e as { name?: string })?.name !== 'AbortError') setMQuote(null);
+      } finally { setLoadingQuote(false); }
+    }, 5000);
+    return () => { clearTimeout(handle); ctrl.abort(); };
+  }, [amountIn, route, from.address, to.address, slippageBps, address, refreshTick]);
 
-  async function swap() {
-    if (!address || !quote?.tx) return;
-    setTx({ status: 'pending', message: 'submitting swap...' });
+  // ----- Display outputs -----
+  const outAmount = useMemo(() => {
+    if (route === 'curve' && curveOut !== null) {
+      return formatUnits(curveOut, curveDecimals);
+    }
+    if (route === 'monorail' && mQuote) {
+      return quoteSummary(mQuote).outputFormatted;
+    }
+    return '';
+  }, [route, curveOut, curveDecimals, mQuote]);
+
+  const minOut = useMemo(() => {
+    if (route === 'curve' && curveOut !== null) {
+      return formatUnits(applySlippage(curveOut, slippageBps), curveDecimals);
+    }
+    if (route === 'monorail' && mQuote) {
+      return quoteSummary(mQuote).minOutputFormatted;
+    }
+    return '';
+  }, [route, curveOut, curveDecimals, mQuote, slippageBps]);
+
+  const priceImpactPct = route === 'monorail' && mQuote ? quoteSummary(mQuote).priceImpactPct : null;
+
+  // ----- Allowance + approve for curve sells -----
+  const allowanceRead = useReadContract({
+    address: (route === 'curve' && isSell ? (from.address as Address) : undefined),
+    abi: tokenAbi as any,
+    functionName: 'allowance',
+    args: address && curveAddr ? [address, curveAddr] : undefined,
+    query: { enabled: route === 'curve' && isSell && !!address && !!curveAddr },
+  });
+  const allowance = (allowanceRead.data as bigint | undefined) ?? 0n;
+  const sellAmountWei = isSell && amountIn ? (() => { try { return parseUnits(amountIn, from.decimals); } catch { return 0n; } })() : 0n;
+  const needsApproval = route === 'curve' && isSell && sellAmountWei > 0n && needsApprove(allowance, sellAmountWei);
+
+  // ----- Execution -----
+  const { writeContractAsync } = useWriteContract();
+  const { sendTransactionAsync } = useSendTransaction();
+  const [tx, setTx] = useState<TxState>({ status: 'idle' });
+  const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
+  const { isSuccess } = useWaitForTransactionReceipt({ hash: txHash });
+  useEffect(() => { if (isSuccess) setTx({ status: 'success', message: 'swap confirmed' }); }, [isSuccess]);
+
+  async function handleSwap() {
+    if (!address) return;
+    setTx({ status: 'pending', message: 'submitting...' });
     try {
-      const hash = await sendTransactionAsync({
-        to: quote.tx.to as Address,
-        data: quote.tx.data as `0x${string}`,
-        value: quote.tx.value ? BigInt(quote.tx.value) : 0n,
-      });
-      setTxHash(hash);
-      setTx({ status: 'pending', message: 'confirming...' });
-    } catch (e: any) {
-      setTx({ status: 'error', message: (e?.shortMessage || e?.message || 'error').slice(0, 80) });
+      if (route === 'curve') {
+        if (!curveAddr || !curveOut) throw new Error('no curve quote');
+        const minOutWei = applySlippage(curveOut, slippageBps);
+        if (isSell && needsApproval) {
+          setTx({ status: 'pending', message: 'approving...' });
+          const approveHash = await writeContractAsync({
+            address: from.address as Address,
+            abi: tokenAbi as any,
+            functionName: 'approve',
+            args: [curveAddr, MAX_UINT256],
+          } as any);
+          setTxHash(approveHash);
+          await new Promise((res) => setTimeout(res, 1500));
+        }
+        if (isBuy) {
+          const monIn = parseEther(amountIn);
+          const hash = await writeContractAsync({
+            address: curveAddr,
+            abi: curveAbi as any,
+            functionName: 'buy',
+            args: [minOutWei],
+            value: monIn,
+          } as any);
+          setTxHash(hash);
+        } else if (isSell) {
+          const tokensIn = parseUnits(amountIn, from.decimals);
+          const hash = await writeContractAsync({
+            address: curveAddr,
+            abi: curveAbi as any,
+            functionName: 'sell',
+            args: [tokensIn, minOutWei],
+          } as any);
+          setTxHash(hash);
+        }
+        setTx({ status: 'pending', message: 'confirming...' });
+      } else {
+        // monorail
+        if (!mQuote) throw new Error('no quote');
+        const exec = toExecutable(mQuote);
+        const hash = await sendTransactionAsync({ to: exec.to, data: exec.data, value: exec.value });
+        setTxHash(hash);
+        setTx({ status: 'pending', message: 'confirming...' });
+      }
+    } catch (e: unknown) {
+      const msg = (e as { shortMessage?: string; message?: string })?.shortMessage || (e as Error)?.message || 'error';
+      setTx({ status: 'error', message: msg.slice(0, 80) });
     }
   }
 
-  function flip() { setFrom(to); setTo(from); setAmountIn(''); setQuote(null); }
+  function flip() {
+    setFrom(to);
+    setTo(from);
+    setAmountIn('');
+  }
 
-  const outAmount = useMemo(() => {
-    if (!quote) return null;
-    try { return formatEther(BigInt(quote.outAmount || quote.amountOut || '0')); } catch { return null; }
-  }, [quote]);
+  // ----- Submit gate -----
+  const hasQuote = route === 'curve' ? curveOut !== null && curveOut > 0n : !!mQuote;
+  const preflightOk = route !== 'curve' || (preflight?.ok ?? true);
+  const disableReason = crossCurve.disabled
+    ? crossCurve.reason
+    : (route === 'curve' && preflight && preflight.ok === false ? preflight.reason : null);
+  const submitDisabled = !address || !hasQuote || !preflightOk || crossCurve.disabled || tx.status === 'pending';
+  const submitLabel = !address ? 'Connect wallet' : crossCurve.disabled ? 'Two-step required' : !hasQuote ? 'Enter amount' : needsApproval ? `Approve ${from.symbol} + Swap` : 'Swap';
 
   return (
     <div style={{ maxWidth: 440, margin: '0 auto', padding: 24, color: '#fff' }}>
@@ -107,19 +361,32 @@ export default function SwapPage() {
       <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 12, padding: 16 }}>
         <TokenInput label="From" token={from} setToken={setFrom} amount={amountIn} setAmount={setAmountIn} onPickerOpen={() => setPickerOpen('from')} />
         <div style={{ display: 'flex', justifyContent: 'center', margin: '8px 0' }}>
-          <button onClick={flip} style={{ background: 'rgba(167,139,250,0.15)', border: '1px solid rgba(167,139,250,0.3)', borderRadius: 6, color: 'var(--brand, #A78BFA)', padding: '4px 12px', cursor: 'pointer', display: 'inline-flex',  alignItems: 'center',  justifyContent: 'center',}}><ArrowDownUp size={16} /></button>
+          <button onClick={flip} style={{ background: 'rgba(167,139,250,0.15)', border: '1px solid rgba(167,139,250,0.3)', borderRadius: 6, color: 'var(--brand, #A78BFA)', padding: '4px 12px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><ArrowDownUp size={16} /></button>
         </div>
-        <TokenInput label="To" token={to} setToken={setTo} amount={outAmount || ''} setAmount={() => {}} readOnly onPickerOpen={() => setPickerOpen('to')} />
+        <TokenInput label="To" token={to} setToken={setTo} amount={outAmount} setAmount={() => {}} readOnly onPickerOpen={() => setPickerOpen('to')} />
         <div style={{ marginTop: 12, display: 'flex', gap: 6, alignItems: 'center' }}>
           <span style={{ fontSize: 12, color: '#888' }}>Slippage</span>
           {[100, 500, 1000].map((bps) => (
             <button key={bps} onClick={() => setSlippageBps(bps)} style={{ padding: '4px 10px', fontSize: 12, background: slippageBps === bps ? 'var(--brand, #A78BFA)' : 'rgba(255,255,255,0.05)', color: slippageBps === bps ? '#000' : '#aaa', border: 'none', borderRadius: 4, cursor: 'pointer' }}>{bps / 100}%</button>
           ))}
+          <button onClick={() => setRefreshTick((n) => n + 1)} aria-label="Refresh quote" style={{ marginLeft: 'auto', padding: '4px 8px', fontSize: 12, background: 'rgba(255,255,255,0.05)', color: '#aaa', border: 'none', borderRadius: 4, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}><RefreshCw size={12} /> Refresh</button>
         </div>
-        {loadingQuote && <div style={{ marginTop: 8, fontSize: 12, color: '#888' }}>quoting...</div>}
-        {quote && quote.priceImpact && <div style={{ marginTop: 8, fontSize: 12, color: '#aaa' }}>Price impact: {(quote.priceImpact * 100).toFixed(2)}%</div>}
-        <button onClick={swap} disabled={!address || !quote?.tx || tx.status === 'pending'} style={{ width: '100%', marginTop: 16, padding: 14, background: 'var(--brand, #A78BFA)', color: '#000', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 16, cursor: (!address || !quote?.tx) ? 'not-allowed' : 'pointer', opacity: (!address || !quote?.tx) ? 0.5 : 1 }}>
-          {!address ? 'Connect wallet' : !quote?.tx ? 'Enter amount' : 'Swap'}
+        <RouteLabel route={route} disabledReason={disableReason} />
+        {loadingQuote && route === 'monorail' && <div style={{ marginTop: 8, fontSize: 12, color: '#888' }}>quoting...</div>}
+        {hasQuote && (
+          <div style={{ marginTop: 8, fontSize: 12, color: '#aaa' }}>
+            Min received: {minOut} {to.symbol}
+            {priceImpactPct !== null && (
+              <span style={{ marginLeft: 12, color: priceImpactPct > 2 ? '#f93' : '#aaa' }}>Price impact: {priceImpactPct.toFixed(2)}%</span>
+            )}
+          </div>
+        )}
+        <button
+          onClick={handleSwap}
+          disabled={submitDisabled}
+          style={{ width: '100%', marginTop: 16, padding: 14, background: 'var(--brand, #A78BFA)', color: '#000', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 16, cursor: submitDisabled ? 'not-allowed' : 'pointer', opacity: submitDisabled ? 0.5 : 1 }}
+        >
+          {submitLabel}
         </button>
         <StatusPill state={tx} />
       </div>
@@ -129,30 +396,11 @@ export default function SwapPage() {
         onSelect={(token) => {
           if (pickerOpen === 'from') setFrom(token);
           else if (pickerOpen === 'to') setTo(token);
+          setPickerOpen(null);
         }}
-        currentSelected={pickerOpen === 'from' ? from.address : pickerOpen === 'to' ? to.address : undefined}
+        currentSelected={pickerOpen === 'from' ? from.address : to.address}
       />
-    </div>
-  );
-}
-
-function TokenInput({ label, token, amount, setAmount, readOnly, onPickerOpen }: { label: string; token: TokenOption; setToken: (t: TokenOption) => void; amount: string; setAmount: (v: string) => void; readOnly?: boolean; onPickerOpen: () => void }) {
-  return (
-    <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 8, padding: 12 }}>
-      <div style={{ fontSize: 12, color: '#888' }}>{label}</div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-        <input value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.0" inputMode="decimal" readOnly={readOnly} style={{ flex: 1, background: 'transparent', border: 'none', color: '#fff', fontSize: 22, outline: 'none', minWidth: 0 }} />
-        <button onClick={onPickerOpen} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-border transition-colors">
-          {token.imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={token.imageUrl} alt={token.symbol} className="w-6 h-6 rounded-full" />
-          ) : (
-            <div className="w-6 h-6 rounded-full bg-brand-purple flex items-center justify-center text-xs text-white font-bold">{token.symbol[0]}</div>
-          )}
-          <span className="text-white font-semibold">{token.symbol}</span>
-          <ChevronDown size={16} className="text-white/50" />
-        </button>
-      </div>
+      <div style={{ marginTop: 8, fontSize: 10, color: '#555', textAlign: 'center' }}>API: {MONORAIL_API}</div>
     </div>
   );
 }
