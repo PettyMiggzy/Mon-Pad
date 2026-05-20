@@ -9,6 +9,7 @@ import { Coins, Lock, Clock, X, AlertTriangle, Loader2, CheckCircle2 } from 'luc
 import { CONTRACTS, MONSHI_TOKEN } from '@/lib/constants';
 import { hubAbi, poolFactoryAbi, poolAbi } from '@/lib/abis';
 import { fmtMon } from '@/lib/format';
+import { useRouter } from 'next/router';
 
 type TxState = { status: 'idle' | 'pending' | 'success' | 'error'; message?: string };
 
@@ -38,6 +39,8 @@ function fmtUnlockDate(unlockTs: bigint): string {
 }
 
 export default function StakePage() {
+  const router = useRouter();
+  const canonical = `https://www.monpad.net${router.asPath.split('?')[0]}`;
   const { address, isConnected } = useAccount();
   const [selectedPool, setSelectedPool] = useState<Address | null>(null);
   const [stakeAmount, setStakeAmount] = useState('');
@@ -292,7 +295,13 @@ export default function StakePage() {
     <>
       <Head>
         <title>Stake | Mon-Pad</title>
-        <meta name="description" content="Stake tokens on Mon-Pad and earn MON rewards from trading fees." />
+        <meta key="description" name="description" content="Stake tokens on Mon-Pad and earn MON rewards from trading fees. Free for MONSHI holders." />
+        <meta key="og:title" property="og:title" content="Stake | Mon-Pad" />
+        <meta key="og:description" property="og:description" content="Stake tokens on Mon-Pad and earn MON rewards from trading fees." />
+        <meta key="og:url" property="og:url" content={canonical} />
+        <meta key="twitter:title" name="twitter:title" content="Stake | Mon-Pad" />
+        <meta key="twitter:description" name="twitter:description" content="Stake tokens on Mon-Pad. Earn MON rewards." />
+        <link key="canonical" rel="canonical" href={canonical} />
       </Head>
       <main className="max-w-5xl mx-auto px-4 py-8">
         <div className="flex items-center gap-3 mb-2">

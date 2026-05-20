@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Head from 'next/head';
 import { ArrowRight, Shield, Coins, TrendingUp, Lock, Sparkles, MessageCircle, BookOpen } from 'lucide-react';
 
 const FAQ = [
@@ -44,6 +45,32 @@ const LAUNCH_STEPS = [
 export default function HowItWorks() {
   return (
     <div className="max-w-5xl mx-auto px-4 py-12">
+      <Head>
+        <title>How Mon-Pad works | Fair launch on Monad</title>
+        <meta key="description" name="description" content="How Mon-Pad works: bonding curve, graduation to Uniswap V3, fair launch with no pre-sale or team allocation on Monad." />
+        <meta key="og:title" property="og:title" content="How Mon-Pad works" />
+        <meta key="og:description" property="og:description" content="Fair launch token platform on Monad. Learn how the bonding curve and graduation work." />
+        <meta key="og:url" property="og:url" content="https://www.monpad.net/how-it-works" />
+        <meta key="twitter:title" name="twitter:title" content="How Mon-Pad works" />
+        <meta key="twitter:description" name="twitter:description" content="Fair launch token platform on Monad." />
+        <link key="canonical" rel="canonical" href="https://www.monpad.net/how-it-works" />
+        {/* FAQ JSON-LD mirrors the visible FAQ array above exactly. */}
+        {/* Do not edit one without editing the other - schema-vs-content mismatch triggers Google manual actions. */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              '@context': 'https://schema.org',
+              '@type': 'FAQPage',
+              mainEntity: FAQ.map((f) => ({
+                '@type': 'Question',
+                name: f.q,
+                acceptedAnswer: { '@type': 'Answer', text: f.a },
+              })),
+            }),
+          }}
+        />
+      </Head>
       {/* Hero */}
       <header className="text-center mb-16">
         <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">How Mon-Pad works</h1>

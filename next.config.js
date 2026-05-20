@@ -15,6 +15,11 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_SERVER_URL: process.env.NEXT_PUBLIC_SERVER_URL || '',
   },
+  async rewrites() {
+    return [
+      { source: '/sitemap.xml', destination: '/api/sitemap.xml' },
+    ];
+  },
   webpack: (config) => {
     config.resolve.fallback = {
       ...config.resolve.fallback,

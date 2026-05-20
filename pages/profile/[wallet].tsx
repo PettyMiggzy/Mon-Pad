@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
 import { useAccount } from 'wagmi';
 import Link from 'next/link';
+import Head from 'next/head';
 import Layout from '@/components/Layout';
 import { api, type TokenSummary, type Profile } from '@/lib/api';
 import { fmtMon, shortAddr, isAddress } from '@/lib/format';
@@ -185,6 +186,14 @@ export default function ProfilePage() {
 
   return (
     <Layout>
+      <Head>
+        <title>{`${displayName} | Mon-Pad`}</title>
+        <meta key="description" name="description" content={`Profile of ${displayName} on Mon-Pad. Tokens created and holdings on Monad.`} />
+        <meta key="robots" name="robots" content="noindex,follow" />
+        <meta key="og:title" property="og:title" content={`${displayName} | Mon-Pad`} />
+        <meta key="og:url" property="og:url" content={`https://www.monpad.net/profile/${walletStr}`} />
+        <link key="canonical" rel="canonical" href={`https://www.monpad.net/profile/${walletStr}`} />
+      </Head>
       <div className="mx-auto max-w-5xl px-4 py-8">
         {/* Hero */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center">

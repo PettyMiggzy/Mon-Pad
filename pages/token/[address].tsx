@@ -1,4 +1,5 @@
 import { useRouter } from 'next/router';
+import Head from 'next/head';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
@@ -54,6 +55,16 @@ export default function TokenDetailPage() {
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: 16, color: '#fff' }}>
+      <Head>
+        <title>{`${current.name} (${current.symbol}) | Mon-Pad`}</title>
+        <meta key="description" name="description" content={`Buy or trade ${current.symbol} on Mon-Pad. Live price chart, trades, holders on Monad.`} />
+        <meta key="og:title" property="og:title" content={`${current.name} (${current.symbol}) | Mon-Pad`} />
+        <meta key="og:description" property="og:description" content={`Trade ${current.symbol} on Mon-Pad. Fair launch token on Monad.`} />
+        <meta key="og:url" property="og:url" content={`https://www.monpad.net/token/${addr}`} />
+        <meta key="twitter:title" name="twitter:title" content={`${current.name} (${current.symbol})`} />
+        <meta key="twitter:description" name="twitter:description" content={`Trade ${current.symbol} on Mon-Pad.`} />
+        <link key="canonical" rel="canonical" href={`https://www.monpad.net/token/${addr}`} />
+      </Head>
       <TokenHeader token={current} />
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 360px', gap: 16, marginTop: 16 }}>
         <div>

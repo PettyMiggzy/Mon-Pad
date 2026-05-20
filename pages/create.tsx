@@ -5,6 +5,7 @@ import { parseEther, type Address } from 'viem';
 import { factoryAbi } from '@/lib/abis';
 import { api } from '@/lib/api';
 import { CONTRACTS, CREATION_FEE_MON, GRADUATION_TARGET_MON, CREATOR_GRADUATION_REWARD_MON, BUY_FEE_CREATOR_BPS } from '@/lib/constants';
+import Head from 'next/head';
 
 type TxState = { status: 'idle' | 'pending' | 'success' | 'error'; message?: string };
 
@@ -20,6 +21,7 @@ function StatusPill({ state }: { state: TxState }) {
 
 export default function CreatePage() {
   const router = useRouter();
+  const canonical = 'https://www.monpad.net' + router.asPath.split('?')[0];
   const { address } = useAccount();
   const [name, setName] = useState('');
   const [symbol, setSymbol] = useState('');
@@ -89,6 +91,16 @@ export default function CreatePage() {
 
   return (
     <div style={{ maxWidth: 640, margin: '0 auto', padding: 24, color: '#fff' }}>
+      <Head>
+        <title>Launch a Token | Mon-Pad</title>
+        <meta key="description" name="description" content="Launch a fair-launch token on Monad in minutes. 100 MON fee, no presale, no team allocation. Earn 2% of trading fees forever." />
+        <meta key="og:title" property="og:title" content="Launch a Token | Mon-Pad" />
+        <meta key="og:description" property="og:description" content="Launch a fair-launch token on Monad in minutes. 100 MON fee, no presale." />
+        <meta key="og:url" property="og:url" content={canonical} />
+        <meta key="twitter:title" name="twitter:title" content="Launch a Token | Mon-Pad" />
+        <meta key="twitter:description" name="twitter:description" content="Launch a fair-launch token on Monad in minutes." />
+        <link key="canonical" rel="canonical" href={canonical} />
+      </Head>
       <h1 style={{ marginBottom: 24 }}>Launch a token</h1>
       <div style={{ display: 'grid', gap: 16 }}>
         <Field label="Name" value={name} onChange={setName} placeholder="Awesome Coin" maxLength={32} />

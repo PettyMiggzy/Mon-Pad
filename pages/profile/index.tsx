@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useAccount } from 'wagmi';
 import Layout from '@/components/Layout';
+import Head from 'next/head';
 
 export default function ProfileIndexPage() {
   const router = useRouter();
@@ -15,7 +16,12 @@ export default function ProfileIndexPage() {
 
   return (
     <Layout>
-      <div className="mx-auto max-w-5xl px-4 py-16">
+      <Head>
+        <title>Profile | Mon-Pad</title>
+        <meta key="description" name="description" content="Connect your wallet to view your Mon-Pad profile, tokens created, and holdings." />
+        <meta key="robots" name="robots" content="noindex,follow" />
+      </Head>
+            <div className="mx-auto max-w-5xl px-4 py-16">
         <div className="mx-auto max-w-md rounded-xl border border-border bg-card p-8 text-center">
           <h1 className="text-2xl font-bold text-white">Your Profile</h1>
           <p className="mt-2 text-sm text-white/60">

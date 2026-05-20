@@ -5,6 +5,7 @@ import { type Address } from 'viem';
 import { factoryAbi, hubAbi, poolFactoryAbi, graduatorAbi } from '@/lib/abis';
 import { CONTRACTS, isAdmin, MONAD_EXPLORER } from '@/lib/constants';
 import type { BugReport } from '@/lib/api';
+import Head from 'next/head';
 
 export default function AdminPage() {
   const router = useRouter();
@@ -25,6 +26,10 @@ export default function AdminPage() {
 
   return (
     <div style={{ maxWidth: 920, margin: '0 auto', padding: 24, color: '#fff' }}>
+      <Head>
+        <title>Admin | Mon-Pad</title>
+        <meta key="robots" name="robots" content="noindex,nofollow" />
+      </Head>
       <h1 style={{ marginBottom: 24 }}>Admin</h1>
       <FactorySection />
       <PoolFactorySection />

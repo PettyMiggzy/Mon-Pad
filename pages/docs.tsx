@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import { ExternalLink, FileCode, Shield, MessageCircle, Sparkles, Wallet } from 'lucide-react';
+import Head from 'next/head';
+import { useRouter } from 'next/router';
 
 const CHAIN_PARAMS = {
   chainId: '0x8f',
@@ -30,6 +32,8 @@ const API_ENDPOINTS = [
 ];
 
 export default function Docs() {
+  const router = useRouter();
+  const canonical = `https://www.monpad.net${router.asPath.split('?')[0]}`;
   const addMonadToWallet = async () => {
     if (typeof window === 'undefined' || !(window as { ethereum?: { request: (args: { method: string; params: unknown[] }) => Promise<unknown> } }).ethereum) {
       alert('No Web3 wallet detected. Install MetaMask or Rabby first.');
@@ -55,7 +59,17 @@ export default function Docs() {
     <div className="max-w-5xl mx-auto px-4 py-12">
       {/* Hero */}
       <header className="text-center mb-16">
-        <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">Mon-Pad Documentation</h1>
+        <Head>
+        <title>Docs | Mon-Pad</title>
+        <meta key="description" name="description" content="Mon-Pad developer docs: contract addresses, ABIs, integration guides, and API reference for builders on Monad." />
+        <meta key="og:title" property="og:title" content="Docs | Mon-Pad" />
+        <meta key="og:description" property="og:description" content="Mon-Pad developer docs: contracts, ABIs, integration guides." />
+        <meta key="og:url" property="og:url" content={canonical} />
+        <meta key="twitter:title" name="twitter:title" content="Docs | Mon-Pad" />
+        <meta key="twitter:description" name="twitter:description" content="Mon-Pad developer docs." />
+        <link key="canonical" rel="canonical" href={canonical} />
+      </Head>
+      <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">Mon-Pad Documentation</h1>
         <p className="text-base md:text-lg text-white/70 max-w-2xl mx-auto leading-relaxed">
           Contracts, APIs, and integration details for developers and serious traders.
         </p>

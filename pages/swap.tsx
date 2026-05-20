@@ -4,6 +4,8 @@ import { ArrowDownUp, ChevronDown } from 'lucide-react';
 import TokenPicker from '@/components/TokenPicker';
 import { parseEther, formatEther, type Address } from 'viem';
 import { MONORAIL_API, MONORAIL_PARTNER_ID } from '@/lib/constants';
+import Head from 'next/head';
+import { useRouter } from 'next/router';
 
 type TxState = { status: 'idle' | 'pending' | 'success' | 'error'; message?: string };
 
@@ -22,6 +24,8 @@ function StatusPill({ state }: { state: TxState }) {
 }
 
 export default function SwapPage() {
+  const router = useRouter();
+  const canonical = `https://www.monpad.net${router.asPath.split('?')[0]}`;
   const { address } = useAccount();
   const [from, setFrom] = useState<TokenOption>(COMMON_TOKENS[0]);
   const [to, setTo] = useState<TokenOption>(COMMON_TOKENS[1]);
@@ -89,6 +93,16 @@ export default function SwapPage() {
 
   return (
     <div style={{ maxWidth: 440, margin: '0 auto', padding: 24, color: '#fff' }}>
+      <Head>
+        <title>Swap | Mon-Pad</title>
+        <meta key="description" name="description" content="Swap tokens on Monad. Mon-Pad routes pre-graduation tokens through the bonding curve and graduated tokens via Monorail aggregator." />
+        <meta key="og:title" property="og:title" content="Swap | Mon-Pad" />
+        <meta key="og:description" property="og:description" content="Swap tokens on Monad. Bonding curve + Monorail dual-router." />
+        <meta key="og:url" property="og:url" content={canonical} />
+        <meta key="twitter:title" name="twitter:title" content="Swap | Mon-Pad" />
+        <meta key="twitter:description" name="twitter:description" content="Swap tokens on Monad." />
+        <link key="canonical" rel="canonical" href={canonical} />
+      </Head>
       <h1 style={{ marginBottom: 16 }}>Swap</h1>
       <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 12, padding: 16 }}>
         <TokenInput label="From" token={from} setToken={setFrom} amount={amountIn} setAmount={setAmountIn} onPickerOpen={() => setPickerOpen('from')} />

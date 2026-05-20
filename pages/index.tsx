@@ -7,6 +7,8 @@ import TokenGrid from '@/components/TokenGrid';
 import HomeRail from '@/components/HomeRail';
 import { api, type TokenSummary } from '@/lib/api';
 import { contractsConfigured } from '@/lib/constants';
+import Head from 'next/head';
+import { useRouter } from 'next/router';
 
 type FilterKey = 'all' | 'trending' | 'near-graduation' | 'graduated';
 
@@ -18,6 +20,8 @@ const FILTERS: { key: FilterKey; label: string; apiValue: string | undefined }[]
 ];
 
 export default function Home() {
+  const router = useRouter();
+  const canonical = `https://www.monpad.net${router.asPath.split('?')[0]}`;
   const [filter, setFilter] = useState<FilterKey>('all');
   const [tokens, setTokens] = useState<TokenSummary[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -54,6 +58,16 @@ export default function Home() {
 
   return (
     <>
+      <Head>
+        <title>Mon-Pad — Fair Launch on Monad</title>
+        <meta key="description" name="description" content="Fair token launches on Monad. 100 MON to launch, 425k to graduate. Devs earn 2% forever. Stake for MON rewards." />
+        <meta key="og:title" property="og:title" content="Mon-Pad — Fair Launch on Monad" />
+        <meta key="og:description" property="og:description" content="Fair token launches on Monad. 100 MON to launch, 425k to graduate. Devs earn 2% forever." />
+        <meta key="og:url" property="og:url" content={canonical} />
+        <meta key="twitter:title" name="twitter:title" content="Mon-Pad — Fair Launch on Monad" />
+        <meta key="twitter:description" name="twitter:description" content="Fair token launches on Monad. 100 MON to launch, 425k to graduate. Devs earn 2% forever." />
+        <link key="canonical" rel="canonical" href={canonical} />
+      </Head>
       {/* Live trade ticker at the very top */}
       <LiveTicker />
 
