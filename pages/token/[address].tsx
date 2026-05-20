@@ -1,4 +1,5 @@
 import { useRouter } from 'next/router';
+import type { GetServerSideProps, GetServerSidePropsContext } from 'next';
 import Head from 'next/head';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
@@ -9,6 +10,43 @@ import { useTokenUpdates } from '@/lib/ws';
 import { curveAbi } from '@/lib/abis';
 import { previewBuy, previewSell, graduationProgress, monToGraduation } from '@/lib/curve';
 import { GRADUATION_TARGET_MON, MONAD_EXPLORER, TOKEN_DECIMALS } from '@/lib/constants';
+
+
+export const getServerSideProps: GetServerSideProps = async (
+  ctx: GetServerSidePropsContext
+) => {
+  const raw = ctx.params?.address;
+  const addrParam = typeof raw === 'string' ? raw.toLowerCase() : '';
+
+  let initialToken: TokenSummary | null = null;
+  if (addrParam && /^0x[a-f0-9]{40}$/.test(addrParam)) {
+    try {
+      initialToken = await api.getToken(addrParam);
+    } catch {
+      initialToken = null;
+    }
+  }
+
+  // Edge cache: 60s fresh, 5min stale-while-revalidate. Most token pages get
+  // hit by social crawlers + bursts of traffic right after a share — this
+  // amortizes the origin API call to effectively zero per share burst.
+  ctx.res.setHeader(
+    'Cache-Control',
+    'public, s-maxage=60, stale-while-revalidate=300'
+  );
+
+  return {
+    props: {
+      addrParam,
+      initialToken,
+    },
+  };
+};
+
+type TokenDetailPageProps = {
+  addrParam: string;
+  initialToken: TokenSummary | null;
+};
 
 type TxState = { status: 'idle' | 'pending' | 'success' | 'error'; message?: string };
 
@@ -26,10 +64,10 @@ function StatusPill({ state, onDismiss }: { state: TxState; onDismiss?: () => vo
   );
 }
 
-export default function TokenDetailPage() {
+export default function TokenDetailPage({ addrParam, initialToken }: TokenDetailPageProps) {
   const router = useRouter();
   const addr = (router.query.address as string | undefined)?.toLowerCase() as Address | undefined;
-  const [token, setToken] = useState<TokenSummary | null>(null);
+  const [token, setToken] = useState<TokenSummary | null>(initialToken);
   const live = useTokenUpdates(addr);
   const [tab, setTab] = useState<'trades' | 'comments' | 'holders'>('trades');
   const [trades, setTrades] = useState<Trade[]>([]);
@@ -63,7 +101,40 @@ export default function TokenDetailPage() {
         <meta key="og:url" property="og:url" content={`https://www.monpad.net/token/${addr}`} />
         <meta key="twitter:title" name="twitter:title" content={`${current.name} (${current.symbol})`} />
         <meta key="twitter:description" name="twitter:description" content={`Trade ${current.symbol} on Mon-Pad.`} />
+          <meta key="og:image" property="og:image" content={`https://www.monpad.net/api/og?addr=${addr}`} />
+          <meta key="og:image:width" property="og:image:width" content="1200" />
+          <meta key="og:image:height" property="og:image:height" content="630" />
+          <meta key="og:image:type" property="og:image:type" content="image/png" />
+          <meta key="twitter:card" name="twitter:card" content="summary_large_image" />
+          <meta key="twitter:image" name="twitter:image" content={`https://www.monpad.net/api/og?addr=${addr}`} />
         <link key="canonical" rel="canonical" href={`https://www.monpad.net/token/${addr}`} />
+          <script
+            key="jsonld-product"
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{
+              __html: JSON.stringify({
+                '@context': 'https://schema.org',
+                '@type': 'Product',
+                name: current.name,
+                description: `${current.name} (${current.symbol}) on Mon-Pad — fair launch token on Monad.`,
+                image: current.imageUrl || `https://www.monpad.net/api/og?addr=${addr}`,
+                url: `https://www.monpad.net/token/${addr}`,
+                brand: { '@type': 'Brand', name: 'Mon-Pad' },
+                category: 'Cryptocurrency',
+                ...(current.marketCapMon && Number(current.marketCapMon) > 0
+                  ? {
+                      offers: {
+                        '@type': 'AggregateOffer',
+                        priceCurrency: 'MON',
+                        lowPrice: '0',
+                        highPrice: current.marketCapMon,
+                        availability: 'https://schema.org/InStock',
+                      },
+                    }
+                  : {}),
+              }),
+            }}
+          />
       </Head>
       <TokenHeader token={current} />
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 360px', gap: 16, marginTop: 16 }}>
