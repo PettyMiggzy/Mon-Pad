@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAccount } from 'wagmi';
-import { Home, Plus, ArrowLeftRight, User, Shield, BookOpen, FileText } from 'lucide-react';
+import { Home, Plus, ArrowLeftRight, Coins, User, Shield, BookOpen, FileText } from 'lucide-react';
 import { isAdmin } from '@/lib/constants';
 import { AddressGuard } from './AddressGuard';
 import type { ReactNode } from 'react';
@@ -11,6 +11,7 @@ const PRIMARY_NAV = [
   { href: '/', label: 'Home', icon: Home, desktopOnly: false },
   { href: '/create', label: 'Create', icon: Plus, desktopOnly: false },
   { href: '/swap', label: 'Swap', icon: ArrowLeftRight, desktopOnly: false },
+  { href: '/stake', label: 'Stake', icon: Coins, desktopOnly: false },
   { href: '/how-it-works', label: 'How it works', icon: BookOpen, desktopOnly: true },
   { href: '/docs', label: 'Docs', icon: FileText, desktopOnly: true },
 ] as const;
@@ -127,7 +128,7 @@ export function Layout({ children }: { children: ReactNode }) {
           WebkitBackdropFilter: 'blur(10px)',
           borderTop: '1px solid var(--bd, rgba(139, 92, 246, 0.15))',
           display: 'grid',
-          gridTemplateColumns: admin ? 'repeat(5, 1fr)' : 'repeat(4, 1fr)',
+          gridTemplateColumns: admin ? 'repeat(6, 1fr)' : 'repeat(5, 1fr)',
         }}
       >
         {PRIMARY_NAV.filter((n) => !n.desktopOnly).map((n) => {
