@@ -5,7 +5,7 @@ export default function PromoBanner() {
   return (
     <div
       className="relative w-full rounded-2xl border border-border overflow-hidden mt-6 mb-8"
-      style={{ aspectRatio: '6 / 1' }}
+      style={{ aspectRatio: '4 / 1' }}
     >
       <video
         autoPlay

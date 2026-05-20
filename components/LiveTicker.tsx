@@ -15,7 +15,7 @@ type Props = {
  * render the trade list TWICE side-by-side, animate translateX from 0 to -50%
  * so the second copy lands exactly where the first started -> seamless loop.
  *
- * Animation duration scales with trade count (* 4s per trade) so 1 trade
+ * Animation duration scales with trade count (* 5s per trade) so 1 trade
  * cycles fast and 30 trades cycle slowly; visual density stays consistent.
  */
 export default function LiveTicker({ maxItems = 20 }: Props) {
@@ -27,7 +27,7 @@ export default function LiveTicker({ maxItems = 20 }: Props) {
   const durationSec = useMemo(() => {
     const n = Math.max(trades.length, 1);
     const bucket = Math.ceil(n / 5) * 5;
-    return bucket * 4;
+    return bucket * 5;
   }, [Math.ceil(trades.length / 5)]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
