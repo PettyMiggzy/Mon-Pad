@@ -3,7 +3,6 @@ import { useRouter } from 'next/router';
 import { useAccount } from 'wagmi';
 import Link from 'next/link';
 import Head from 'next/head';
-import Layout from '@/components/Layout';
 import { api, type TokenSummary, type Profile } from '@/lib/api';
 import { fmtMon, shortAddr, isAddress } from '@/lib/format';
 
@@ -151,17 +150,17 @@ export default function ProfilePage() {
 
   if (!router.isReady) {
     return (
-      <Layout>
+      <>
         <div className="mx-auto max-w-5xl px-4 py-8">
           <div className="h-32 animate-pulse rounded-xl border border-border bg-card" />
         </div>
-      </Layout>
+      </>
     );
   }
 
   if (!validWallet) {
     return (
-      <Layout>
+      <>
         <div className="mx-auto max-w-5xl px-4 py-16 text-center">
           <h1 className="text-2xl font-bold text-white">Invalid wallet</h1>
           <p className="mt-2 text-white/60">
@@ -174,18 +173,19 @@ export default function ProfilePage() {
             Back to home
           </Link>
         </div>
-      </Layout>
+      </>
     );
   }
 
   const displayName = profile?.displayName?.trim() || shortAddr(walletStr);
-  const launches = profile?.stats.launches ?? createdTokens.length;
-  const holdings = profile?.stats.holdings ?? 0;
+  // Stats derive from real client-side data. Do NOT use profile.stats.launches
+  // as a primary value - it's mock data in MOCK_MODE=1 and would lie to users.
+  const launches = createdTokens.length;
   const graduatedCount = createdTokens.filter((t) => t.graduated).length;
-  const joined = formatJoined(profile?.stats.memberSince);
+  const joined = profile?.stats.memberSince ? formatJoined(profile.stats.memberSince) : '—';
 
   return (
-    <Layout>
+    <>
       <Head>
         <title>{`${displayName} | Mon-Pad`}</title>
         <meta key="description" name="description" content={`Profile of ${displayName} on Mon-Pad. Tokens created and holdings on Monad.`} />
@@ -217,9 +217,8 @@ export default function ProfilePage() {
         </div>
 
         {/* Stats grid */}
-        <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="mt-8 grid grid-cols-3 gap-3">
           <StatCard label="Tokens Created" value={String(launches)} />
-          <StatCard label="Holdings" value={String(holdings)} />
           <StatCard label="Graduated" value={String(graduatedCount)} />
           <StatCard label="Joined" value={joined} />
         </div>
@@ -249,10 +248,7 @@ export default function ProfilePage() {
                 : 'text-white/60 hover:text-white')
             }
           >
-            Holdings{' '}
-            <span className="ml-1 rounded bg-white/10 px-1.5 py-0.5 text-xs">
-              {holdings}
-            </span>
+            Holdings
           </button>
         </div>
 
@@ -300,6 +296,6 @@ export default function ProfilePage() {
           )}
         </div>
       </div>
-    </Layout>
+    </>
   );
 }

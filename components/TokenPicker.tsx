@@ -16,9 +16,10 @@ export type TokenOption = {
 };
 
 const COMMON_TOKENS: TokenOption[] = [
-  { symbol: 'MON', name: 'Monad', address: '0x0000000000000000000000000000000000000000', decimals: 18 },
-  { symbol: 'WMON', name: 'Wrapped Monad', address: '0x760AfE86e5de5fa0Ee542fc7B7B713e1c5425701', decimals: 18 },
-  { symbol: 'MONSHI', name: 'Monshi', address: '0xB744F5CDb792d8187640214C4A1c9aCE29af7777', decimals: 18 },
+  { symbol: 'MON', name: 'Monad', address: '0x0000000000000000000000000000000000000000', decimals: 18, imageUrl: '/monad.png' },
+  { symbol: 'WMON', name: 'Wrapped Monad', address: '0x760AfE86e5de5fa0Ee542fc7B7B713e1c5425701', decimals: 18, imageUrl: '/monad.png' },
+  // TODO: Replace with proper MONSHI logo when partnership assets land
+  { symbol: 'MONSHI', name: 'Monshi', address: '0xB744F5CDb792d8187640214C4A1c9aCE29af7777', decimals: 18, imageUrl: '/Pad.png' },
 ];
 
 type Props = {

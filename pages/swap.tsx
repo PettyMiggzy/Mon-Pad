@@ -107,7 +107,7 @@ export default function SwapPage() {
       <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 12, padding: 16 }}>
         <TokenInput label="From" token={from} setToken={setFrom} amount={amountIn} setAmount={setAmountIn} onPickerOpen={() => setPickerOpen('from')} />
         <div style={{ display: 'flex', justifyContent: 'center', margin: '8px 0' }}>
-          <button onClick={flip} style={{ background: 'rgba(167,139,250,0.15)', border: '1px solid rgba(167,139,250,0.3)', borderRadius: 6, color: 'var(--brand, #A78BFA)', padding: '4px 12px', cursor: 'pointer' }}>\u21c5</button>
+          <button onClick={flip} style={{ background: 'rgba(167,139,250,0.15)', border: '1px solid rgba(167,139,250,0.3)', borderRadius: 6, color: 'var(--brand, #A78BFA)', padding: '4px 12px', cursor: 'pointer', display: 'inline-flex',  alignItems: 'center',  justifyContent: 'center',}}><ArrowDownUp size={16} /></button>
         </div>
         <TokenInput label="To" token={to} setToken={setTo} amount={outAmount || ''} setAmount={() => {}} readOnly onPickerOpen={() => setPickerOpen('to')} />
         <div style={{ marginTop: 12, display: 'flex', gap: 6, alignItems: 'center' }}>
