@@ -1,16 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAccount, useSendTransaction, useWaitForTransactionReceipt } from 'wagmi';
+import { ArrowDownUp, ChevronDown } from 'lucide-react';
+import TokenPicker from '@/components/TokenPicker';
 import { parseEther, formatEther, type Address } from 'viem';
 import { MONORAIL_API, MONORAIL_PARTNER_ID } from '@/lib/constants';
 
 type TxState = { status: 'idle' | 'pending' | 'success' | 'error'; message?: string };
 
-type TokenOption = { symbol: string; address: string; decimals: number };
+type TokenOption = { symbol: string; address: string; decimals: number; name?: string; imageUrl?: string };
 
 const COMMON_TOKENS: TokenOption[] = [
-  { symbol: 'MON', address: '0x0000000000000000000000000000000000000000', decimals: 18 },
-  { symbol: 'WMON', address: '0x760AfE86e5de5fa0Ee542fc7B7B713e1c5425701', decimals: 18 },
-  { symbol: 'MONSHI', address: '0xB744F5CDb792d8187640214C4A1c9aCE29af7777', decimals: 18 }, // TODO: replace with real MONSHI addr
+  { symbol: 'MON', name: 'Monad', address: '0x0000000000000000000000000000000000000000', decimals: 18 },
+  { symbol: 'WMON', name: 'Wrapped Monad', address: '0x760AfE86e5de5fa0Ee542fc7B7B713e1c5425701', decimals: 18 },
+  { symbol: 'MONSHI', name: 'Monshi', address: '0xB744F5CDb792d8187640214C4A1c9aCE29af7777', decimals: 18 }, // TODO: replace with real MONSHI addr
 ];
 
 function StatusPill({ state }: { state: TxState }) {
@@ -23,6 +25,7 @@ export default function SwapPage() {
   const { address } = useAccount();
   const [from, setFrom] = useState<TokenOption>(COMMON_TOKENS[0]);
   const [to, setTo] = useState<TokenOption>(COMMON_TOKENS[1]);
+  const [pickerOpen, setPickerOpen] = useState<'from' | 'to' | null>(null);
   const [amountIn, setAmountIn] = useState('');
   const [slippageBps, setSlippageBps] = useState(500);
   const [quote, setQuote] = useState<any>(null);
@@ -88,11 +91,11 @@ export default function SwapPage() {
     <div style={{ maxWidth: 440, margin: '0 auto', padding: 24, color: '#fff' }}>
       <h1 style={{ marginBottom: 16 }}>Swap</h1>
       <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 12, padding: 16 }}>
-        <TokenInput label="From" token={from} setToken={setFrom} amount={amountIn} setAmount={setAmountIn} />
+        <TokenInput label="From" token={from} setToken={setFrom} amount={amountIn} setAmount={setAmountIn} onPickerOpen={() => setPickerOpen('from')} />
         <div style={{ display: 'flex', justifyContent: 'center', margin: '8px 0' }}>
           <button onClick={flip} style={{ background: 'rgba(167,139,250,0.15)', border: '1px solid rgba(167,139,250,0.3)', borderRadius: 6, color: 'var(--brand, #A78BFA)', padding: '4px 12px', cursor: 'pointer' }}>\u21c5</button>
         </div>
-        <TokenInput label="To" token={to} setToken={setTo} amount={outAmount || ''} setAmount={() => {}} readOnly />
+        <TokenInput label="To" token={to} setToken={setTo} amount={outAmount || ''} setAmount={() => {}} readOnly onPickerOpen={() => setPickerOpen('to')} />
         <div style={{ marginTop: 12, display: 'flex', gap: 6, alignItems: 'center' }}>
           <span style={{ fontSize: 12, color: '#888' }}>Slippage</span>
           {[100, 500, 1000].map((bps) => (
@@ -106,20 +109,35 @@ export default function SwapPage() {
         </button>
         <StatusPill state={tx} />
       </div>
-      {/* TODO: full token search modal, balance display, full Monad token list */}
+      <TokenPicker
+        open={pickerOpen !== null}
+        onClose={() => setPickerOpen(null)}
+        onSelect={(token) => {
+          if (pickerOpen === 'from') setFrom(token);
+          else if (pickerOpen === 'to') setTo(token);
+        }}
+        currentSelected={pickerOpen === 'from' ? from.address : pickerOpen === 'to' ? to.address : undefined}
+      />
     </div>
   );
 }
 
-function TokenInput({ label, token, setToken, amount, setAmount, readOnly }: { label: string; token: TokenOption; setToken: (t: TokenOption) => void; amount: string; setAmount: (v: string) => void; readOnly?: boolean }) {
+function TokenInput({ label, token, amount, setAmount, readOnly, onPickerOpen }: { label: string; token: TokenOption; setToken: (t: TokenOption) => void; amount: string; setAmount: (v: string) => void; readOnly?: boolean; onPickerOpen: () => void }) {
   return (
     <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 8, padding: 12 }}>
       <div style={{ fontSize: 12, color: '#888' }}>{label}</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
         <input value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.0" inputMode="decimal" readOnly={readOnly} style={{ flex: 1, background: 'transparent', border: 'none', color: '#fff', fontSize: 22, outline: 'none', minWidth: 0 }} />
-        <select value={token.address} onChange={(e) => { const t = COMMON_TOKENS.find((x) => x.address === e.target.value); if (t) setToken(t); }} style={{ background: 'rgba(255,255,255,0.05)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, padding: '6px 10px', fontSize: 14, cursor: 'pointer' }}>
-          {COMMON_TOKENS.map((t) => <option key={t.address} value={t.address}>{t.symbol}</option>)}
-        </select>
+        <button onClick={onPickerOpen} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-border transition-colors">
+          {token.imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={token.imageUrl} alt={token.symbol} className="w-6 h-6 rounded-full" />
+          ) : (
+            <div className="w-6 h-6 rounded-full bg-brand-purple flex items-center justify-center text-xs text-white font-bold">{token.symbol[0]}</div>
+          )}
+          <span className="text-white font-semibold">{token.symbol}</span>
+          <ChevronDown size={16} className="text-white/50" />
+        </button>
       </div>
     </div>
   );
