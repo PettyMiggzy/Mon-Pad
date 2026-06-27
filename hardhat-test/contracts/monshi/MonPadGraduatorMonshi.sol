@@ -264,6 +264,17 @@ contract MonPadGraduatorMonshi is ReentrancyGuard, IERC721Receiver {
         npm.safeTransferFrom(address(this), BURN_ADDRESS, nftId);
         emit NftBurned(token, nftId);
 
+        // Sweep any post-mint residual to treasury. V3 mint with amountXMin=0 consumes the two
+        // sides by the live price and leaves a little of one of them; without this it would be
+        // locked behind the graduated[] sweep guard forever (audit L-5).
+        address treasury = monpadFactory.treasuryWallet();
+        if (treasury != address(0)) {
+            uint256 tokLeft = IERC20(token).balanceOf(address(this));
+            if (tokLeft > 0) IERC20(token).transfer(treasury, tokLeft);
+            uint256 quoteLeft = quote.balanceOf(address(this));
+            if (quoteLeft > 0) quote.transfer(treasury, quoteLeft);
+        }
+
         _tokenInFlight = address(0);
 
         emit Graduated(token, pool, nftId, amountToken, quoteAmount, liquidity, sqrtPriceX96);

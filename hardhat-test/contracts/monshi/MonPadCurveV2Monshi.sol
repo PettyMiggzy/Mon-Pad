@@ -128,6 +128,11 @@ contract MonPadCurveV2Monshi {
     uint256 public realMonReserve;
     uint256 public realTokenReserve;
 
+    // Snapshotted from the factory at launch so later owner changes to these params can't
+    // brick an in-flight curve or front-run its graduation economics (audit H-3 / M-3).
+    uint256 public gradTarget;
+    uint256 public gradCreatorReward;
+
     event Buy(address indexed buyer, uint256 monIn, uint256 tokensOut, uint256 newPrice);
     event Sell(address indexed seller, uint256 tokensIn, uint256 monOut, uint256 newPrice);
     event DevBuy(address indexed dev, uint256 monIn, uint256 tokensOut);
@@ -181,6 +186,10 @@ contract MonPadCurveV2Monshi {
         virtualMonReserve = 117_000 ether;
         virtualTokenReserve = 1_260_000_000 ether;
         realTokenReserve = 1_000_000_000 ether;
+
+        // Snapshot graduation economics for this launch (see storage comment).
+        gradTarget = IFactory(_factory).graduationTarget();
+        gradCreatorReward = IFactory(_factory).graduationCreatorReward();
     }
 
     // ── CREATOR TOKENOMICS CONFIG ─────────────
@@ -219,17 +228,16 @@ contract MonPadCurveV2Monshi {
     }
 
     function bondedBps() public view returns (uint256) {
-        uint256 target = IFactory(factory).graduationTarget();
-        if (target == 0) return 0;
-        return (monRaisedNet * 10000) / target;
+        if (gradTarget == 0) return 0;
+        return (monRaisedNet * 10000) / gradTarget;
     }
 
     function canGrad() public view returns (bool) {
-        return monRaisedNet >= IFactory(factory).graduationTarget() && !graduated;
+        return monRaisedNet >= gradTarget && !graduated;
     }
 
     function capMon() external view returns (uint256) {
-        return IFactory(factory).graduationTarget();
+        return gradTarget;
     }
 
     /// @notice Rich 4-tuple curve reserves (used by the Mon-Pad frontend for quote previews).
@@ -280,8 +288,13 @@ contract MonPadCurveV2Monshi {
         require(!pauseBuys, "buys paused (token)");
         require(quoteIn > 0, "0");
 
+        // Balance-delta accounting: credit only what actually arrived, so a fee-on-transfer
+        // or otherwise non-standard MONSHI can never make the curve over-credit (audit M-1).
+        uint256 beforeBal = IERC20(quote).balanceOf(address(this));
         _safeTransferFrom(quote, msg.sender, address(this), quoteIn);
-        return _buy(msg.sender, quoteIn, minTokensOut, false);
+        uint256 received = IERC20(quote).balanceOf(address(this)) - beforeBal;
+        require(received > 0, "0 received");
+        return _buy(msg.sender, received, minTokensOut, false);
     }
 
     /// @notice Dev buy at launch (no fees, no tax). Factory pushes MONSHI to the curve first.
@@ -334,7 +347,7 @@ contract MonPadCurveV2Monshi {
         monRaised        += monIn;
         monRaisedNet     += L.monForBuy;
 
-        IToken(token).transfer(buyer, tokensOut);
+        _safeTransfer(token, buyer, tokensOut);
 
         // Route the creator fee + per-trade tax (burn/LP/creator). Order: after the buyer's fill.
         if (!isDev) {
@@ -347,9 +360,8 @@ contract MonPadCurveV2Monshi {
 
         emit Buy(buyer, monIn, tokensOut, priceWeiPerToken());
 
-        if (monRaisedNet >= f.graduationTarget()) {
-            _graduate();
-        }
+        // Graduation is NOT auto-triggered here — it is finalized via the separate, retryable
+        // graduate() so a griefed external pool can never brick buys (audit: graduation-DoS).
     }
 
     // ── CORE: SELL ────────────────────────────
@@ -392,7 +404,9 @@ contract MonPadCurveV2Monshi {
             address recipient = f.getRewardRecipient();
             _safeTransfer(quote, recipient, L.stakingFee);
             if (recipient.code.length > 0) {
-                (bool notified, ) = recipient.call(abi.encodeWithSignature("notifyReward(address,uint256)", token, L.stakingFee));
+                // Gas-capped + return-discarded so a malicious/buggy recipient can't brick or
+                // return-bomb sells (audit D-1). The MONSHI is already delivered above.
+                (bool notified, ) = recipient.call{gas: 50000}(abi.encodeWithSignature("notifyReward(address,uint256)", token, L.stakingFee));
                 notified;
             }
             totalStakingFees += L.stakingFee;
@@ -484,18 +498,28 @@ contract MonPadCurveV2Monshi {
         monRaisedNet     += monshiAmt;
         totalBurnedTokens += tokensOut;
 
-        IToken(token).transfer(DEAD, tokensOut);
+        _safeTransfer(token, DEAD, tokensOut);
         emit BuybackBurn(monshiAmt, tokensOut);
     }
 
     // ── GRADUATION ────────────────────────────
     uint256 internal constant GRAD_LP_FLOOR = 1 ether;
 
+    /// @notice Finalize graduation once the target is reached. Permissionless + retryable.
+    /// @dev Decoupled from buy() so a griefed/mispriced external pool can never brick trading
+    ///      (audit: graduation-DoS). A failed call reverts atomically — no funds move — and can
+    ///      be retried by anyone (a keeper, the frontend, or the next trader).
+    function graduate() external nonReentrant {
+        require(!graduated, "graduated");
+        require(monRaisedNet >= gradTarget, "not ready");
+        _graduate();
+    }
+
     function _graduate() internal {
         require(!graduated, "already");
         IFactory f = IFactory(factory);
 
-        uint256 creatorReward = f.graduationCreatorReward();
+        uint256 creatorReward = gradCreatorReward;
 
         uint256 bal = IERC20(quote).balanceOf(address(this));
         uint256 minNeeded = creatorReward + platformPending + creatorPending + GRAD_LP_FLOOR;

@@ -201,9 +201,14 @@ describe("MONSHI-native MonPad", () => {
     const { token, curve } = await launch(ctx);
     const curveC = await ethers.getContractAt("MonPadCurveV2Monshi", curve);
 
-    // One big buy to cross the 425k MONSHI graduation target.
+    // One big buy to cross the 425k MONSHI graduation target. Graduation is decoupled from
+    // buy() (audit fix), so the buy itself must NOT revert and must NOT auto-graduate.
     await buy(ctx, curve, 450_000n * E18);
+    expect(await curveC.graduated()).to.equal(false);
+    expect(await curveC.canGrad()).to.equal(true);
 
+    // Finalize via the separate, permissionless, retryable graduate().
+    await curveC.connect(ctx.buyer).graduate();
     expect(await curveC.graduated()).to.equal(true);
     expect(await ctx.grad.isGraduated(token)).to.equal(true);
 
