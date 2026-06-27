@@ -8,9 +8,18 @@ import { useAccount, useReadContract, useWriteContract, useWaitForTransactionRec
 import { parseEther, formatEther, type Address } from 'viem';
 import { api, type TokenSummary, type Trade, type Comment, type Holder } from '@/lib/api';
 import { useTokenUpdates } from '@/lib/ws';
-import { curveAbi } from '@/lib/abis';
+import { curveAbi, tokenAbi } from '@/lib/abis';
 import { previewBuy, previewSell, graduationProgress, monToGraduation } from '@/lib/curve';
-import { GRADUATION_TARGET_MON, MONAD_EXPLORER, TOKEN_DECIMALS } from '@/lib/constants';
+import {
+  GRADUATION_TARGET_MON, MONAD_EXPLORER, TOKEN_DECIMALS,
+  BUY_FEE_CREATOR_BPS, BUY_FEE_PLATFORM_BPS,
+  SELL_FEE_PLATFORM_BPS, SELL_FEE_CREATOR_BPS, SELL_FEE_STAKING_BPS,
+} from '@/lib/constants';
+
+// Buy/sell are functions on the per-token MonPadCurveV2 clone, NOT on the ERC20
+// token contract. Trades must target token.curve(), resolved on-chain below.
+const BUY_FEE_TOTAL_BPS = BUY_FEE_CREATOR_BPS + BUY_FEE_PLATFORM_BPS;
+const SELL_FEE_TOTAL_BPS = SELL_FEE_PLATFORM_BPS + SELL_FEE_CREATOR_BPS + SELL_FEE_STAKING_BPS;
 
 
 export const getServerSideProps: GetServerSideProps = async (
@@ -70,6 +79,14 @@ export default function TokenDetailPage({ addrParam, initialToken }: TokenDetail
   const addr = (router.query.address as string | undefined)?.toLowerCase() as Address | undefined;
   const [token, setToken] = useState<TokenSummary | null>(initialToken);
   const live = useTokenUpdates(addr);
+  // Resolve the per-token bonding-curve contract (buy/sell/claims live here, not on the ERC20).
+  const curveRead = useReadContract({
+    address: addr,
+    abi: tokenAbi as any,
+    functionName: 'curve',
+    query: { enabled: !!addr },
+  });
+  const curveAddress = curveRead.data as Address | undefined;
   const [tab, setTab] = useState<'trades' | 'comments' | 'holders'>('trades');
   const [trades, setTrades] = useState<Trade[]>([]);
   const [comments, setComments] = useState<Comment[]>([]);
@@ -150,8 +167,8 @@ export default function TokenDetailPage({ addrParam, initialToken }: TokenDetail
           </div>
         </div>
         <div>
-          <TradePanel token={current} />
-          <CreatorPanel token={current} />
+          <TradePanel token={current} curveAddress={curveAddress} />
+          <CreatorPanel token={current} curveAddress={curveAddress} />
         </div>
       </div>
     </div>
@@ -304,7 +321,7 @@ function HoldersList({ holders, symbol }: { holders: Holder[]; symbol: string })
   );
 }
 
-function TradePanel({ token }: { token: TokenSummary }) {
+function TradePanel({ token, curveAddress }: { token: TokenSummary; curveAddress?: Address }) {
   const { address } = useAccount();
   const [side, setSide] = useState<'buy' | 'sell'>('buy');
   const [amount, setAmount] = useState('');
@@ -318,28 +335,45 @@ function TradePanel({ token }: { token: TokenSummary }) {
   useEffect(() => { if (tx.status === 'success') { const t = setTimeout(() => setTx({ status: 'idle' }), 5000); return () => clearTimeout(t); } }, [tx.status]);
 
   const monRaisedNet = BigInt(token.monRaisedNet ?? 0);
+  // Mirror the curve's off-the-top fee handling so the quoted output matches the fill:
+  //  - BUY: fee taken off MON in before the curve math (less MON buys the curve)
+  //  - SELL: fee taken off the gross MON the curve releases (user receives net)
   const quote = useMemo(() => {
     if (!amount || isNaN(Number(amount))) return null;
     try {
       if (side === 'buy') {
-        const monIn = parseEther(amount);
-        return previewBuy(monIn, monRaisedNet);
+        const monInNet = (parseEther(amount) * BigInt(10000 - BUY_FEE_TOTAL_BPS)) / 10000n;
+        return previewBuy(monInNet, monRaisedNet);
       } else {
         const tokensIn = parseEther(amount);
-        return previewSell(tokensIn, monRaisedNet);
+        const grossOut = previewSell(tokensIn, monRaisedNet);
+        return (grossOut * BigInt(10000 - SELL_FEE_TOTAL_BPS)) / 10000n;
       }
     } catch { return null; }
   }, [amount, side, monRaisedNet]);
 
   const minOut = quote ? (quote * BigInt(10000 - slippageBps)) / 10000n : 0n;
 
+  // Graduated tokens no longer trade on the curve (buy/sell revert) \u2014 send users to the aggregator.
+  if (token.graduated) {
+    return (
+      <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: 16, textAlign: 'center' }}>
+        <div style={{ fontSize: 13, color: '#aaa', marginBottom: 10 }}>This token has graduated. Trade it on the open market.</div>
+        <Link href={`/swap?from=0x0000000000000000000000000000000000000000&to=${token.address}`} style={{ display: 'inline-block', padding: '10px 18px', background: 'var(--brand, #A78BFA)', color: '#000', borderRadius: 6, fontWeight: 700, fontSize: 14, textDecoration: 'none' }}>
+          Trade on Swap
+        </Link>
+      </div>
+    );
+  }
+
   async function submit() {
     if (!address || !quote || !amount) return;
+    if (!curveAddress) { setTx({ status: 'error', message: 'curve not found for this token' }); return; }
     setTx({ status: 'pending', message: side === 'buy' ? 'buying...' : 'selling...' });
     try {
       const hash = side === 'buy'
-        ? await writeContractAsync({ address: token.address as Address, abi: curveAbi as any, functionName: 'buy' as any, args: [minOut] as any, value: parseEther(amount) } as any)
-        : await writeContractAsync({ address: token.address as Address, abi: curveAbi as any, functionName: 'sell' as any, args: [parseEther(amount), minOut] as any } as any);
+        ? await writeContractAsync({ address: curveAddress, abi: curveAbi as any, functionName: 'buy' as any, args: [minOut] as any, value: parseEther(amount) } as any)
+        : await writeContractAsync({ address: curveAddress, abi: curveAbi as any, functionName: 'sell' as any, args: [parseEther(amount), minOut] as any } as any);
       setTxHash(hash);
       setTx({ status: 'pending', message: 'confirming...' });
     } catch (e: any) {
@@ -349,6 +383,7 @@ function TradePanel({ token }: { token: TokenSummary }) {
 
   const outLabel = side === 'buy' ? token.symbol || 'tokens' : 'MON';
   const inLabel = side === 'buy' ? 'MON' : token.symbol || 'tokens';
+  const tradeDisabled = !address || !amount || !quote || !curveAddress || tx.status === 'pending' || waiting;
 
   return (
     <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: 12 }}>
@@ -364,32 +399,32 @@ function TradePanel({ token }: { token: TokenSummary }) {
           <div style={{ color: '#666', marginTop: 2 }}>min received: {Number(formatEther(minOut)).toFixed(6)} (5% slip)</div>
         </div>
       )}
-      <button disabled={!address || !amount || !quote || tx.status === 'pending' || waiting} onClick={submit} style={{ width: '100%', marginTop: 12, padding: 12, background: 'var(--brand, #A78BFA)', color: '#000', border: 'none', borderRadius: 6, fontWeight: 700, cursor: (!address || !amount || !quote) ? 'not-allowed' : 'pointer', opacity: (!address || !amount || !quote) ? 0.5 : 1 }}>
-        {!address ? 'Connect wallet' : side === 'buy' ? 'BUY' : 'SELL'}
+      <button disabled={tradeDisabled} onClick={submit} style={{ width: '100%', marginTop: 12, padding: 12, background: 'var(--brand, #A78BFA)', color: '#000', border: 'none', borderRadius: 6, fontWeight: 700, cursor: tradeDisabled ? 'not-allowed' : 'pointer', opacity: tradeDisabled ? 0.5 : 1 }}>
+        {!address ? 'Connect wallet' : !curveAddress ? 'Loading curve...' : side === 'buy' ? 'BUY' : 'SELL'}
       </button>
       <StatusPill state={tx} onDismiss={() => setTx({ status: 'idle' })} />
     </div>
   );
 }
 
-function CreatorPanel({ token }: { token: TokenSummary }) {
+function CreatorPanel({ token, curveAddress }: { token: TokenSummary; curveAddress?: Address }) {
   const { address } = useAccount();
   const { writeContractAsync } = useWriteContract();
   const [tx, setTx] = useState<TxState>({ status: 'idle' });
   const isCreator = address && token.creator && address.toLowerCase() === token.creator.toLowerCase();
 
   const { data: creatorPending } = useReadContract({
-    address: token.address as Address | undefined,
+    address: curveAddress,
     abi: curveAbi as any,
     functionName: 'creatorPending',
-    query: { enabled: !!isCreator && !!token.address, refetchInterval: 15000 },
+    query: { enabled: !!isCreator && !!curveAddress, refetchInterval: 15000 },
   });
 
   const { data: graduationClaim } = useReadContract({
-    address: token.address as Address | undefined,
+    address: curveAddress,
     abi: curveAbi as any,
     functionName: 'graduationRewardClaimable',
-    query: { enabled: !!isCreator && !!token.address, refetchInterval: 15000 },
+    query: { enabled: !!isCreator && !!curveAddress, refetchInterval: 15000 },
   });
 
   if (!isCreator) return null;
@@ -398,9 +433,10 @@ function CreatorPanel({ token }: { token: TokenSummary }) {
   const [gradAmount, gradClaimable] = (graduationClaim as [bigint, boolean] | undefined) ?? [0n, false];
 
   async function claim(fn: 'claimCreatorRewards' | 'claimGraduationReward') {
+    if (!curveAddress) { setTx({ status: 'error', message: 'curve not found for this token' }); return; }
     setTx({ status: 'pending', message: 'claiming...' });
     try {
-      await writeContractAsync({ address: token.address as Address, abi: curveAbi as any, functionName: fn as any, args: [] as any } as any);
+      await writeContractAsync({ address: curveAddress, abi: curveAbi as any, functionName: fn as any, args: [] as any } as any);
       setTx({ status: 'success', message: 'claimed' });
     } catch (e: any) {
       setTx({ status: 'error', message: (e?.shortMessage || e?.message || 'error').slice(0, 60) });
