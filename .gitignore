@@ -33,7 +33,8 @@ components/_bak/
 pages.bak/
 
 # Abandoned legacy contract tree (canonical lives in hardhat-test/contracts/)
-contracts/
+# Anchored to repo root so it does NOT also ignore hardhat-test/contracts/.
+/contracts/
 
 # Abandoned legacy Foundry deploy tree
 deploy/
