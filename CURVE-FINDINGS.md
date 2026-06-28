@@ -56,3 +56,37 @@ LP. Both symptoms share one lever: the `vm / gradTarget` ratio.
 
 Both require redeploying the curve + factory (~1 MON gas) and re-pointing the app.
 **No token has launched yet, so there is zero migration cost — best done now.**
+
+---
+
+## Resolution (implemented + fork-validated)
+
+Decision: match **nad.fun's virtual MON reserve (~180,000)** instead of a per-wallet
+cap, plus seed a real-MON buffer from the creation fee.
+
+- Curve `virtualMonReserve = gradTarget × 9/13` (= **180,000 MON** at the 260k
+  target; self-scaling). No per-wallet cap.
+- `initialize()` is payable; the factory seeds a **100 MON buffer** (carved from the
+  creation fee) into each curve as real exit liquidity. Remainder → treasury.
+
+### Before → after (measured on a mainnet fork, `scripts/curve-analysis.js`)
+
+| Metric | Before (live) | After (rebalanced) |
+|---|---:|---:|
+| First buy $96 → supply | 8.1% | **3.3%** |
+| First buy $192 → supply | 15.2% | **6.5%** |
+| First buy $500 → supply | 33.1% | **15.6%** |
+| Supply sold on curve | 99.2% | **75.0%** |
+| Supply to DEX LP | 0.8% | **25.0%** |
+| DEX open vs curve price | 20.5× (spike) | **0.97× (continuous)** |
+| Launch → graduation | 22× | 6.1× |
+| Starting FDV | ~$1,090 | **~$2,750** |
+| Graduation FDV | ~$24,100 | **~$16,760** |
+
+Roundtrip still fee-negative (no value extraction); sole-holder 100% sell now
+succeeds (buffer). 33/33 unit tests pass.
+
+> ⚠️ **Live mainnet contracts still run the OLD curve.** These changes are in source
+> and fork-validated only. Going live requires redeploying the curve+factory+graduator,
+> re-verifying, and pointing the app at the new addresses (see TESTING.md / deployV3.js).
+
