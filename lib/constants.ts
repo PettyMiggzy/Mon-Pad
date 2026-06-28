@@ -41,9 +41,9 @@ export function contractsConfigured(): boolean {
 // --- V3 (native-MON pad, LIVE on Monad mainnet 143) ----------------------
 // Redeployed 2026-06-28 with the rebalanced curve (nad.fun-style 180k virtual MON)
 // + 100 MON creation-fee buffer + 25% buyback skim on creator tax above 2%.
-// Override via env if redeployed.
-export const FACTORY_V3 = (process.env.NEXT_PUBLIC_FACTORY_V3 ?? '0x11495d18d065c78AC64891F45E81902036791143') as Address;
-export const GRADUATOR_V3 = (process.env.NEXT_PUBLIC_GRADUATOR_V3 ?? '0xc86C4A94C2C2Efa05115A7c523D3a074aA243E5e') as Address;
+// Treasury + buyback baked in as 0x5db7…575f; owner 0x5db7. Override via env if redeployed.
+export const FACTORY_V3 = (process.env.NEXT_PUBLIC_FACTORY_V3 ?? '0xf82bFD436ea36515DFF5A6933980F86813D4f3Fa') as Address;
+export const GRADUATOR_V3 = (process.env.NEXT_PUBLIC_GRADUATOR_V3 ?? '0x9770b2a62d719b67E4Be206b0B0158b1448eB666') as Address;
 export function v3Configured(): boolean { return FACTORY_V3 !== ZERO_ADDRESS; }
 
 // V3 economics (native MON; pegged ~$5k at deploy, tunable via factory timelock)
