@@ -26,7 +26,7 @@ export default function PromoBanner() {
             Launch Your Coin on Mon-Pad
           </h2>
           <p className="text-sm md:text-base text-white/85 mt-2">
-            Fair launch. 2% royalties forever, staking pool and 25k Monad at graduation.
+            Fair launch on Monad. Creators earn trading fees. Liquidity locked at graduation.
           </p>
         </div>
         <Link

@@ -1,7 +1,7 @@
-import { contractsConfigured } from '@/lib/constants';
+import { v3Configured } from '@/lib/constants';
 
 export function AddressGuard() {
-  if (contractsConfigured()) return null;
+  if (v3Configured()) return null;
   return (
     <div
       role="alert"
