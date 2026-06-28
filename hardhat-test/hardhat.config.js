@@ -15,6 +15,18 @@ module.exports = {
       metadata: { bytecodeHash: "none", appendCBOR: false },
     },
   },
+  sourcify: { enabled: true },
+  etherscan: {
+    apiKey: { monadMainnet: process.env.EXPLORER_API_KEY || "noned" },
+    customChains: [{
+      network: "monadMainnet",
+      chainId: 143,
+      urls: {
+        apiURL: process.env.EXPLORER_API_URL || "https://api.monadscan.com/api",
+        browserURL: "https://monadscan.com",
+      },
+    }],
+  },
   networks: {
     hardhat: process.env.FORK_RPC ? {
       forking: { url: process.env.FORK_RPC },
