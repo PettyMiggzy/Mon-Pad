@@ -38,6 +38,27 @@ export function contractsConfigured(): boolean {
   return Object.values(CONTRACTS).every((a) => a !== ZERO_ADDRESS);
 }
 
+// --- V3 (native-MON pad, LIVE on Monad mainnet 143) ----------------------
+// Deployed 2026-06-28; source-verified on Monadscan. Override via env if redeployed.
+export const FACTORY_V3 = (process.env.NEXT_PUBLIC_FACTORY_V3 ?? '0x9007E499EdafBEC87Cc363fbE8Fd2B31142F4C01') as Address;
+export const GRADUATOR_V3 = (process.env.NEXT_PUBLIC_GRADUATOR_V3 ?? '0x07b5AAaB9080f4A7aA491933437e47e3dFFe90a9') as Address;
+export function v3Configured(): boolean { return FACTORY_V3 !== ZERO_ADDRESS; }
+
+// V3 economics (native MON; pegged ~$5k at deploy, tunable via factory timelock)
+export const V3_CREATION_FEE_MON = 500n;
+export const V3_GRADUATION_TARGET_MON = 260_000n;
+export const V3_CREATOR_REWARD_MON = 41_700n;
+export const V3_TREASURY_CUT_MON = 10_400n;
+export const V3_MAX_DEV_BUY_BPS = 200;     // 2% supply cap on dev buy
+export const V3_MAX_TRADE_TAX_BPS = 1000;  // 10% creator per-trade tax cap
+export const V3_BUY_FEE_CREATOR_BPS = 100;
+export const V3_BUY_FEE_BUFFER_BPS = 100;
+export const V3_SELL_FEE_CREATOR_BPS = 50;
+export const V3_SELL_FEE_STAKING_BPS = 50;  // -> MONSHI buyback
+export const V3_SELL_FEE_PLATFORM_BPS = 100;
+// Curve self-calibration: virtualMon = gradTarget * 117000/425000 (preserves the audited shape).
+export const V3_TOTAL_SUPPLY = 1_000_000_000n;
+
 // --- Chain (SPEC: Monad mainnet) -----------------------------------------
 export const MONAD_CHAIN_ID = 143 as const;
 export const MONAD_RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'https://rpc.monad.xyz';

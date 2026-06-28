@@ -5,8 +5,9 @@ import LiveTicker from '@/components/LiveTicker';
 import PromoBanner from '@/components/PromoBanner';
 import TokenGrid from '@/components/TokenGrid';
 import HomeRail from '@/components/HomeRail';
-import { api, type TokenSummary } from '@/lib/api';
-import { contractsConfigured } from '@/lib/constants';
+import { type TokenSummary } from '@/lib/api';
+import { listV3Tokens } from '@/lib/chainV3';
+import { v3Configured } from '@/lib/constants';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 
@@ -26,30 +27,43 @@ export default function Home() {
   const [tokens, setTokens] = useState<TokenSummary[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const gridRef = useRef<HTMLDivElement | null>(null);
-  const configured = contractsConfigured();
+  const configured = v3Configured();
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
 
-    const apiValue = FILTERS.find((f) => f.key === filter)?.apiValue;
-
-    api
-      .listTokens(apiValue)
-      .then((t) => {
+    (async () => {
+      try {
+        const list = await listV3Tokens(60);
         if (cancelled) return;
-        setTokens(t);
+        let rows = list;
+        if (filter === 'graduated') rows = list.filter((t) => t.graduated);
+        else if (filter === 'near-graduation') rows = list.filter((t) => !t.graduated).sort((a, b) => b.progress - a.progress);
+        else if (filter === 'trending') rows = [...list].sort((a, b) => b.progress - a.progress);
+        const mapped: TokenSummary[] = rows.map((t) => ({
+          address: t.token,
+          name: t.name,
+          symbol: t.symbol,
+          imageUrl: undefined,
+          creator: t.creator,
+          marketCapMon: (BigInt(t.priceWeiPerToken) * 1_000_000_000n).toString(),
+          volume24hMon: '0',
+          monRaisedNet: t.monRaisedNet,
+          graduated: t.graduated,
+          createdAt: 0,
+          sparkline: [],
+        }));
+        setTokens(mapped);
         setLoading(false);
-      })
-      .catch(() => {
+      } catch {
         if (cancelled) return;
         setTokens([]);
         setLoading(false);
-      });
+      }
+    })();
 
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [filter]);
 
   const scrollToGrid = () => {

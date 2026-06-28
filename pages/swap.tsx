@@ -5,7 +5,8 @@ import { ArrowDownUp, ChevronDown, RefreshCw } from 'lucide-react';
 import TokenPicker from '@/components/TokenPicker';
 import type { TokenOption } from '@/components/TokenPicker';
 import { parseEther, parseUnits, formatUnits, type Address } from 'viem';
-import { CONTRACTS, ZERO_ADDRESS, MONORAIL_API } from '@/lib/constants';
+import { CONTRACTS, ZERO_ADDRESS, MONORAIL_API, WMON } from '@/lib/constants';
+import { api } from '@/lib/api';
 import { curveAbi, factoryAbi, tokenAbi } from '@/lib/abis';
 import { getMonorailQuote, toExecutable, quoteSummary, type MonorailQuote } from '@/lib/monorail';
 import {
@@ -83,19 +84,43 @@ function TokenInput({ label, token, setToken, amount, setAmount, readOnly, onPic
 }
 
 const DEFAULT_FROM: TokenOption = { symbol: 'MON', name: 'Monad', address: '0x0000000000000000000000000000000000000000', decimals: 18, imageUrl: '/monad.png', isMonPadToken: false, graduated: true };
-const DEFAULT_TO: TokenOption = { symbol: 'WMON', name: 'Wrapped Monad', address: '0x760AfE86e5de5fa0Ee542fc7B7B713e1c5425701', decimals: 18, imageUrl: '/monad.png', isMonPadToken: false, graduated: true };
+const DEFAULT_TO: TokenOption = { symbol: 'WMON', name: 'Wrapped Monad', address: WMON, decimals: 18, imageUrl: '/monad.png', isMonPadToken: false, graduated: true };
 
 export default function SwapPage() {
   const { address } = useAccount();
   const router = useRouter();
   const canonical = useMemo(() => {
     if (typeof window !== 'undefined') return `${window.location.origin}${router.asPath.split('?')[0]}`;
-    return 'https://monpad.fun/swap';
+    return 'https://www.monpad.net/swap';
   }, [router.asPath]);
 
   const [from, setFrom] = useState<TokenOption>(DEFAULT_FROM);
   const [to, setTo] = useState<TokenOption>(DEFAULT_TO);
   const [amountIn, setAmountIn] = useState('');
+
+  // Honor ?from=&?to= deep links (e.g. "Trade on Swap" from a graduated token page).
+  // Applied once after the router is ready so it never clobbers later user picks.
+  const deepLinkApplied = useRef(false);
+  useEffect(() => {
+    if (!router.isReady || deepLinkApplied.current) return;
+    deepLinkApplied.current = true;
+    const resolve = async (addrParam: string): Promise<TokenOption | null> => {
+      const a = addrParam.toLowerCase();
+      if (a === ZERO_ADDRESS.toLowerCase()) return DEFAULT_FROM;
+      if (a === WMON.toLowerCase()) return DEFAULT_TO;
+      if (!/^0x[a-f0-9]{40}$/.test(a)) return null;
+      try {
+        const t = await api.getToken(a);
+        if (t) return { symbol: t.symbol, name: t.name, address: t.address, decimals: 18, imageUrl: t.imageUrl, isMonPadToken: true, graduated: t.graduated };
+      } catch { /* ignore — keep default */ }
+      return null;
+    };
+    (async () => {
+      const { from: qFrom, to: qTo } = router.query;
+      if (typeof qFrom === 'string') { const r = await resolve(qFrom); if (r) setFrom(r); }
+      if (typeof qTo === 'string') { const r = await resolve(qTo); if (r) setTo(r); }
+    })();
+  }, [router.isReady, router.query]);
   const [slippageBps, setSlippageBps] = useState(500);
   const [pickerOpen, setPickerOpen] = useState<'from' | 'to' | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
