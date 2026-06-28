@@ -319,6 +319,19 @@
   },
   {
     "inputs": [],
+    "name": "CREATION_BUFFER_MON",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "MAX_TRADE_TAX_BPS",
     "outputs": [
       {
