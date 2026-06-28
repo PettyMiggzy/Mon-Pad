@@ -378,16 +378,19 @@ contract MonPadGraduatorV3 is ReentrancyGuard, IERC721Receiver {
         npm.safeTransferFrom(address(this), BURN_ADDRESS, nftId);
         emit NftBurned(token, nftId);
 
-        // ---- 9b. Sweep post-mint residual to treasury. V3 mint with amount*Min=0 consumes the
-        // two sides by the live price and leaves a little of one of them; without this it would be
-        // locked behind the graduated[] sweep guard forever.
+        // ---- 9b. Sweep THIS mint's residual to treasury. V3 mint with amount*Min=0 consumes the
+        // two sides by the live price and leaves a little of one of them. We sweep only the exact
+        // delta (amountDesired - used) — never the full balance (audit M-1) — and do it best-effort
+        // so a hostile treasury/token can never revert and brick the irreversible LP seed (audit L-1).
         {
             address treasury = monpadFactory.treasuryWallet();
             if (treasury != address(0)) {
-                uint256 tokLeft = IToken(token).balanceOf(address(this));
-                if (tokLeft > 0) IToken(token).transfer(treasury, tokLeft);
-                uint256 wmonLeft = wmon.balanceOf(address(this));
-                if (wmonLeft > 0) wmon.transfer(treasury, wmonLeft);
+                uint256 tokenUsed = (token0 == tokenA) ? used0 : used1;
+                uint256 wmonUsed  = (token0 == tokenA) ? used1 : used0;
+                uint256 tokLeft = amountToken > tokenUsed ? amountToken - tokenUsed : 0;
+                uint256 wmonLeft = monAmt > wmonUsed ? monAmt - wmonUsed : 0;
+                if (tokLeft > 0) { (bool s1, ) = token.call(abi.encodeWithSelector(IToken.transfer.selector, treasury, tokLeft)); s1; }
+                if (wmonLeft > 0) { (bool s2, ) = address(wmon).call(abi.encodeWithSelector(IWMON.transfer.selector, treasury, wmonLeft)); s2; }
             }
         }
 
