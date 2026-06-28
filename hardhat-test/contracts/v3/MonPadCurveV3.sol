@@ -112,7 +112,6 @@ contract MonPadCurveV3 {
     bool public pauseSells;
     bool private _initialized;
 
-    uint256 public constant CURVE_K = 1e36;
     uint256 public virtualMonReserve;
     uint256 public virtualTokenReserve;
     uint256 public realMonReserve;
@@ -155,30 +154,32 @@ contract MonPadCurveV3 {
         _status = _NOT_ENTERED;
     }
 
+    /// @dev `factory = msg.sender` binds initialization to the cloning factory (audit M-1
+    ///      defense-in-depth): even if a clone address leaked, only the factory that deploys it
+    ///      can initialize it, and it can only point `factory` at itself.
     function initialize(
         address _token,
         address _creator,
-        address _factory,
         FeeConfig calldata _cfg
     ) external {
         require(!_initialized, "init");
-        require(_token != address(0) && _factory != address(0), "addr0");
+        require(_token != address(0) && _creator != address(0), "addr0");
         _initialized = true;
         _status = _NOT_ENTERED;
 
         token = _token;
         creator = _creator;
-        factory = _factory;
-        wmon = IFactory(_factory).wmon();
+        factory = msg.sender;
+        wmon = IFactory(msg.sender).wmon();
         launchedAt = block.timestamp;
 
         _setFeeConfig(_cfg);
 
         // Snapshot economics; self-calibrate the curve to the target (preserves the audited
         // ~21x / ~99%-sold shape at any target: Vm/T and Vt/S held constant vs the 425k design).
-        gradTarget        = IFactory(_factory).graduationTarget();
-        gradCreatorReward = IFactory(_factory).graduationCreatorReward();
-        gradTreasuryCut   = IFactory(_factory).graduationTreasuryCut();
+        gradTarget        = IFactory(msg.sender).graduationTarget();
+        gradCreatorReward = IFactory(msg.sender).graduationCreatorReward();
+        gradTreasuryCut   = IFactory(msg.sender).graduationTreasuryCut();
         require(gradTarget > 0, "target=0");
 
         virtualMonReserve   = (gradTarget * 117_000) / 425_000;
@@ -237,9 +238,10 @@ contract MonPadCurveV3 {
     function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast) {
         (uint256 m, uint256 t) = effectiveReserves();
         (uint256 r0, uint256 r1) = token < wmon ? (t, m) : (m, t);
-        require(r0 <= type(uint112).max && r1 <= type(uint112).max, "reserve overflow");
-        reserve0 = uint112(r0);
-        reserve1 = uint112(r1);
+        // Saturate instead of reverting so the read shim never DoS's an indexer (audit L-3).
+        uint256 cap = type(uint112).max;
+        reserve0 = uint112(r0 > cap ? cap : r0);
+        reserve1 = uint112(r1 > cap ? cap : r1);
         blockTimestampLast = uint32(block.timestamp);
     }
 
@@ -366,7 +368,9 @@ contract MonPadCurveV3 {
         (bool sellerOk, ) = msg.sender.call{value: monOut}("");
         require(sellerOk, "seller pay fail");
 
-        emit Trade(token, msg.sender, false, monOut, tokensIn, virtualMonReserve, virtualTokenReserve, realMonReserve, realTokenReserve, priceWeiPerToken(), block.timestamp);
+        // monAmount = gross curve-side MON (symmetric with buy's gross monIn) for consistent
+        // indexer volume; priceX18 is the post-trade spot price (audit L-2).
+        emit Trade(token, msg.sender, false, L.grossMonOut, tokensIn, virtualMonReserve, virtualTokenReserve, realMonReserve, realTokenReserve, priceWeiPerToken(), block.timestamp);
     }
 
     function _calcSellOut(uint256 tokensIn) internal view returns (uint256) {
@@ -435,6 +439,7 @@ contract MonPadCurveV3 {
     // ── GRADUATION (decoupled, retryable) ─────
     function graduate() external nonReentrant {
         require(!graduated, "graduated");
+        require(!IFactory(factory).blocked(token), "blocked"); // honor the admin kill-switch (audit Low)
         require(monRaisedNet >= gradTarget, "not ready");
         _graduate();
     }
@@ -473,6 +478,11 @@ contract MonPadCurveV3 {
 
         _safeTransfer(token, grad, lpTokens);
         IGraduator(grad).onGraduate{value: lpMon}(token, lpTokens);
+
+        // Zero the now-migrated reserves so the value-conservation invariant stays exact
+        // post-graduation (these are never read again — buy/sell are notGraduated-gated).
+        realMonReserve = 0;
+        lpPendingMon = 0;
 
         emit Graduated(lpMon, gradCreatorReward, gradTreasuryCut);
     }
