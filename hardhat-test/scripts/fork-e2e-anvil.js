@@ -10,7 +10,8 @@
 const { ethers } = require("ethers");
 
 const RPC = process.env.ANVIL_RPC || "http://127.0.0.1:8545";
-const FACTORY = "0x9007E499EdafBEC87Cc363fbE8Fd2B31142F4C01";
+// Live mainnet factory (rebalanced curve + buffer). Override via FACTORY_ADDR.
+const FACTORY = process.env.FACTORY_ADDR || "0x9ae8376ef5F22e02e217b1A4081686ea9e488E9C";
 // anvil default account #0 (well-known dev key; fork-only)
 const PK = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 
