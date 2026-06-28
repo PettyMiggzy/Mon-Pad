@@ -35,9 +35,9 @@ const FAQ = [
 
 const LAUNCH_STEPS = [
   { n: 1, title: 'Connect your wallet', body: 'MetaMask, Rabby, or any wallet that supports Monad mainnet (chainId 143).' },
-  { n: 2, title: 'Pay 100 MON creation fee', body: 'Funds the initial setup. Returned to treasury at graduation.' },
+  { n: 2, title: 'Pay 500 MON creation fee', body: '100 MON seeds your curve as starting liquidity; the rest funds the platform treasury.' },
   { n: 3, title: 'Fill in token details', body: 'Name, symbol, description, image, socials (Twitter, Telegram, website — all optional).' },
-  { n: 4, title: 'Make your dev buy (optional)', body: 'Between 0 and 5% of supply. Signals commitment. Standard is roughly 1–2%.' },
+  { n: 4, title: 'Make your dev buy (optional)', body: 'Between 0 and 2% of supply. Signals commitment. Standard is roughly 1–2%.' },
   { n: 5, title: 'Confirm transaction', body: 'One tx creates the token, sets up the bonding curve, and credits your dev buy.' },
   { n: 6, title: 'Trading goes live instantly', body: 'Your token has its own page at /token/<address> for anyone to buy and sell.' },
 ];
@@ -163,8 +163,8 @@ export default function HowItWorks() {
               </tr>
               <tr className="border-t border-border">
                 <td className="px-4 py-3 font-medium">Token creation</td>
-                <td className="px-4 py-3">100 MON</td>
-                <td className="px-4 py-3">Returned to treasury at graduation</td>
+                <td className="px-4 py-3">500 MON</td>
+                <td className="px-4 py-3">100 MON seeds curve liquidity; remainder to treasury</td>
               </tr>
               <tr className="border-t border-border">
                 <td className="px-4 py-3 font-medium">Early unstake</td>
@@ -180,7 +180,7 @@ export default function HowItWorks() {
       <section className="mt-16">
         <h2 className="text-3xl font-bold text-white mb-6">Graduation</h2>
         <p className="text-base text-white/70 leading-relaxed mb-6">
-          When raised MON hits <strong className="text-white">425,000 MON net of fees</strong>, the token graduates automatically. Three things happen in one transaction:
+          When raised MON hits <strong className="text-white">260,000 MON net of fees</strong> (≈ $5,000), the token graduates automatically. Three things happen in one transaction:
         </p>
         <ol className="space-y-3 mb-6">
           <li className="flex gap-3 items-start">

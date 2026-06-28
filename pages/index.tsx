@@ -74,12 +74,12 @@ export default function Home() {
     <>
       <Head>
         <title>Mon-Pad — Fair Launch on Monad</title>
-        <meta key="description" name="description" content="Fair token launches on Monad. 100 MON to launch, 425k to graduate. Devs earn 2% forever. Stake for MON rewards." />
+        <meta key="description" name="description" content="Fair token launches on Monad. 500 MON to launch, 260k to graduate. Creators earn fees on every trade." />
         <meta key="og:title" property="og:title" content="Mon-Pad — Fair Launch on Monad" />
-        <meta key="og:description" property="og:description" content="Fair token launches on Monad. 100 MON to launch, 425k to graduate. Devs earn 2% forever." />
+        <meta key="og:description" property="og:description" content="Fair token launches on Monad. 500 MON to launch, 260k to graduate. Creators earn fees on every trade." />
         <meta key="og:url" property="og:url" content={canonical} />
         <meta key="twitter:title" name="twitter:title" content="Mon-Pad — Fair Launch on Monad" />
-        <meta key="twitter:description" name="twitter:description" content="Fair token launches on Monad. 100 MON to launch, 425k to graduate. Devs earn 2% forever." />
+        <meta key="twitter:description" name="twitter:description" content="Fair token launches on Monad. 500 MON to launch, 260k to graduate. Creators earn fees on every trade." />
         <link key="canonical" rel="canonical" href={canonical} />
       </Head>
       {/* Live trade ticker at the very top */}
@@ -123,7 +123,7 @@ export default function Home() {
             color: 'var(--p2, rgba(220, 215, 240, 0.7))',
           }}
         >
-          100 MON to launch. 425k to graduate. Live on Monad.
+          500 MON to launch. 260k to graduate. Live on Monad.
         </motion.p>
 
         <motion.div
