@@ -157,11 +157,14 @@ contract MonPadCurveV3 {
     /// @dev `factory = msg.sender` binds initialization to the cloning factory (audit M-1
     ///      defense-in-depth): even if a clone address leaked, only the factory that deploys it
     ///      can initialize it, and it can only point `factory` at itself.
+    /// @dev Payable: the factory forwards a small slice of the creation fee as a real-MON
+    ///      buffer (seeds `realMonReserve`), giving every launch immediate exit liquidity and
+    ///      eliminating the 1-wei "no MON liquidity" edge on a sole-holder's full sell.
     function initialize(
         address _token,
         address _creator,
         FeeConfig calldata _cfg
-    ) external {
+    ) external payable {
         require(!_initialized, "init");
         require(_token != address(0) && _creator != address(0), "addr0");
         _initialized = true;
@@ -175,16 +178,19 @@ contract MonPadCurveV3 {
 
         _setFeeConfig(_cfg);
 
-        // Snapshot economics; self-calibrate the curve to the target (preserves the audited
-        // ~21x / ~99%-sold shape at any target: Vm/T and Vt/S held constant vs the 425k design).
+        // Snapshot economics; self-calibrate the curve to the target. Vm = gradTarget * 9/13
+        // ≈ 0.692× (≈180,000 MON at the 260k target) — matches the flatter nad.fun-style virtual
+        // MON reserve so early buyers can't grab an outsized share and the curve sells ~74% on
+        // the curve / leaves ~26% for the LP, opening the DEX at ≈ the curve's final price.
         gradTarget        = IFactory(msg.sender).graduationTarget();
         gradCreatorReward = IFactory(msg.sender).graduationCreatorReward();
         gradTreasuryCut   = IFactory(msg.sender).graduationTreasuryCut();
         require(gradTarget > 0, "target=0");
 
-        virtualMonReserve   = (gradTarget * 117_000) / 425_000;
+        virtualMonReserve   = (gradTarget * 9) / 13;
         virtualTokenReserve = 1_260_000_000 ether;
         realTokenReserve    = SUPPLY;
+        realMonReserve      = msg.value; // creation-fee buffer (real exit liquidity)
         require(virtualMonReserve > 0, "vm=0");
     }
 

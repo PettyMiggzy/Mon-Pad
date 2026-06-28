@@ -71,14 +71,19 @@ async function invariant(curveAddr) {
 }
 
 describe("MonPad V3 (native MON)", () => {
-  it("creation fee accrues to treasuryPending and is pullable", async () => {
+  it("creation fee: buffer seeds the curve, remainder accrues to treasuryPending and is pullable", async () => {
     const ctx = await setup();
     const fee = await ctx.factory.creationFee();
-    const { } = await launch(ctx);
-    expect(await ctx.factory.treasuryPending()).to.equal(fee);
+    const buffer = await ctx.factory.CREATION_BUFFER_MON();
+    const { curve } = await launch(ctx);
+    // 100 MON of the fee seeds the curve as real exit liquidity; the rest goes to treasury.
+    const c = await curveAt(curve);
+    expect(await c.realMonReserve()).to.equal(buffer);
+    expect(await ethers.provider.getBalance(curve)).to.be.gte(buffer);
+    expect(await ctx.factory.treasuryPending()).to.equal(fee - buffer);
     const before = await ethers.provider.getBalance(ctx.treasury.address);
     await ctx.factory.connect(ctx.buyer).claimTreasury(); // permissionless
-    expect((await ethers.provider.getBalance(ctx.treasury.address)) - before).to.equal(fee);
+    expect((await ethers.provider.getBalance(ctx.treasury.address)) - before).to.equal(fee - buffer);
   });
 
   it("dev buy at creation gives the creator tokens, capped at 2%", async () => {

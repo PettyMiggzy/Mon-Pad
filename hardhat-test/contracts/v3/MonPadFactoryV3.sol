@@ -69,6 +69,10 @@ contract MonPadFactoryV3 {
 
     // ── ECONOMICS (native MON; tunable, $5k-pegged defaults) ──
     uint256 public creationFee = 500 ether;              // ~"not free" anti-spam
+    /// @dev Slice of the creation fee seeded into each new curve as a real-MON buffer
+    ///      (immediate exit liquidity + removes the sole-holder full-sell rounding edge).
+    ///      The remainder of the fee accrues to treasuryPending.
+    uint256 public constant CREATION_BUFFER_MON = 100 ether;
     uint256 public maxDevBuyBps = 200;                   // 2% supply cap on dev buy
     uint256 public minDevBuyMon = 0;
     uint256 public graduationTarget = 260_000 ether;     // ~$5,000 at deploy-time MON price
@@ -148,16 +152,20 @@ contract MonPadFactoryV3 {
         uint256 devBuy = msg.value - fee;
         if (devBuy > 0) require(devBuy >= minDevBuyMon, "dev buy < min");
 
+        // Carve a real-MON buffer out of the fee; the rest accrues to treasury (pull).
+        uint256 buffer = fee >= CREATION_BUFFER_MON ? CREATION_BUFFER_MON : 0;
+
         token = Clones.clone(tokenImpl);
         MonPadTokenV2(token).initialize(name, symbol, 1_000_000_000 ether);
 
         curve = Clones.clone(curveImpl);
         // Curve reads economics + wmon from this factory (msg.sender) and binds factory=this.
-        MonPadCurveV3(payable(curve)).initialize(token, msg.sender, cfg);
+        // Forward the buffer as msg.value -> seeds the curve's realMonReserve.
+        MonPadCurveV3(payable(curve)).initialize{value: buffer}(token, msg.sender, cfg);
 
         MonPadTokenV2(token).setCurve(curve);
 
-        treasuryPending += fee; // pull pattern — claimable via claimTreasury() (audit H-1)
+        treasuryPending += fee - buffer; // pull pattern — claimable via claimTreasury() (audit H-1)
 
         if (devBuy > 0) {
             MonPadCurveV3(payable(curve)).devBuy{value: devBuy}(msg.sender);

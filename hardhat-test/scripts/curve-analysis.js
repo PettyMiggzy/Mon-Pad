@@ -10,7 +10,7 @@
 
 const { ethers } = require("ethers");
 const RPC = "http://127.0.0.1:8545";
-const FACTORY = "0x9007E499EdafBEC87Cc363fbE8Fd2B31142F4C01";
+const FACTORY = process.env.FACTORY_ADDR || "0x9007E499EdafBEC87Cc363fbE8Fd2B31142F4C01";
 const USD_PER_MON = 5000 / 260000;
 
 const FA = ["function creationFee() view returns (uint256)","function allCounts() view returns (uint256,uint256)","function allTokens(uint256) view returns (address)","function allCurves(uint256) view returns (address)","function createLaunch(string,string,(uint16,uint16,uint16,uint16)) payable"];
