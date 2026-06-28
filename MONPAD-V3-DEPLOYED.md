@@ -16,9 +16,13 @@ All 4 contracts are verified (Etherscan V2, chain 143):
 MonPadCurveV3, MonPadTokenV2, MonPadFactoryV3, MonPadGraduatorV3 — view at
 `https://monadscan.com/address/<address>#code`. Re-run with `scripts/verify-v3.sh`.
 
-**Ownership:** `transferOwnership` called → `pendingOwner` = `0xC022B75D302AF292328cc0C056c7310552E74c8E`
-on the factory + graduator; call `acceptOwnership()` from that wallet to finalize, then the
-burner is safe to discard.
+**Ownership:** owner = `0x5db7CA9d2CE3f414B3fd94EC0FcaF9F3Ab1A575f` (transferOwnership called →
+`pendingOwner` = `0x5db7…575f`; `acceptOwnership()` from that wallet finalizes it). Treasury +
+buyback are baked into this deploy as `0x5db7…575f` (no timelock needed).
+
+> ⚠️ **Security:** the earlier intended owner `0xC022…4c8E` and treasury/buyback `0xe7a31f…7aB5`
+> both carry **unauthorized EIP-7702 delegations** (drainer/forwarder pattern) — abandoned. Do not
+> reuse them. All roles moved to the clean wallet `0x5db7…575f` (+ platform `0x57C8…2A16`).
 
 **RPC:** the app uses a QuickNode Monad-mainnet endpoint (set `NEXT_PUBLIC_RPC_URL` +
 `NEXT_PUBLIC_RPC_WSS` in Vercel/.env.local; public `rpc.monad.xyz` is the fallback).
@@ -27,10 +31,10 @@ burner is safe to discard.
 
 | Contract | Address |
 |---|---|
-| MonPadFactoryV3 | `0x11495d18d065c78AC64891F45E81902036791143` |
-| MonPadGraduatorV3 | `0xc86C4A94C2C2Efa05115A7c523D3a074aA243E5e` |
-| MonPadCurveV3 (impl, cloned per token) | `0x6d008Fa497acEc9EE7Ab78344a3D88cB04Da0ebe` |
-| MonPadTokenV2 (impl, cloned per token) | `0x4fC4df29a5dE017b198D0CA966A3762dE1E356bf` |
+| MonPadFactoryV3 | `0xf82bFD436ea36515DFF5A6933980F86813D4f3Fa` |
+| MonPadGraduatorV3 | `0x9770b2a62d719b67E4Be206b0B0158b1448eB666` |
+| MonPadCurveV3 (impl, cloned per token) | `0xf5184f2255797f5AD5fa92Ca273FdBb07EbaB623` |
+| MonPadTokenV2 (impl, cloned per token) | `0x7B26281D9AA463452814453d946FE21898B3269e` |
 
 _Superseded (do not use): factories `0x9007E499EdafBEC87Cc363fbE8Fd2B31142F4C01`, `0x9ae8376ef5F22e02e217b1A4081686ea9e488E9C`._
 
@@ -39,9 +43,10 @@ _Superseded (do not use): factories `0x9007E499EdafBEC87Cc363fbE8Fd2B31142F4C01`
 | Role | Address | Notes |
 |---|---|---|
 | Owner / Deployer (TEMP burner) | `0xbbDB9561c981E72290EF5d138d781C14A825fAd5` | ⚠️ transfer ownership off this before discarding |
-| Platform | `0x57C8A5AeC1c172fE41416A2FAE6eBDD92b552A16` | platform trade-fee cut |
-| Treasury | `0xe7a31fd91a6f2ab0c73db3b7d0954a6a3acc7ab5` | creation fees + $200 graduation cut |
-| Buyback | `0xe7a31fd91a6f2ab0c73db3b7d0954a6a3acc7ab5` | 0.5% sell slice → buy & burn MONSHI |
+| Owner | `0x5db7CA9d2CE3f414B3fd94EC0FcaF9F3Ab1A575f` | admin (clean EOA) — accept ownership from here |
+| Platform | `0x57C8A5AeC1c172fE41416A2FAE6eBDD92b552A16` | platform trade-fee cut (clean EOA) |
+| Treasury | `0x5db7CA9d2CE3f414B3fd94EC0FcaF9F3Ab1A575f` | creation fees + $200 graduation cut |
+| Buyback | `0x5db7CA9d2CE3f414B3fd94EC0FcaF9F3Ab1A575f` | 0.5% sell slice → buy & burn MONSHI |
 
 ## External (pre-existing on Monad)
 
