@@ -2,7 +2,18 @@
 
 **Chain:** Monad Mainnet (chainId **143**)
 **Base currency:** native **MON**
-**Status:** contracts live; pending ownership transfer + frontend wiring + DexScreener listing.
+**Status:** contracts live + **source-verified on Monadscan**; pending ownership `acceptOwnership` + frontend wiring + DexScreener listing.
+
+All 4 contracts are verified on Monadscan (Etherscan V2, chain 143):
+MonPadCurveV3, MonPadTokenV2, MonPadFactoryV3, MonPadGraduatorV3 — view at
+`https://monadscan.com/address/<address>#code`.
+
+**Ownership:** `pendingOwner` set to `0xC022B75D302AF292328cc0C056c7310552E74c8E` on the
+factory + graduator; call `acceptOwnership()` from that wallet to finalize, then the burner
+is safe to discard.
+
+**RPC:** the app uses a QuickNode Monad-mainnet endpoint (set `NEXT_PUBLIC_RPC_URL` +
+`NEXT_PUBLIC_RPC_WSS` in Vercel/.env.local; public `rpc.monad.xyz` is the fallback).
 
 ## Contracts
 
