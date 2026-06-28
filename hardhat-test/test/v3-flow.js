@@ -137,6 +137,28 @@ describe("MonPad V3 (native MON)", () => {
     await invariant(curve);
   });
 
+  it("buyback skims 25% of the creator tax above the 2% free threshold", async () => {
+    const ctx = await setup();
+    // 10% tax, all routed to burn — so any MONSHI accrual on a buy can only be the skim.
+    const cfg = { cfBurnTokenBps: 0, cfLpBps: 0, taxBurnTokenBps: 1000, taxLpBps: 0 };
+    const { curve } = await launch(ctx, cfg);
+    const c = await curveAt(curve);
+    await c.connect(ctx.buyer).buy(0, { value: 1000n * E18 });
+    // tax = 100 MON; excess over 2% = 80 MON; skim = 25% = 20 MON -> buyback
+    expect(await c.monshiBuybackPending()).to.equal(20n * E18);
+    await invariant(curve);
+  });
+
+  it("no buyback skim when the creator tax is at/below 2%", async () => {
+    const ctx = await setup();
+    const cfg = { cfBurnTokenBps: 0, cfLpBps: 0, taxBurnTokenBps: 200, taxLpBps: 0 }; // exactly 2%
+    const { curve } = await launch(ctx, cfg);
+    const c = await curveAt(curve);
+    await c.connect(ctx.buyer).buy(0, { value: 1000n * E18 });
+    expect(await c.monshiBuybackPending()).to.equal(0n); // buys carry no MONSHI slice; tax<=2% => no skim
+    await invariant(curve);
+  });
+
   it("MONSHI buyback slice accrues on sells and is claimable to the buyback wallet", async () => {
     const ctx = await setup();
     const { token, curve } = await launch(ctx);
