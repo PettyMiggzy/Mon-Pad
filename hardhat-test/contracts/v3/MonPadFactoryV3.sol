@@ -69,6 +69,10 @@ contract MonPadFactoryV3 {
 
     // ── ECONOMICS (native MON; tunable, $5k-pegged defaults) ──
     uint256 public creationFee = 500 ether;              // ~"not free" anti-spam
+    /// @dev Slice of the creation fee seeded into each new curve as a real-MON buffer
+    ///      (immediate exit liquidity + removes the sole-holder full-sell rounding edge).
+    ///      The remainder of the fee accrues to treasuryPending.
+    uint256 public constant CREATION_BUFFER_MON = 100 ether;
     uint256 public maxDevBuyBps = 200;                   // 2% supply cap on dev buy
     uint256 public minDevBuyMon = 0;
     uint256 public graduationTarget = 260_000 ether;     // ~$5,000 at deploy-time MON price
@@ -86,6 +90,10 @@ contract MonPadFactoryV3 {
     uint16 public sellFeeStakingBps = 50;    // 0.5% -> MONSHI buyback
     uint16 public sellFeePlatformBps = 100;  // 1% platform
     uint16 public constant MAX_TRADE_TAX_BPS = 1000; // mirror of curve cap (headroom reserve)
+    /// @dev Buyback skim on the creator's per-trade tax ABOVE the 2% free threshold:
+    ///      the MONSHI buyback takes `taxSkimRateBps`/10000 of the excess tax (default 25%).
+    ///      Snapshotted per-curve at launch. 0 = creator keeps the whole tax.
+    uint256 public taxSkimRateBps = 2500;
 
     // ── PAUSES / TIMELOCK ─────────────────────
     bool public pauseNewLaunches;
@@ -148,16 +156,20 @@ contract MonPadFactoryV3 {
         uint256 devBuy = msg.value - fee;
         if (devBuy > 0) require(devBuy >= minDevBuyMon, "dev buy < min");
 
+        // Carve a real-MON buffer out of the fee; the rest accrues to treasury (pull).
+        uint256 buffer = fee >= CREATION_BUFFER_MON ? CREATION_BUFFER_MON : 0;
+
         token = Clones.clone(tokenImpl);
         MonPadTokenV2(token).initialize(name, symbol, 1_000_000_000 ether);
 
         curve = Clones.clone(curveImpl);
         // Curve reads economics + wmon from this factory (msg.sender) and binds factory=this.
-        MonPadCurveV3(payable(curve)).initialize(token, msg.sender, cfg);
+        // Forward the buffer as msg.value -> seeds the curve's realMonReserve.
+        MonPadCurveV3(payable(curve)).initialize{value: buffer}(token, msg.sender, cfg);
 
         MonPadTokenV2(token).setCurve(curve);
 
-        treasuryPending += fee; // pull pattern — claimable via claimTreasury() (audit H-1)
+        treasuryPending += fee - buffer; // pull pattern — claimable via claimTreasury() (audit H-1)
 
         if (devBuy > 0) {
             MonPadCurveV3(payable(curve)).devBuy{value: devBuy}(msg.sender);
@@ -224,6 +236,7 @@ contract MonPadFactoryV3 {
 
     function _applySetCreationFee(uint256 v) internal { emit ParamChanged("creationFee", creationFee, v); creationFee = v; }
     function _applySetMaxDevBuyBps(uint256 v) internal { require(v <= 1000, "max 10%"); emit ParamChanged("maxDevBuyBps", maxDevBuyBps, v); maxDevBuyBps = v; }
+    function _applySetTaxSkimRate(uint256 v) internal { require(v <= 10000, "max 100%"); emit ParamChanged("taxSkimRateBps", taxSkimRateBps, v); taxSkimRateBps = v; }
     function _applySetMinDevBuyMon(uint256 v) internal { emit ParamChanged("minDevBuyMon", minDevBuyMon, v); minDevBuyMon = v; }
     function _applySetGraduationTarget(uint256 v) internal {
         require(v > graduationCreatorReward + graduationTreasuryCut, "target < payouts");
@@ -294,6 +307,7 @@ contract MonPadFactoryV3 {
     bytes32 public constant OP_GRAD_TREASURY     = keccak256("setGraduationTreasuryCut");
     bytes32 public constant OP_MONSHI_DISCOUNT   = keccak256("setMonshiDiscount");
     bytes32 public constant OP_FEE_SPLITS        = keccak256("setFeeSplits");
+    bytes32 public constant OP_TAX_SKIM          = keccak256("setTaxSkimRate");
 
     event OpQueued(bytes32 indexed key, uint64 readyAt, bytes encodedValue);
     event OpExecuted(bytes32 indexed key);
@@ -334,6 +348,8 @@ contract MonPadFactoryV3 {
     function executeSetCreationFee(uint256 v) external onlyOwner { _consume(OP_CREATION_FEE, abi.encode(v)); _applySetCreationFee(v); }
     function queueSetMaxDevBuyBps(uint256 v) external onlyOwner { _queue(OP_MAX_DEV_BUY_BPS, abi.encode(v)); }
     function executeSetMaxDevBuyBps(uint256 v) external onlyOwner { _consume(OP_MAX_DEV_BUY_BPS, abi.encode(v)); _applySetMaxDevBuyBps(v); }
+    function queueSetTaxSkimRate(uint256 v) external onlyOwner { _queue(OP_TAX_SKIM, abi.encode(v)); }
+    function executeSetTaxSkimRate(uint256 v) external onlyOwner { _consume(OP_TAX_SKIM, abi.encode(v)); _applySetTaxSkimRate(v); }
     function queueSetMinDevBuyMon(uint256 v) external onlyOwner { _queue(OP_MIN_DEV_BUY_MON, abi.encode(v)); }
     function executeSetMinDevBuyMon(uint256 v) external onlyOwner { _consume(OP_MIN_DEV_BUY_MON, abi.encode(v)); _applySetMinDevBuyMon(v); }
     function queueSetGraduationTarget(uint256 v) external onlyOwner { _queue(OP_GRAD_TARGET, abi.encode(v)); }

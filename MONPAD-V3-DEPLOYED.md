@@ -2,15 +2,23 @@
 
 **Chain:** Monad Mainnet (chainId **143**)
 **Base currency:** native **MON**
-**Status:** contracts live + **source-verified on Monadscan**; pending ownership `acceptOwnership` + frontend wiring + DexScreener listing.
+**Status:** contracts live + **source-verified** (Etherscan V2, chain 143); pending ownership `acceptOwnership` + frontend wiring + DexScreener listing.
 
-All 4 contracts are verified on Monadscan (Etherscan V2, chain 143):
+> **Redeployed 2026-06-28** with the rebalanced curve (nad.fun-style **180,000 virtual MON**
+> = `gradTarget × 9/13`) + a **100 MON creation-fee buffer** seeded into each curve + a
+> **25% buyback skim** on the creator's per-trade tax above the 2% free threshold
+> (`taxSkimRateBps`, tunable). This moderates early-buyer share (first $96 ≈ 3.3% vs 8%),
+> splits ~75% curve / ~25% DEX LP, and opens the DEX at ≈ the curve's final price (no
+> graduation spike). Earlier sets (`0x9007…4C01`, `0x9ae8…E9C`) are superseded — do not use.
+> See `CURVE-FINDINGS.md`.
+
+All 4 contracts are verified (Etherscan V2, chain 143):
 MonPadCurveV3, MonPadTokenV2, MonPadFactoryV3, MonPadGraduatorV3 — view at
-`https://monadscan.com/address/<address>#code`.
+`https://monadscan.com/address/<address>#code`. Re-run with `scripts/verify-v3.sh`.
 
-**Ownership:** `pendingOwner` set to `0xC022B75D302AF292328cc0C056c7310552E74c8E` on the
-factory + graduator; call `acceptOwnership()` from that wallet to finalize, then the burner
-is safe to discard.
+**Ownership:** `transferOwnership` called → `pendingOwner` = `0xC022B75D302AF292328cc0C056c7310552E74c8E`
+on the factory + graduator; call `acceptOwnership()` from that wallet to finalize, then the
+burner is safe to discard.
 
 **RPC:** the app uses a QuickNode Monad-mainnet endpoint (set `NEXT_PUBLIC_RPC_URL` +
 `NEXT_PUBLIC_RPC_WSS` in Vercel/.env.local; public `rpc.monad.xyz` is the fallback).
@@ -19,10 +27,12 @@ is safe to discard.
 
 | Contract | Address |
 |---|---|
-| MonPadFactoryV3 | `0x9007E499EdafBEC87Cc363fbE8Fd2B31142F4C01` |
-| MonPadGraduatorV3 | `0x07b5AAaB9080f4A7aA491933437e47e3dFFe90a9` |
-| MonPadCurveV3 (impl, cloned per token) | `0x4410feC440D3F774266323B79ee0E06f2d2D07Ca` |
-| MonPadTokenV2 (impl, cloned per token) | `0x61d018D65a6A66270f335812E05dc6A7181D40b6` |
+| MonPadFactoryV3 | `0x11495d18d065c78AC64891F45E81902036791143` |
+| MonPadGraduatorV3 | `0xc86C4A94C2C2Efa05115A7c523D3a074aA243E5e` |
+| MonPadCurveV3 (impl, cloned per token) | `0x6d008Fa497acEc9EE7Ab78344a3D88cB04Da0ebe` |
+| MonPadTokenV2 (impl, cloned per token) | `0x4fC4df29a5dE017b198D0CA966A3762dE1E356bf` |
+
+_Superseded (do not use): factories `0x9007E499EdafBEC87Cc363fbE8Fd2B31142F4C01`, `0x9ae8376ef5F22e02e217b1A4081686ea9e488E9C`._
 
 ## Wallet roles
 

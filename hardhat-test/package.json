@@ -5,7 +5,8 @@
   "main": "hardhat.config.js",
   "scripts": {
     "test": "hardhat test",
-    "compile": "hardhat compile"
+    "compile": "hardhat compile",
+    "fork:e2e": "bash scripts/run-fork-e2e.sh"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^4.0.0",

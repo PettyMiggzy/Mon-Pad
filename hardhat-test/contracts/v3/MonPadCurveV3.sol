@@ -40,6 +40,7 @@ interface IFactory {
     function sellFeeCreatorBps() external view returns (uint16);
     function sellFeeStakingBps() external view returns (uint16);  // -> MONSHI buyback
     function sellFeePlatformBps() external view returns (uint16);
+    function taxSkimRateBps() external view returns (uint256); // buyback skim on tax above the free threshold
     function graduationTarget() external view returns (uint256);
     function graduationCreatorReward() external view returns (uint256);
     function graduationTreasuryCut() external view returns (uint256);
@@ -74,6 +75,7 @@ struct FeeConfig {
 contract MonPadCurveV3 {
     address public constant DEAD = 0x000000000000000000000000000000000000dEaD;
     uint16  public constant MAX_TRADE_TAX_BPS = 1000; // 10%
+    uint16  public constant TAX_FREE_BPS = 200;       // creator tax up to 2% has no buyback skim
     uint256 internal constant SUPPLY = 1_000_000_000 ether;
     uint256 internal constant GRAD_LP_FLOOR = 1 ether;
 
@@ -106,6 +108,7 @@ contract MonPadCurveV3 {
     uint256 public gradTarget;
     uint256 public gradCreatorReward;
     uint256 public gradTreasuryCut;
+    uint256 public taxSkimRateBps; // buyback's cut of the creator tax above TAX_FREE_BPS
 
     bool public graduated;
     bool public pauseBuys;
@@ -157,11 +160,14 @@ contract MonPadCurveV3 {
     /// @dev `factory = msg.sender` binds initialization to the cloning factory (audit M-1
     ///      defense-in-depth): even if a clone address leaked, only the factory that deploys it
     ///      can initialize it, and it can only point `factory` at itself.
+    /// @dev Payable: the factory forwards a small slice of the creation fee as a real-MON
+    ///      buffer (seeds `realMonReserve`), giving every launch immediate exit liquidity and
+    ///      eliminating the 1-wei "no MON liquidity" edge on a sole-holder's full sell.
     function initialize(
         address _token,
         address _creator,
         FeeConfig calldata _cfg
-    ) external {
+    ) external payable {
         require(!_initialized, "init");
         require(_token != address(0) && _creator != address(0), "addr0");
         _initialized = true;
@@ -175,16 +181,20 @@ contract MonPadCurveV3 {
 
         _setFeeConfig(_cfg);
 
-        // Snapshot economics; self-calibrate the curve to the target (preserves the audited
-        // ~21x / ~99%-sold shape at any target: Vm/T and Vt/S held constant vs the 425k design).
+        // Snapshot economics; self-calibrate the curve to the target. Vm = gradTarget * 9/13
+        // ≈ 0.692× (≈180,000 MON at the 260k target) — matches the flatter nad.fun-style virtual
+        // MON reserve so early buyers can't grab an outsized share and the curve sells ~74% on
+        // the curve / leaves ~26% for the LP, opening the DEX at ≈ the curve's final price.
         gradTarget        = IFactory(msg.sender).graduationTarget();
         gradCreatorReward = IFactory(msg.sender).graduationCreatorReward();
         gradTreasuryCut   = IFactory(msg.sender).graduationTreasuryCut();
+        taxSkimRateBps    = IFactory(msg.sender).taxSkimRateBps();
         require(gradTarget > 0, "target=0");
 
-        virtualMonReserve   = (gradTarget * 117_000) / 425_000;
+        virtualMonReserve   = (gradTarget * 9) / 13;
         virtualTokenReserve = 1_260_000_000 ether;
         realTokenReserve    = SUPPLY;
+        realMonReserve      = msg.value; // creation-fee buffer (real exit liquidity)
         require(virtualMonReserve > 0, "vm=0");
     }
 
@@ -399,8 +409,27 @@ contract MonPadCurveV3 {
 
     function _routeTradeTax(uint256 notional) internal {
         FeeConfig memory c = feeConfig;
-        uint256 burnTok = (notional * c.taxBurnTokenBps) / 10000;
-        uint256 lp      = (notional * c.taxLpBps) / 10000;
+        uint256 taxBps = uint256(c.taxBurnTokenBps) + c.taxLpBps;
+        if (taxBps == 0) return;
+        uint256 totalTax = (notional * taxBps) / 10000;
+        if (totalTax == 0) return;
+
+        // Buyback (MONSHI) skims taxSkimRateBps of the tax ABOVE the free threshold.
+        uint256 skim;
+        if (taxBps > TAX_FREE_BPS && taxSkimRateBps > 0) {
+            uint256 excessTax = (notional * (taxBps - TAX_FREE_BPS)) / 10000;
+            skim = (excessTax * taxSkimRateBps) / 10000;
+            if (skim > 0) {
+                monshiBuybackPending += skim;
+                totalStakingFees     += skim;
+                emit FeeCollected("tax-skim-buyback", IFactory(factory).getRewardRecipient(), skim);
+            }
+        }
+
+        // Remainder keeps the creator's burn:LP ratio.
+        uint256 remainder = totalTax - skim;
+        uint256 burnTok   = (remainder * c.taxBurnTokenBps) / taxBps;
+        uint256 lp        = remainder - burnTok;
         _applyAllocation(burnTok, lp);
     }
 

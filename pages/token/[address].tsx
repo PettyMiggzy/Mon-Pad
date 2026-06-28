@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useAccount, useReadContract, useReadContracts, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseEther, formatEther, type Address } from 'viem';
 import { curveV3Abi, tokenAbi } from '@/lib/abis';
+import V3TokenActivity from '@/components/V3TokenActivity';
 import {
   MONAD_EXPLORER, V3_GRADUATION_TARGET_MON,
   V3_BUY_FEE_CREATOR_BPS, V3_BUY_FEE_BUFFER_BPS,
@@ -46,17 +47,17 @@ export default function TokenPage() {
   const curveRead = useReadContract({ address: addr, abi: tokenAbi as any, functionName: 'curve', query: { enabled: !!addr } });
   const curve = curveRead.data as Address | undefined;
 
-  const meta = useReadContracts({
+  const meta = useReadContracts(({
     contracts: addr ? [
       { address: addr, abi: tokenAbi as any, functionName: 'name' },
       { address: addr, abi: tokenAbi as any, functionName: 'symbol' },
     ] : [],
     query: { enabled: !!addr },
-  });
+  }) as any);
   const name = (meta.data?.[0]?.result as string) || 'Token';
   const symbol = (meta.data?.[1]?.result as string) || '';
 
-  const state = useReadContracts({
+  const state = useReadContracts(({
     contracts: curve ? [
       { address: curve, abi: curveV3Abi as any, functionName: 'getCurveReserves' },
       { address: curve, abi: curveV3Abi as any, functionName: 'monRaisedNet' },
@@ -65,7 +66,7 @@ export default function TokenPage() {
       { address: curve, abi: curveV3Abi as any, functionName: 'tradeTaxBps' },
     ] : [],
     query: { enabled: !!curve, refetchInterval: 8000 },
-  });
+  }) as any);
 
   const reserves: Reserves | null = useMemo(() => {
     const r = state.data?.[0]?.result as readonly [bigint, bigint, bigint, bigint] | undefined;
@@ -99,6 +100,7 @@ export default function TokenPage() {
 
       <GraduationBar progress={progress} remaining={remaining} graduated={graduated} canGrad={canGrad} curve={curve} />
       <TradePanel token={addr} curve={curve} symbol={symbol} reserves={reserves} graduated={graduated} tradeTax={tradeTax} />
+      <V3TokenActivity curve={curve} symbol={symbol} />
       <CreatorPanel curve={curve} creator={creator} wallet={wallet} graduated={graduated} />
     </div>
   );
@@ -232,13 +234,13 @@ function CreatorPanel({ curve, creator, wallet, graduated }: { curve?: Address; 
   const [tx, setTx] = useState<TxState>({ status: 'idle' });
   const isCreator = !!wallet && !!creator && wallet.toLowerCase() === creator.toLowerCase();
 
-  const reads = useReadContracts({
+  const reads = useReadContracts(({
     contracts: (isCreator && curve) ? [
       { address: curve, abi: curveV3Abi as any, functionName: 'creatorPending' },
       { address: curve, abi: curveV3Abi as any, functionName: 'graduationRewardClaimable' },
     ] : [],
     query: { enabled: isCreator && !!curve, refetchInterval: 15000 },
-  });
+  }) as any);
   if (!isCreator) return null;
   const pending = (reads.data?.[0]?.result as bigint) ?? 0n;
   const grad = reads.data?.[1]?.result as readonly [bigint, boolean] | undefined;

@@ -142,9 +142,10 @@ export default function Docs() {
 buyPrice(ΔMON) = tokenReserve - k / (virtualMON + realMON + ΔMON)
 sellPrice(ΔTOK) = (virtualMON + realMON) - k / (tokenReserve + ΔTOK)
 
-virtualMON = 117,000 MON  (anti-snipe)
-tokenReserve_initial = 800,000,000  (curve allocation)
-graduationTarget = 425,000 MON net of fees`}
+virtualMON = 180,000 MON  (anti-snipe; gradTarget * 9/13)
+virtualToken = 1,260,000,000
+tokenSupply = 1,000,000,000  (entire supply on the curve)
+graduationTarget = 260,000 MON net of fees  (~$5,000)`}
         </pre>
         <p className="text-sm text-white/60 leading-relaxed mt-4">
           Virtual reserves mean the first buyer doesn&apos;t get the whole supply at near-zero cost. The curve starts at a realistic price and rises smoothly toward graduation.

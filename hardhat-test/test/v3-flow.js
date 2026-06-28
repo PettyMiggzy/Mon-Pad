@@ -71,14 +71,19 @@ async function invariant(curveAddr) {
 }
 
 describe("MonPad V3 (native MON)", () => {
-  it("creation fee accrues to treasuryPending and is pullable", async () => {
+  it("creation fee: buffer seeds the curve, remainder accrues to treasuryPending and is pullable", async () => {
     const ctx = await setup();
     const fee = await ctx.factory.creationFee();
-    const { } = await launch(ctx);
-    expect(await ctx.factory.treasuryPending()).to.equal(fee);
+    const buffer = await ctx.factory.CREATION_BUFFER_MON();
+    const { curve } = await launch(ctx);
+    // 100 MON of the fee seeds the curve as real exit liquidity; the rest goes to treasury.
+    const c = await curveAt(curve);
+    expect(await c.realMonReserve()).to.equal(buffer);
+    expect(await ethers.provider.getBalance(curve)).to.be.gte(buffer);
+    expect(await ctx.factory.treasuryPending()).to.equal(fee - buffer);
     const before = await ethers.provider.getBalance(ctx.treasury.address);
     await ctx.factory.connect(ctx.buyer).claimTreasury(); // permissionless
-    expect((await ethers.provider.getBalance(ctx.treasury.address)) - before).to.equal(fee);
+    expect((await ethers.provider.getBalance(ctx.treasury.address)) - before).to.equal(fee - buffer);
   });
 
   it("dev buy at creation gives the creator tokens, capped at 2%", async () => {
@@ -129,6 +134,28 @@ describe("MonPad V3 (native MON)", () => {
     await c.connect(ctx.buyer).buy(0, { value: 1000n * E18 });
     expect(await c.totalBurnedTokens()).to.be.gt(0n);
     expect(await c.lpPendingMon()).to.be.gt(0n);
+    await invariant(curve);
+  });
+
+  it("buyback skims 25% of the creator tax above the 2% free threshold", async () => {
+    const ctx = await setup();
+    // 10% tax, all routed to burn — so any MONSHI accrual on a buy can only be the skim.
+    const cfg = { cfBurnTokenBps: 0, cfLpBps: 0, taxBurnTokenBps: 1000, taxLpBps: 0 };
+    const { curve } = await launch(ctx, cfg);
+    const c = await curveAt(curve);
+    await c.connect(ctx.buyer).buy(0, { value: 1000n * E18 });
+    // tax = 100 MON; excess over 2% = 80 MON; skim = 25% = 20 MON -> buyback
+    expect(await c.monshiBuybackPending()).to.equal(20n * E18);
+    await invariant(curve);
+  });
+
+  it("no buyback skim when the creator tax is at/below 2%", async () => {
+    const ctx = await setup();
+    const cfg = { cfBurnTokenBps: 0, cfLpBps: 0, taxBurnTokenBps: 200, taxLpBps: 0 }; // exactly 2%
+    const { curve } = await launch(ctx, cfg);
+    const c = await curveAt(curve);
+    await c.connect(ctx.buyer).buy(0, { value: 1000n * E18 });
+    expect(await c.monshiBuybackPending()).to.equal(0n); // buys carry no MONSHI slice; tax<=2% => no skim
     await invariant(curve);
   });
 
