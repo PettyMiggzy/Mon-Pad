@@ -1,0 +1,24 @@
+{
+  "version": "v3-native-mon",
+  "network": "monadMainnet",
+  "chainId": "143",
+  "deployer": "0xbbDB9561c981E72290EF5d138d781C14A825fAd5",
+  "addresses": {
+    "factory": "0x9007E499EdafBEC87Cc363fbE8Fd2B31142F4C01",
+    "graduator": "0x07b5AAaB9080f4A7aA491933437e47e3dFFe90a9",
+    "curveImpl": "0x4410feC440D3F774266323B79ee0E06f2d2D07Ca",
+    "tokenImpl": "0x61d018D65a6A66270f335812E05dc6A7181D40b6",
+    "wmon": "0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A",
+    "npm": "0xa9f6B6656e32F223d778b01642F32D00F5310526",
+    "monshi": "0xB744F5CDb792d8187640214C4A1c9aCE29af7777"
+  },
+  "config": {
+    "platform": "0x57C8A5AeC1c172fE41416A2FAE6eBDD92b552A16",
+    "treasury": "0xe7a31fd91a6f2ab0c73db3b7d0954a6a3acc7ab5",
+    "buyback": "0xe7a31fd91a6f2ab0c73db3b7d0954a6a3acc7ab5",
+    "creationFee": "500000000000000000000",
+    "graduationTarget": "260000000000000000000000",
+    "graduationCreatorReward": "41700000000000000000000",
+    "graduationTreasuryCut": "10400000000000000000000"
+  }
+}
