@@ -5,10 +5,12 @@
 **Status:** contracts live + **source-verified** (Etherscan V2, chain 143); pending ownership `acceptOwnership` + frontend wiring + DexScreener listing.
 
 > **Redeployed 2026-06-28** with the rebalanced curve (nad.fun-style **180,000 virtual MON**
-> = `gradTarget × 9/13`) + a **100 MON creation-fee buffer** seeded into each curve. This
-> moderates early-buyer share (first $96 ≈ 3.3% vs 8%), splits ~75% curve / ~25% DEX LP, and
-> opens the DEX at ≈ the curve's final price (no graduation spike). The earlier set
-> (factory `0x9007…4C01`) is superseded — do not use it. See `CURVE-FINDINGS.md`.
+> = `gradTarget × 9/13`) + a **100 MON creation-fee buffer** seeded into each curve + a
+> **25% buyback skim** on the creator's per-trade tax above the 2% free threshold
+> (`taxSkimRateBps`, tunable). This moderates early-buyer share (first $96 ≈ 3.3% vs 8%),
+> splits ~75% curve / ~25% DEX LP, and opens the DEX at ≈ the curve's final price (no
+> graduation spike). Earlier sets (`0x9007…4C01`, `0x9ae8…E9C`) are superseded — do not use.
+> See `CURVE-FINDINGS.md`.
 
 All 4 contracts are verified (Etherscan V2, chain 143):
 MonPadCurveV3, MonPadTokenV2, MonPadFactoryV3, MonPadGraduatorV3 — view at
@@ -25,12 +27,12 @@ burner is safe to discard.
 
 | Contract | Address |
 |---|---|
-| MonPadFactoryV3 | `0x9ae8376ef5F22e02e217b1A4081686ea9e488E9C` |
-| MonPadGraduatorV3 | `0x6cc317d91a18170Fd8fb2027c71A10C4f741E894` |
-| MonPadCurveV3 (impl, cloned per token) | `0x33c6e332a7b062bb436fdD81631227854991859C` |
-| MonPadTokenV2 (impl, cloned per token) | `0x76C2914bd8F9B44820793d0E285A065A452ce2E5` |
+| MonPadFactoryV3 | `0x11495d18d065c78AC64891F45E81902036791143` |
+| MonPadGraduatorV3 | `0xc86C4A94C2C2Efa05115A7c523D3a074aA243E5e` |
+| MonPadCurveV3 (impl, cloned per token) | `0x6d008Fa497acEc9EE7Ab78344a3D88cB04Da0ebe` |
+| MonPadTokenV2 (impl, cloned per token) | `0x4fC4df29a5dE017b198D0CA966A3762dE1E356bf` |
 
-_Superseded (do not use): factory `0x9007E499EdafBEC87Cc363fbE8Fd2B31142F4C01`, graduator `0x07b5AAaB9080f4A7aA491933437e47e3dFFe90a9`._
+_Superseded (do not use): factories `0x9007E499EdafBEC87Cc363fbE8Fd2B31142F4C01`, `0x9ae8376ef5F22e02e217b1A4081686ea9e488E9C`._
 
 ## Wallet roles
 

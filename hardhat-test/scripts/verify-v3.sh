@@ -23,10 +23,12 @@ BUYBACK=0xe7a31fd91a6f2ab0c73db3b7d0954a6a3acc7ab5
 WMON=0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A
 NPM=0xa9f6B6656e32F223d778b01642F32D00F5310526
 MONSHI=0xB744F5CDb792d8187640214C4A1c9aCE29af7777
-FACTORY=0x9ae8376ef5F22e02e217b1A4081686ea9e488E9C
-GRAD=0x6cc317d91a18170Fd8fb2027c71A10C4f741E894
-CURVE=0x33c6e332a7b062bb436fdD81631227854991859C
-TOKEN=0x76C2914bd8F9B44820793d0E285A065A452ce2E5
+# Addresses from the latest deployment record (deployments/v3-143.json).
+FACTORY=$(node -e "console.log(require('./deployments/v3-143.json').addresses.factory)")
+GRAD=$(node -e "console.log(require('./deployments/v3-143.json').addresses.graduator)")
+CURVE=$(node -e "console.log(require('./deployments/v3-143.json').addresses.curveImpl)")
+TOKEN=$(node -e "console.log(require('./deployments/v3-143.json').addresses.tokenImpl)")
+echo "verifying: factory=$FACTORY grad=$GRAD curve=$CURVE token=$TOKEN"
 
 FACTORY_ARGS=$(cast abi-encode "c(address,address,address,address,address)" $PLATFORM $TREASURY $BUYBACK $WMON $MONSHI | sed 's/^0x//')
 GRAD_ARGS=$(cast abi-encode "c(address,address,address)" $FACTORY $NPM $WMON | sed 's/^0x//')
