@@ -98,16 +98,19 @@ AMM pool (same flow as pump.fun → PumpSwap).
 > **Chain:** Monad (chainId 143)
 > **Protocol:** Mon-Pad (bonding-curve launchpad) — request a pre-bond parser /
 > dedicated `dexId`, like `pumpfun`, so curve tokens chart before graduation.
-> **Factory contract:** `<FACTORY_ADDRESS>` — emits `Launch(...)` per token
-> (discovers per-token curve clones).
-> **Curve contract (per token, EIP-1167 clone of impl `<CURVE_IMPL>`):** emits
-> `Trade(...)` on every buy/sell with post-trade virtual+real reserves and
-> `priceX18`; deterministic on-chain constant-product formula, no oracle.
+> **Factory contract:** `0xf82bFD436ea36515DFF5A6933980F86813D4f3Fa` — emits
+> `Launch(...)` per token (discovers per-token curve clones). Verified source.
+> **Curve contract (per token, EIP-1167 clone of impl
+> `0xf5184f2255797f5AD5fa92Ca273FdBb07EbaB623`):** emits `Trade(...)` on every
+> buy/sell with post-trade virtual+real reserves and `priceX18`; deterministic
+> on-chain constant-product formula, no oracle. Verified source.
 > **Quote token (for USD):** WMON `0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A`.
 > **Price derivation:** `priceX18` field, or
 > `(virtualMon+realMon)/(virtualToken-(supply-realToken))`.
-> **Graduation:** `Graduate(token, pool, ...)` migrates liquidity to a Uniswap V3
-> pool (`<NPM/factory>`); please transition the page to that pool post-bond.
+> **Graduation:** graduator `0x9770b2a62d719b67E4Be206b0B0158b1448eB666` emits
+> `Graduated(token, pool, ...)` and migrates liquidity into a Uniswap V3 pool via
+> NPM `0xa9f6B6656e32F223d778b01642F32D00F5310526`; please transition the page to
+> that pool post-bond.
 > **Event ABIs:** (attach `Launch`, `Trade`, `Graduate` ABI JSON)
 > **Examples:** (attach 1 launch tx + 1 buy tx + 1 sell tx hash once deployed)
 
@@ -118,9 +121,10 @@ easier to grant when the events are already live and parseable on mainnet.
 
 ## Build checklist (so the above is true on-chain)
 
-- [ ] Factory emits `Launch` with quoteToken=WMON + initial virtual reserves.
-- [ ] Curve emits `Trade` (unified, post-trade reserves + priceX18) on buy/sell/devBuy.
-- [ ] Curve/graduator emit `Graduate` with the AMM pool address.
-- [ ] Verify all three contracts on the Monad explorer (parser dev needs source/ABI).
-- [ ] Submit the listing-request package above to DexScreener Discord.
-- [ ] Keep the Uniswap-V2 read shim (fallback for generic scanners).
+- [x] Factory emits `Launch` with quoteToken=WMON + initial virtual reserves.
+- [x] Curve emits `Trade` (unified, post-trade reserves + priceX18) on buy/sell/devBuy.
+- [x] Graduator emits `Graduated` with the AMM pool address.
+- [x] All 4 contracts source-verified on the Monad explorer (Etherscan V2, chain 143).
+- [ ] **Create the first token** (~500 MON) so there are real `Launch`/`Trade` txs to attach.
+- [ ] Submit the listing-request package above to DexScreener (Discord) with those tx hashes.
+- [x] Uniswap-V2 read shim present on the curve (fallback for generic scanners).

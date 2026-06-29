@@ -90,7 +90,7 @@ export default function Home() {
         <PromoBanner />
       </div>
 
-      {/* Compact app header — leads straight into the coin grid */}
+      {/* Compact app header — sell the creator upside (FOMO to launch) */}
       <motion.section
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
@@ -107,11 +107,11 @@ export default function Home() {
         }}
       >
         <div style={{ minWidth: 0 }}>
-          <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--p1, #ECE9F8)', margin: 0, lineHeight: 1.2 }}>
-            Launch a coin on Monad
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--p1, #ECE9F8)', margin: 0, lineHeight: 1.2 }}>
+            Launch a coin. Earn forever.
           </h1>
-          <p style={{ marginTop: 4, fontSize: 13, color: 'var(--p2, rgba(220, 215, 240, 0.65))' }}>
-            Fair curve · 500 MON to start · liquidity locked at graduation
+          <p style={{ marginTop: 4, fontSize: 13, color: 'var(--p2, rgba(220, 215, 240, 0.7))' }}>
+            Pocket fees on every trade + <span style={{ color: '#4ADE80', fontWeight: 700 }}>~$800</span> when your coin graduates. Liquidity locks itself.
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -144,6 +144,21 @@ export default function Home() {
           </div>
         )}
       </motion.section>
+
+      {/* Creator rewards — the bullish bit, to FOMO people into launching */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2" style={{ maxWidth: 1280, margin: '0 auto', padding: '0 16px 12px' }}>
+        {[
+          { icon: '💸', t: 'Fees on every trade', d: 'You earn on every buy & sell your coin gets — claim anytime, forever.' },
+          { icon: '🎓', t: '~$800 at graduation', d: '41,700 MON paid straight to you the moment your coin bonds.' },
+          { icon: '🔒', t: 'Locked liquidity', d: 'LP auto-locks at graduation (rug-proof) — so buyers actually trust it.' },
+        ].map((p) => (
+          <div key={p.t} style={{ background: 'var(--bg-card, rgba(28,24,56,0.6))', border: '1px solid var(--bd, rgba(139,92,246,0.15))', borderRadius: 12, padding: '12px 14px' }}>
+            <div style={{ fontSize: 18 }}>{p.icon}</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--p1,#ECE9F8)', marginTop: 4 }}>{p.t}</div>
+            <div style={{ fontSize: 11, color: 'var(--p2, rgba(220,215,240,0.6))', marginTop: 2, lineHeight: 1.4 }}>{p.d}</div>
+          </div>
+        ))}
+      </div>
 
       {/* Sticky filter tabs */}
       <div
