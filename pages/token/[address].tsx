@@ -209,6 +209,12 @@ export default function TokenPage() {
   );
 }
 
+// Subscript digits for the leading-zero count in tiny prices (DexScreener style).
+const SUBS = '₀₁₂₃₄₅₆₇₈₉';
+function toSub(num: number): string {
+  return String(num).split('').map((d) => SUBS[+d] ?? d).join('');
+}
+
 function fmtNum(n: number, maxFrac = 2): string {
   if (!isFinite(n)) return '—';
   if (n === 0) return '0';
@@ -216,8 +222,15 @@ function fmtNum(n: number, maxFrac = 2): string {
   if (a >= 1e9) return (n / 1e9).toFixed(2) + 'B';
   if (a >= 1e6) return (n / 1e6).toFixed(2) + 'M';
   if (a >= 1e3) return (n / 1e3).toFixed(2) + 'K';
-  if (a < 0.0001) return n.toExponential(2);
-  return n.toLocaleString(undefined, { maximumFractionDigits: maxFrac });
+  // Tiny values: render 0.0₇304 instead of "3.04e-8" (count = leading zeros after the
+  // decimal). Crypto-native + readable; matches DexScreener/DEXTools.
+  if (a < 0.0001) {
+    const exp = Math.floor(Math.log10(a));
+    const zeros = -exp - 1;
+    const digits = (a / Math.pow(10, exp)).toFixed(2).replace('.', ''); // 3 significant figures
+    return `${n < 0 ? '-' : ''}0.0${toSub(zeros)}${digits}`;
+  }
+  return n.toLocaleString(undefined, { maximumFractionDigits: Math.max(maxFrac, 4) });
 }
 
 function HeaderStat({ label, value, color, sub }: { label: string; value: string; color?: string; sub?: string }) {

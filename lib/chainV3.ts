@@ -157,11 +157,40 @@ export type Candle = { time: number; open: number; high: number; low: number; cl
 
 // ── getLogs window sizing ───────────────────────────────────────────────────
 // The RPC caps eth_getLogs to a 100-block range (returns -32614 / HTTP 413 above
-// that). So we scan in <=100-block chunks. After moving to a getLogs-friendly RPC,
-// widen these via env (NEXT_PUBLIC_GETLOGS_CHUNK / _LOOKBACK) — no code change.
-const LOGS_CHUNK = BigInt(process.env.NEXT_PUBLIC_GETLOGS_CHUNK || '99');           // blocks per getLogs call
-const LOGS_LOOKBACK = BigInt(process.env.NEXT_PUBLIC_GETLOGS_LOOKBACK || '2000');   // token-page chart/trades window
-const LOGS_CARD_LOOKBACK = BigInt(process.env.NEXT_PUBLIC_GETLOGS_CARD_LOOKBACK || '500'); // homepage cards (lighter)
+// that). So we scan in <=100-block chunks, fired CONCURRENTLY (bounded) so a wide
+// window stays fast. After moving to a getLogs-friendly RPC, widen these via env
+// (NEXT_PUBLIC_GETLOGS_CHUNK / _LOOKBACK) — no code change.
+const LOGS_CHUNK = BigInt(process.env.NEXT_PUBLIC_GETLOGS_CHUNK || '99');            // blocks per getLogs call
+const LOGS_LOOKBACK = BigInt(process.env.NEXT_PUBLIC_GETLOGS_LOOKBACK || '12000');   // token-page chart/trades window
+const LOGS_CARD_LOOKBACK = BigInt(process.env.NEXT_PUBLIC_GETLOGS_CARD_LOOKBACK || '600'); // homepage cards (lighter)
+const LOGS_CONCURRENCY = Number(process.env.NEXT_PUBLIC_GETLOGS_CONCURRENCY || '10'); // parallel getLogs calls per batch
+
+/**
+ * Scan an address's logs for `event` across a recent window, in <=100-block chunks
+ * fired in bounded-concurrency batches (so a 12k-block window is ~12 fast batches
+ * instead of 120 sequential calls). Returns raw decoded logs (any order).
+ */
+async function scanLogs(address: Address, event: any, lookbackBlocks: bigint, chunk: bigint): Promise<any[]> {
+  let head: bigint;
+  try { head = await publicClient.getBlockNumber(); } catch { return []; }
+  const from = head > lookbackBlocks ? head - lookbackBlocks : 0n;
+  // Build the [begin,end] chunk ranges newest→oldest.
+  const ranges: [bigint, bigint][] = [];
+  for (let start = head; start >= from; start -= chunk + 1n) {
+    const begin = start > chunk ? start - chunk : 0n;
+    ranges.push([begin, start]);
+    if (begin === 0n) break;
+  }
+  const out: any[] = [];
+  for (let i = 0; i < ranges.length; i += LOGS_CONCURRENCY) {
+    const batch = ranges.slice(i, i + LOGS_CONCURRENCY);
+    const results = await Promise.all(batch.map(([begin, end]) =>
+      (publicClient.getLogs as any)({ address, event, fromBlock: begin, toBlock: end }).catch(() => [] as any[])
+    ));
+    for (const logs of results) out.push(...logs);
+  }
+  return out;
+}
 
 /**
  * Read recent Trade events for a curve. Scans a bounded window of recent blocks,
@@ -183,38 +212,21 @@ export function getV3Trades(curve: Address, lookbackBlocks = LOGS_LOOKBACK, chun
 
 async function _getV3Trades(curve: Address, lookbackBlocks = LOGS_LOOKBACK, chunk = LOGS_CHUNK): Promise<V3Trade[]> {
   if (!curve || curve === ('0x0000000000000000000000000000000000000000' as Address)) return [];
-  let head: bigint;
-  try { head = await publicClient.getBlockNumber(); } catch { return []; }
-  const from = head > lookbackBlocks ? head - lookbackBlocks : 0n;
-
-  const trades: V3Trade[] = [];
-  for (let start = head; start >= from; start -= chunk + 1n) {
-    const end = start;
-    const begin = start > chunk ? start - chunk : 0n;
-    let logs: any[] = [];
-    try {
-      logs = (await (publicClient.getLogs as any)({ address: curve, event: TRADE_EVENT, fromBlock: begin, toBlock: end })) as any[];
-    } catch {
-      // Range too wide for this RPC — skip this chunk rather than fail the whole feed.
-      if (begin === 0n) break;
-      continue;
-    }
-    for (const lg of logs) {
-      const a = lg.args || {};
-      trades.push({
-        txHash: lg.transactionHash as string,
-        trader: a.trader as Address,
-        isBuy: Boolean(a.isBuy),
-        mon: Number(formatEther((a.monAmount as bigint) ?? 0n)),
-        tokens: Number(formatEther((a.tokenAmount as bigint) ?? 0n)),
-        price: Number(formatEther((a.priceX18 as bigint) ?? 0n)),
-        time: Number((a.tradedAt as bigint) ?? 0n),
-        block: (lg.blockNumber as bigint) ?? 0n,
-      });
-    }
-    if (begin === 0n) break;
-  }
-  // Newest first, dedup by (tx + logIndex isn't tracked) — sort by block then time.
+  const logs = await scanLogs(curve, TRADE_EVENT, lookbackBlocks, chunk);
+  const trades: V3Trade[] = logs.map((lg) => {
+    const a = lg.args || {};
+    return {
+      txHash: lg.transactionHash as string,
+      trader: a.trader as Address,
+      isBuy: Boolean(a.isBuy),
+      mon: Number(formatEther((a.monAmount as bigint) ?? 0n)),
+      tokens: Number(formatEther((a.tokenAmount as bigint) ?? 0n)),
+      price: Number(formatEther((a.priceX18 as bigint) ?? 0n)),
+      time: Number((a.tradedAt as bigint) ?? 0n),
+      block: (lg.blockNumber as bigint) ?? 0n,
+    };
+  });
+  // Newest first — sort by block then time.
   trades.sort((x, y) => (y.block === x.block ? y.time - x.time : Number(y.block - x.block)));
   return trades;
 }
@@ -253,25 +265,15 @@ export function getV3Holders(token: Address, exclude: string[] = [], lookbackBlo
 
 async function _getV3Holders(token: Address, exclude: string[], lookbackBlocks: bigint, chunk: bigint): Promise<V3Holder[]> {
   if (!token || token === (_ZERO as Address)) return [];
-  let head: bigint;
-  try { head = await publicClient.getBlockNumber(); } catch { return []; }
-  const from = head > lookbackBlocks ? head - lookbackBlocks : 0n;
+  const logs = await scanLogs(token, TRANSFER_EVENT, lookbackBlocks, chunk);
   const bal = new Map<string, bigint>();
-  for (let start = head; start >= from; start -= chunk + 1n) {
-    const end = start;
-    const begin = start > chunk ? start - chunk : 0n;
-    let logs: any[] = [];
-    try { logs = (await (publicClient.getLogs as any)({ address: token, event: TRANSFER_EVENT, fromBlock: begin, toBlock: end })) as any[]; }
-    catch { if (begin === 0n) break; continue; }
-    for (const lg of logs) {
-      const a = lg.args || {};
-      const v = (a.value as bigint) ?? 0n;
-      const f = ((a.from as string) || '').toLowerCase();
-      const t = ((a.to as string) || '').toLowerCase();
-      if (f && f !== _ZERO) bal.set(f, (bal.get(f) ?? 0n) - v);
-      if (t && t !== _ZERO) bal.set(t, (bal.get(t) ?? 0n) + v);
-    }
-    if (begin === 0n) break;
+  for (const lg of logs) {
+    const a = lg.args || {};
+    const v = (a.value as bigint) ?? 0n;
+    const f = ((a.from as string) || '').toLowerCase();
+    const t = ((a.to as string) || '').toLowerCase();
+    if (f && f !== _ZERO) bal.set(f, (bal.get(f) ?? 0n) - v);
+    if (t && t !== _ZERO) bal.set(t, (bal.get(t) ?? 0n) + v);
   }
   const excl = new Set([_ZERO, _DEAD, ...exclude.map((e) => (e || '').toLowerCase())].filter(Boolean));
   const SUPPLY = 1_000_000_000n * 10n ** 18n;

@@ -57,17 +57,18 @@ export function contractsConfigured(): boolean {
 //
 //    This TEST set (below) graduates into OFFICIAL Uniswap V3 (0x204fAca factory /
 //    0x7197e2 NPM) so graduated tokens are immediately routable + charted.
-export const FACTORY_V3_DEFAULT = '0xf19C4BA8Ea9DAAbdd7BCfE4Ea1e42fED880ca928' as Address;   // TEST factory (official-UniV3 grad)
-export const GRADUATOR_V3_DEFAULT = '0x655C975a6ae34Ac07005d7D541dc06E716e363dC' as Address; // TEST graduator → official Uniswap V3
+export const FACTORY_V3_DEFAULT = '0x45Fb501E1167FbBfEBf42206A3C9945F13C70aaF' as Address;   // TEST factory (official-UniV3 grad + exit-liquidity fix)
+export const GRADUATOR_V3_DEFAULT = '0xE27E3E0D1AAABDDF26Fa00c6046B842A2F58616b' as Address; // TEST graduator → official Uniswap V3
 
 // Retired factories — NEVER transact with these (pre-rebalance curve / compromised
-// treasury / non-indexed-DEX graduator). Includes the prior production factory and
-// the earlier test factory (which graduated into a non-indexed Uniswap fork).
+// treasury / non-indexed-DEX graduator / "no MON liquidity" sell bug). Includes the
+// prior production factory and the earlier test factories.
 export const SUPERSEDED_FACTORIES: ReadonlySet<string> = new Set(
   [
     '0x9007E499EdafBEC87Cc363fbE8Fd2B31142F4C01',
     '0x9ae8376ef5F22e02e217b1A4081686ea9e488E9C',
-    '0x38e4056Db9BB7b3e499A3C6Ec8c5D6C69409458D', // first test factory (non-indexed grad)
+    '0x38e4056Db9BB7b3e499A3C6Ec8c5D6C69409458D', // test factory #1 (non-indexed grad + no exit buffer)
+    '0xf19C4BA8Ea9DAAbdd7BCfE4Ea1e42fED880ca928', // test factory #2 (official grad, but pre exit-liquidity fix)
   ].map((a) => a.toLowerCase()),
 );
 

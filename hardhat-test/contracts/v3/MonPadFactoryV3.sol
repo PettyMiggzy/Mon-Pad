@@ -73,8 +73,10 @@ contract MonPadFactoryV3 {
     uint256 public creationFee = 1 ether;                // TEST: 1 MON to create
     /// @dev Slice of the creation fee seeded into each new curve as a real-MON buffer
     ///      (immediate exit liquidity + removes the sole-holder full-sell rounding edge).
-    ///      The remainder of the fee accrues to treasuryPending.
-    uint256 public constant CREATION_BUFFER_MON = 100 ether;
+    ///      The remainder of the fee accrues to treasuryPending. Must be <= creationFee
+    ///      or NO buffer is seeded (the `fee >= CREATION_BUFFER_MON` gate in createLaunch).
+    ///      TEST: 0.2 MON (fits the 1 MON creation fee). PRODUCTION: restore to 100 ether.
+    uint256 public constant CREATION_BUFFER_MON = 0.2 ether;
     uint256 public maxDevBuyBps = 200;                   // 2% supply cap on dev buy
     uint256 public minDevBuyMon = 0;
     uint256 public graduationTarget = 20 ether;          // TEST: graduate at 20 MON

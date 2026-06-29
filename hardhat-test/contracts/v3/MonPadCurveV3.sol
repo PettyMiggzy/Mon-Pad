@@ -296,8 +296,6 @@ contract MonPadCurveV3 {
         L.taxTotal   = isDev ? 0 : (monIn * tradeTaxBps()) / 10000;
         L.monForBuy  = monIn - L.creatorFee - L.bufferFee - L.taxTotal;
 
-        if (L.bufferFee > 0) platformPending += L.bufferFee;
-
         L.currentMon      = virtualMonReserve + realMonReserve;
         L.currentTokens   = virtualTokenReserve - (SUPPLY - realTokenReserve);
         L.newTokenReserve = (L.currentMon * L.currentTokens) / (L.currentMon + L.monForBuy);
@@ -306,7 +304,15 @@ contract MonPadCurveV3 {
         require(tokensOut >= minOut, "slippage");
         require(tokensOut <= realTokenReserve, "no liquidity");
 
-        realMonReserve   += L.monForBuy;
+        // The buy "buffer" fee stays in the curve as real exit liquidity until the
+        // token bonds (then it flows to the LP at graduation), instead of accruing
+        // to the platform pull-claim. This guarantees a sole holder can always sell
+        // their full position back — without it (e.g. a low creation fee that seeds
+        // no launch buffer) a 100% sell trips the constant-product rounding edge and
+        // reverts with "no MON liquidity". Added after the price calc so it never
+        // distorts the current buy's quote. (monRaisedNet still tracks net buys, so
+        // graduation timing is unchanged.)
+        realMonReserve   += L.monForBuy + L.bufferFee;
         realTokenReserve -= tokensOut;
         monRaised        += monIn;
         monRaisedNet     += L.monForBuy;
