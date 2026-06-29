@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import LiveTicker from '@/components/LiveTicker';
-import PromoBanner from '@/components/PromoBanner';
 import TokenGrid from '@/components/TokenGrid';
 import HomeRail from '@/components/HomeRail';
 import { type TokenSummary } from '@/lib/api';
@@ -84,11 +83,6 @@ export default function Home() {
       </Head>
       {/* Live trade ticker at the very top */}
       <LiveTicker />
-
-      {/* Promo banner */}
-      <div className="max-w-7xl mx-auto px-4">
-        <PromoBanner />
-      </div>
 
       {/* Compact app header — leads straight into the coin grid */}
       <motion.section
