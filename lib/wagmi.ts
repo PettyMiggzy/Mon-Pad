@@ -15,6 +15,7 @@ export const monad = defineChain({
   nativeCurrency: { name: 'MON', symbol: 'MON', decimals: 18 },
   rpcUrls: { default: { http: RPC_URLS } },
   blockExplorers: { default: { name: 'Monadscan', url: MONAD_EXPLORER } },
+  contracts: { multicall3: { address: '0xcA11bde05977b3631167028862bE2a173976CA11' } },
 });
 
 const WC_PROJECT_ID = process.env.NEXT_PUBLIC_WC_PROJECT_ID;

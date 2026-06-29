@@ -12,6 +12,9 @@ const monadChain = {
   name: 'Monad',
   nativeCurrency: { name: 'MON', symbol: 'MON', decimals: 18 },
   rpcUrls: { default: { http: [MONAD_RPC_URL] } },
+  // multicall3 is deployed on Monad at the canonical address. Without this,
+  // publicClient.multicall() throws → listV3Tokens fails → homepage shows nothing.
+  contracts: { multicall3: { address: '0xcA11bde05977b3631167028862bE2a173976CA11' as Address } },
 } as const;
 
 // retryCount: 1 so a rejected request (e.g. a provider 413/429) doesn't retry-storm.
@@ -156,7 +159,21 @@ export type Candle = { time: number; open: number; high: number; low: number; cl
  * Read recent Trade events for a curve. Scans a bounded window of recent blocks,
  * chunking the range so public RPCs that cap getLogs spans still work. Newest first.
  */
-export async function getV3Trades(curve: Address, lookbackBlocks = 12_000n, chunk = 1_000n): Promise<V3Trade[]> {
+// 6s cache keyed by curve+window so the token page's stats + the chart/trades
+// component share a single RPC round instead of each scanning independently.
+const _tradesCache = new Map<string, { at: number; p: Promise<V3Trade[]> }>();
+export function getV3Trades(curve: Address, lookbackBlocks = 12_000n, chunk = 1_000n): Promise<V3Trade[]> {
+  const key = `${curve}:${lookbackBlocks}:${chunk}`;
+  const now = Date.now();
+  const hit = _tradesCache.get(key);
+  if (hit && now - hit.at < 6000) return hit.p;
+  const p = _getV3Trades(curve, lookbackBlocks, chunk);
+  _tradesCache.set(key, { at: now, p });
+  p.catch(() => { if (_tradesCache.get(key)?.p === p) _tradesCache.delete(key); });
+  return p;
+}
+
+async function _getV3Trades(curve: Address, lookbackBlocks = 12_000n, chunk = 1_000n): Promise<V3Trade[]> {
   if (!curve || curve === ('0x0000000000000000000000000000000000000000' as Address)) return [];
   let head: bigint;
   try { head = await publicClient.getBlockNumber(); } catch { return []; }

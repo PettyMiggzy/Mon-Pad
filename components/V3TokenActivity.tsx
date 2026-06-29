@@ -29,7 +29,7 @@ function fmt(n: number, max = 4): string {
   return n.toLocaleString(undefined, { maximumFractionDigits: max });
 }
 
-export default function V3TokenActivity({ curve, symbol }: { curve?: Address; symbol?: string }) {
+export default function V3TokenActivity({ curve, symbol, refreshKey }: { curve?: Address; symbol?: string; refreshKey?: number }) {
   const [trades, setTrades] = useState<V3Trade[]>([]);
   const [loading, setLoading] = useState(true);
   const [tf, setTf] = useState(300);
@@ -50,7 +50,8 @@ export default function V3TokenActivity({ curve, symbol }: { curve?: Address; sy
     load();
     timer = setInterval(load, 20000); // poll for fresh trades (paused when tab hidden)
     return () => { cancelled = true; clearInterval(timer); };
-  }, [curve]);
+    // refreshKey bumps after a trade → reload immediately instead of waiting for the poll.
+  }, [curve, refreshKey]);
 
   const candles = useMemo(() => tradesToCandles(trades, tf), [trades, tf]);
 
@@ -85,26 +86,40 @@ function Candles({ data }: { data: { time: number; open: number; high: number; l
     let chart: any;
     let disposed = false;
     (async () => {
-      const lwc: any = await import('lightweight-charts');
-      if (disposed || !ref.current) return;
-      chart = lwc.createChart(ref.current, {
-        height: 300,
-        layout: { background: { color: 'transparent' }, textColor: '#aaa' },
-        grid: { vertLines: { color: 'rgba(255,255,255,0.04)' }, horzLines: { color: 'rgba(255,255,255,0.04)' } },
-        timeScale: { timeVisible: true, secondsVisible: false, borderColor: 'rgba(255,255,255,0.1)' },
-        rightPriceScale: { borderColor: 'rgba(255,255,255,0.1)' },
-        crosshair: { mode: 0 },
-      });
-      // lightweight-charts v5: addSeries(CandlestickSeries, opts); fall back to v4 API.
-      const series = chart.addSeries
-        ? chart.addSeries(lwc.CandlestickSeries, { upColor: '#4ADE80', downColor: '#F87171', borderVisible: false, wickUpColor: '#4ADE80', wickDownColor: '#F87171' })
-        : chart.addCandlestickSeries({ upColor: '#4ADE80', downColor: '#F87171', borderVisible: false, wickUpColor: '#4ADE80', wickDownColor: '#F87171' });
-      series.setData(data.map((c) => ({ time: c.time as any, open: c.open, high: c.high, low: c.low, close: c.close })));
-      chart.timeScale().fitContent();
-      const onResize = () => { if (ref.current) chart.applyOptions({ width: ref.current.clientWidth }); };
-      onResize();
-      window.addEventListener('resize', onResize);
-      (chart as any)._onResize = onResize;
+      try {
+        const lwc: any = await import('lightweight-charts');
+        if (disposed || !ref.current) return;
+        chart = lwc.createChart(ref.current, {
+          height: 300,
+          width: ref.current.clientWidth || undefined,
+          layout: { background: { color: 'transparent' }, textColor: '#aaa' },
+          grid: { vertLines: { color: 'rgba(255,255,255,0.04)' }, horzLines: { color: 'rgba(255,255,255,0.04)' } },
+          timeScale: { timeVisible: true, secondsVisible: false, borderColor: 'rgba(255,255,255,0.1)' },
+          rightPriceScale: { borderColor: 'rgba(255,255,255,0.1)' },
+          crosshair: { mode: 0 },
+        });
+        // lightweight-charts v5: addSeries(CandlestickSeries, opts); fall back to v4 API.
+        const opts = { upColor: '#4ADE80', downColor: '#F87171', borderVisible: false, wickUpColor: '#4ADE80', wickDownColor: '#F87171' };
+        const series = (chart.addSeries && lwc.CandlestickSeries)
+          ? chart.addSeries(lwc.CandlestickSeries, opts)
+          : chart.addCandlestickSeries(opts);
+        // Dedup + ascending by time (lightweight-charts throws otherwise).
+        const seen = new Set<number>();
+        const rows = data
+          .filter((c) => Number.isFinite(c.time) && Number.isFinite(c.open))
+          .sort((a, b) => a.time - b.time)
+          .filter((c) => (seen.has(c.time) ? false : (seen.add(c.time), true)))
+          .map((c) => ({ time: c.time as any, open: c.open, high: c.high, low: c.low, close: c.close }));
+        series.setData(rows);
+        chart.timeScale().fitContent();
+        const onResize = () => { if (ref.current && chart) chart.applyOptions({ width: ref.current.clientWidth }); };
+        onResize();
+        window.addEventListener('resize', onResize);
+        (chart as any)._onResize = onResize;
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn('[chart] render failed', e);
+      }
     })();
     return () => {
       disposed = true;

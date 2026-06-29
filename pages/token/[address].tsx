@@ -92,6 +92,23 @@ export default function TokenPage() {
   const remaining = monRaisedNet >= GRAD_TARGET ? 0n : GRAD_TARGET - monRaisedNet;
   const canGrad = monRaisedNet >= GRAD_TARGET && !graduated;
 
+  // The connected wallet's balance of this token (so we show "you hold X").
+  const balanceRead = useReadContract({
+    address: addr, abi: tokenAbi as any, functionName: 'balanceOf',
+    args: wallet ? [wallet] : undefined,
+    query: { enabled: !!addr && !!wallet, refetchInterval: 10000 },
+  });
+  const balance = (balanceRead.data as bigint) ?? 0n;
+
+  // After any buy/sell, immediately refresh curve state + balance (don't wait for
+  // the poll interval) and bump a nonce so the chart/trades reload right away.
+  const [tradeNonce, setTradeNonce] = useState(0);
+  const refreshAfterTrade = () => {
+    setTradeNonce((n) => n + 1);
+    state.refetch?.();
+    balanceRead.refetch?.();
+  };
+
   return (
     <div style={{ maxWidth: 760, margin: '0 auto', padding: 16, color: '#fff' }}>
       <Head>
@@ -133,22 +150,31 @@ export default function TokenPage() {
         </div>
       )}
 
-      <GraduationBar progress={progress} remaining={remaining} graduated={graduated} canGrad={canGrad} curve={curve} />
-      <TradePanel token={addr} curve={curve} symbol={symbol} reserves={reserves} graduated={graduated} tradeTax={tradeTax} />
-      <V3TokenActivity curve={curve} symbol={symbol} />
+      {wallet && balance > 0n && (
+        <div style={{ marginTop: 10, fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>
+          You hold <b style={{ color: '#fff' }}>{Number(formatEther(balance)).toLocaleString(undefined, { maximumFractionDigits: 2 })}</b> ${symbol}
+        </div>
+      )}
+      <GraduationBar progress={progress} remaining={remaining} graduated={graduated} canGrad={canGrad} curve={curve} onTraded={refreshAfterTrade} />
+      <TradePanel token={addr} curve={curve} symbol={symbol} reserves={reserves} graduated={graduated} tradeTax={tradeTax} balance={balance} onTraded={refreshAfterTrade} />
+      <V3TokenActivity curve={curve} symbol={symbol} refreshKey={tradeNonce} />
       <CreatorPanel curve={curve} creator={creator} wallet={wallet} graduated={graduated} />
     </div>
   );
 }
 
-function GraduationBar({ progress, remaining, graduated, canGrad, curve }: { progress: number; remaining: bigint; graduated: boolean; canGrad: boolean; curve?: Address }) {
+function GraduationBar({ progress, remaining, graduated, canGrad, curve, onTraded }: { progress: number; remaining: bigint; graduated: boolean; canGrad: boolean; curve?: Address; onTraded?: () => void }) {
   const { writeContractAsync } = useWriteContract();
   const [tx, setTx] = useState<TxState>({ status: 'idle' });
   if (graduated) return <div style={{ marginTop: 16, padding: 12, background: 'rgba(74,222,128,0.1)', border: '1px solid var(--ok, #4ADE80)', borderRadius: 8, color: 'var(--ok, #4ADE80)', fontSize: 13 }}>Graduated — trading on the DEX (WMON/token pool).</div>;
   async function doGrad() {
     if (!curve) return;
     setTx({ status: 'pending' });
-    try { const h = await writeContractAsync({ address: curve, abi: curveV3Abi as any, functionName: 'graduate', args: [] } as any); setTx({ status: 'pending', message: 'graduating... ' + h.slice(0, 10) }); }
+    try {
+      const h = await writeContractAsync({ address: curve, abi: curveV3Abi as any, functionName: 'graduate', args: [] } as any);
+      setTx({ status: 'pending', message: 'graduating... ' + h.slice(0, 10) });
+      setTimeout(() => onTraded?.(), 3000);
+    }
     catch (e: any) { setTx({ status: 'error', message: (e?.shortMessage || e?.message || 'error').slice(0, 70) }); }
   }
   return (
@@ -170,7 +196,7 @@ function GraduationBar({ progress, remaining, graduated, canGrad, curve }: { pro
   );
 }
 
-function TradePanel({ token, curve, symbol, reserves, graduated, tradeTax }: { token?: Address; curve?: Address; symbol: string; reserves: Reserves | null; graduated: boolean; tradeTax: bigint }) {
+function TradePanel({ token, curve, symbol, reserves, graduated, tradeTax, balance = 0n, onTraded }: { token?: Address; curve?: Address; symbol: string; reserves: Reserves | null; graduated: boolean; tradeTax: bigint; balance?: bigint; onTraded?: () => void }) {
   const { address } = useAccount();
   const [side, setSide] = useState<'buy' | 'sell'>('buy');
   const [amount, setAmount] = useState('');
@@ -179,7 +205,14 @@ function TradePanel({ token, curve, symbol, reserves, graduated, tradeTax }: { t
   const [tx, setTx] = useState<TxState>({ status: 'idle' });
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
   const { isSuccess } = useWaitForTransactionReceipt({ hash: txHash });
-  useEffect(() => { if (isSuccess) setTx({ status: 'success', message: 'confirmed' }); }, [isSuccess]);
+  useEffect(() => {
+    if (isSuccess) {
+      setTx({ status: 'success', message: 'confirmed' });
+      setAmount('');
+      onTraded?.(); // refresh curve state, balance, chart on the parent
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSuccess]);
 
   const sellAmountWei = useMemo(() => { try { return side === 'sell' && amount ? parseEther(amount) : 0n; } catch { return 0n; } }, [side, amount]);
   const allowanceRead = useReadContract({
@@ -248,7 +281,14 @@ function TradePanel({ token, curve, symbol, reserves, graduated, tradeTax }: { t
         <button onClick={() => setSide('buy')} style={{ flex: 1, padding: 8, background: side === 'buy' ? 'var(--ok, #4ADE80)' : 'rgba(255,255,255,0.04)', color: side === 'buy' ? '#000' : '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>BUY</button>
         <button onClick={() => setSide('sell')} style={{ flex: 1, padding: 8, background: side === 'sell' ? 'var(--err, #F87171)' : 'rgba(255,255,255,0.04)', color: side === 'sell' ? '#000' : '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>SELL</button>
       </div>
-      <label style={{ fontSize: 12, color: '#888' }}>Amount in {inLabel}</label>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <label style={{ fontSize: 12, color: '#888' }}>Amount in {inLabel}</label>
+        {side === 'sell' && balance > 0n && (
+          <button type="button" onClick={() => setAmount(formatEther(balance))} style={{ fontSize: 11, color: 'var(--brand,#A78BFA)', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}>
+            Hold: {Number(formatEther(balance)).toLocaleString(undefined, { maximumFractionDigits: 2 })} · Max
+          </button>
+        )}
+      </div>
       <input value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.0" inputMode="decimal" style={{ width: '100%', padding: 10, marginTop: 4, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 6, color: '#fff', fontSize: 16, boxSizing: 'border-box' }} />
       {preview != null && preview > 0n && (
         <div style={{ marginTop: 8, fontSize: 12, color: '#aaa' }}>
