@@ -1,11 +1,12 @@
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useAccount, useReadContract, useReadContracts, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseEther, formatEther, type Address } from 'viem';
 import { curveV3Abi, tokenAbi } from '@/lib/abis';
 import V3TokenActivity from '@/components/V3TokenActivity';
+import { getV3Trades, type V3Trade } from '@/lib/chainV3';
 import {
   MONAD_EXPLORER, V3_GRADUATION_TARGET_MON,
   V3_BUY_FEE_CREATOR_BPS, V3_BUY_FEE_BUFFER_BPS,
@@ -58,7 +59,7 @@ export default function TokenPage() {
   const symbol = (meta.data?.[1]?.result as string) || '';
 
   // Off-chain metadata (logo + socials + description) — same-origin, best-effort.
-  const [tokenMeta, setTokenMeta] = useState<{ image_url?: string; description?: string; twitter?: string; telegram?: string; website?: string } | null>(null);
+  const [tokenMeta, setTokenMeta] = useState<{ image_url?: string; description?: string; twitter?: string; telegram?: string; website?: string; created_at?: string } | null>(null);
   useEffect(() => {
     if (!addr) return;
     let cancelled = false;
@@ -109,56 +110,158 @@ export default function TokenPage() {
     balanceRead.refetch?.();
   };
 
+  // Page-level trades (shares the getV3Trades cache with the chart) → live stats.
+  const [pageTrades, setPageTrades] = useState<V3Trade[]>([]);
+  useEffect(() => {
+    if (!curve) return;
+    let cancelled = false;
+    const load = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      getV3Trades(curve).then((t) => { if (!cancelled) setPageTrades(t); }).catch(() => {});
+    };
+    load();
+    const id = setInterval(load, 20000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [curve, tradeNonce]);
+
+  const stats = useMemo(() => {
+    const vol = pageTrades.reduce((s, t) => s + (t.mon || 0), 0);
+    const buys = pageTrades.filter((t) => t.isBuy).length;
+    const sells = pageTrades.length - buys;
+    const traders = new Set(pageTrades.map((t) => (t.trader || '').toLowerCase())).size;
+    const priced = pageTrades.filter((t) => t.price > 0).sort((a, b) => a.time - b.time);
+    const change = priced.length > 1 ? ((priced[priced.length - 1].price - priced[0].price) / priced[0].price) * 100 : 0;
+    return { vol, txns: pageTrades.length, buys, sells, traders, change };
+  }, [pageTrades]);
+
+  // Spot price (MON per token) + market cap, from the live curve reserves.
+  const effMon = reserves ? reserves.vm + reserves.rm : 0n;
+  const effTok = reserves ? reserves.vt - (SUPPLY - reserves.rt) : 0n;
+  const priceMon = effMon > 0n && effTok > 0n ? Number(formatEther(effMon)) / Number(formatEther(effTok)) : 0;
+  const mcapMon = priceMon * 1_000_000_000;
+
   return (
-    <div style={{ maxWidth: 760, margin: '0 auto', padding: 16, color: '#fff' }}>
+    <div style={{ maxWidth: 1180, margin: '0 auto', padding: 16, color: '#fff' }}>
       <Head>
         <title>{`${name}${symbol ? ` (${symbol})` : ''} | Mon-Pad`}</title>
         <meta key="description" name="description" content={`Trade ${symbol || name} on Mon-Pad — native-MON bonding curve on Monad.`} />
         <link key="canonical" rel="canonical" href={`https://www.monpad.net/token/${addr}`} />
       </Head>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      {/* Header: logo, name, links/socials + price chips */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         {tokenMeta?.image_url && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={tokenMeta.image_url}
-            alt={symbol || name}
-            width={48}
-            height={48}
-            style={{ borderRadius: 10, objectFit: 'cover', flexShrink: 0, border: '1px solid rgba(255,255,255,0.1)' }}
-            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-          />
+          <img src={tokenMeta.image_url} alt={symbol || name} width={52} height={52} style={{ borderRadius: 12, objectFit: 'cover', flexShrink: 0, border: '1px solid rgba(255,255,255,0.1)' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
         )}
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-          <h1 style={{ margin: 0, fontSize: 24 }}>{name}</h1>
-          <span style={{ color: '#888' }}>${symbol}</span>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+            <h1 style={{ margin: 0, fontSize: 24 }}>{name}</h1>
+            <span style={{ color: '#888' }}>${symbol}</span>
+          </div>
+          <div style={{ fontSize: 12, color: '#888', marginTop: 2, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+            {creator && <span>by <Link href={`/profile/${creator}`} style={{ color: 'var(--brand, #A78BFA)' }}>{shortAddr(creator)}</Link></span>}
+            <a href={`${MONAD_EXPLORER}/address/${addr}`} target="_blank" rel="noreferrer" style={{ color: 'var(--brand, #A78BFA)' }}>contract</a>
+            {curve && <a href={`${MONAD_EXPLORER}/address/${curve}`} target="_blank" rel="noreferrer" style={{ color: 'var(--brand, #A78BFA)' }}>curve</a>}
+            {tokenMeta?.website && <a href={tokenMeta.website} target="_blank" rel="noreferrer" style={{ color: 'var(--brand, #A78BFA)' }}>web</a>}
+            {tokenMeta?.twitter && <a href={tokenMeta.twitter} target="_blank" rel="noreferrer" style={{ color: 'var(--brand, #A78BFA)' }}>x</a>}
+            {tokenMeta?.telegram && <a href={tokenMeta.telegram} target="_blank" rel="noreferrer" style={{ color: 'var(--brand, #A78BFA)' }}>tg</a>}
+          </div>
         </div>
-      </div>
-      <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
-        {creator && <>by <Link href={`/profile/${creator}`} style={{ color: 'var(--brand, #A78BFA)' }}>{shortAddr(creator)}</Link>{' · '}</>}
-        <a href={`${MONAD_EXPLORER}/address/${addr}`} target="_blank" rel="noreferrer" style={{ color: 'var(--brand, #A78BFA)' }}>contract</a>
-        {curve && <>{' · '}<a href={`${MONAD_EXPLORER}/address/${curve}`} target="_blank" rel="noreferrer" style={{ color: 'var(--brand, #A78BFA)' }}>curve</a></>}
+        <div style={{ flex: 1 }} />
+        <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
+          <HeaderStat label="Price" value={`${fmtNum(priceMon, 8)} MON`} />
+          <HeaderStat label="Market cap" value={`${fmtNum(mcapMon)} MON`} />
+          <HeaderStat label="Change" value={`${stats.change >= 0 ? '+' : ''}${stats.change.toFixed(1)}%`} color={stats.change > 0 ? '#4ADE80' : stats.change < 0 ? '#F87171' : undefined} />
+        </div>
       </div>
       {tokenMeta?.description && (
-        <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 8, lineHeight: 1.5 }}>{tokenMeta.description}</p>
-      )}
-      {(tokenMeta?.twitter || tokenMeta?.telegram || tokenMeta?.website) && (
-        <div style={{ display: 'flex', gap: 12, marginTop: 6, fontSize: 12 }}>
-          {tokenMeta.website && <a href={tokenMeta.website} target="_blank" rel="noreferrer" style={{ color: 'var(--brand, #A78BFA)' }}>Website</a>}
-          {tokenMeta.twitter && <a href={tokenMeta.twitter} target="_blank" rel="noreferrer" style={{ color: 'var(--brand, #A78BFA)' }}>Twitter</a>}
-          {tokenMeta.telegram && <a href={tokenMeta.telegram} target="_blank" rel="noreferrer" style={{ color: 'var(--brand, #A78BFA)' }}>Telegram</a>}
-        </div>
+        <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 10, lineHeight: 1.5 }}>{tokenMeta.description}</p>
       )}
 
-      {wallet && balance > 0n && (
-        <div style={{ marginTop: 10, fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>
-          You hold <b style={{ color: '#fff' }}>{Number(formatEther(balance)).toLocaleString(undefined, { maximumFractionDigits: 2 })}</b> ${symbol}
-        </div>
-      )}
-      <GraduationBar progress={progress} remaining={remaining} graduated={graduated} canGrad={canGrad} curve={curve} onTraded={refreshAfterTrade} />
-      <TradePanel token={addr} curve={curve} symbol={symbol} reserves={reserves} graduated={graduated} tradeTax={tradeTax} balance={balance} onTraded={refreshAfterTrade} />
-      <V3TokenActivity curve={curve} symbol={symbol} refreshKey={tradeNonce} />
-      <CreatorPanel curve={curve} creator={creator} wallet={wallet} graduated={graduated} />
+      {/* DEX-style: chart + trades on the left, trade panel + stats on the right */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4" style={{ marginTop: 16 }}>
+        <main className="lg:col-span-2" style={{ minWidth: 0 }}>
+          <V3TokenActivity curve={curve} symbol={symbol} refreshKey={tradeNonce} />
+        </main>
+        <aside style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <GraduationBar progress={progress} remaining={remaining} graduated={graduated} canGrad={canGrad} curve={curve} onTraded={refreshAfterTrade} />
+          <TradePanel token={addr} curve={curve} symbol={symbol} reserves={reserves} graduated={graduated} tradeTax={tradeTax} balance={balance} onTraded={refreshAfterTrade} />
+          {wallet && balance > 0n && (
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', padding: '0 2px' }}>
+              You hold <b style={{ color: '#fff' }}>{Number(formatEther(balance)).toLocaleString(undefined, { maximumFractionDigits: 2 })}</b> ${symbol}
+            </div>
+          )}
+          <StatsCard priceMon={priceMon} mcapMon={mcapMon} stats={stats} />
+          <CreatorPanel curve={curve} creator={creator} wallet={wallet} graduated={graduated} />
+          <OtherInfo addr={addr} curve={curve} creator={creator} createdAt={tokenMeta?.created_at} />
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+function fmtNum(n: number, maxFrac = 2): string {
+  if (!isFinite(n)) return '—';
+  if (n === 0) return '0';
+  const a = Math.abs(n);
+  if (a >= 1e9) return (n / 1e9).toFixed(2) + 'B';
+  if (a >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+  if (a >= 1e3) return (n / 1e3).toFixed(2) + 'K';
+  if (a < 0.0001) return n.toExponential(2);
+  return n.toLocaleString(undefined, { maximumFractionDigits: maxFrac });
+}
+
+function HeaderStat({ label, value, color }: { label: string; value: string; color?: string }) {
+  return (
+    <div style={{ textAlign: 'right' }}>
+      <div style={{ fontSize: 10, color: '#888', textTransform: 'uppercase', letterSpacing: 0.4 }}>{label}</div>
+      <div style={{ fontSize: 15, fontWeight: 700, color: color || '#fff' }}>{value}</div>
+    </div>
+  );
+}
+
+function StatTile({ label, value, color }: { label: string; value: string; color?: string }) {
+  return (
+    <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: '8px 10px' }}>
+      <div style={{ fontSize: 10, color: '#888', textTransform: 'uppercase', letterSpacing: 0.4 }}>{label}</div>
+      <div style={{ fontSize: 14, fontWeight: 700, color: color || '#fff', marginTop: 2 }}>{value}</div>
+    </div>
+  );
+}
+
+function StatsCard({ priceMon, mcapMon, stats }: { priceMon: number; mcapMon: number; stats: { vol: number; txns: number; buys: number; sells: number; traders: number; change: number } }) {
+  return (
+    <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 10, padding: 12 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Stats</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <StatTile label="Price" value={`${fmtNum(priceMon, 8)} MON`} />
+        <StatTile label="Market cap" value={`${fmtNum(mcapMon)} MON`} />
+        <StatTile label="Volume" value={`${fmtNum(stats.vol)} MON`} />
+        <StatTile label="Txns" value={String(stats.txns)} />
+        <StatTile label="Buys / Sells" value={`${stats.buys} / ${stats.sells}`} color={stats.buys >= stats.sells ? '#4ADE80' : '#F87171'} />
+        <StatTile label="Traders" value={String(stats.traders)} />
+      </div>
+    </div>
+  );
+}
+
+function OtherInfo({ addr, curve, creator, createdAt }: { addr?: Address; curve?: Address; creator?: Address; createdAt?: string }) {
+  const Row = ({ label, children }: { label: string; children: ReactNode }) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, padding: '4px 0' }}>
+      <span style={{ color: '#888' }}>{label}</span>
+      <span style={{ color: '#ddd', textAlign: 'right' }}>{children}</span>
+    </div>
+  );
+  let created = '';
+  if (createdAt) { try { created = new Date(createdAt).toLocaleDateString(); } catch { created = ''; } }
+  return (
+    <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 10, padding: 12 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>Other info</div>
+      {creator && <Row label="Creator"><Link href={`/profile/${creator}`} style={{ color: 'var(--brand,#A78BFA)' }}>{shortAddr(creator)}</Link></Row>}
+      {addr && <Row label="Contract"><a href={`${MONAD_EXPLORER}/address/${addr}`} target="_blank" rel="noreferrer" style={{ color: 'var(--brand,#A78BFA)' }}>{shortAddr(addr)}</a></Row>}
+      {curve && <Row label="Curve"><a href={`${MONAD_EXPLORER}/address/${curve}`} target="_blank" rel="noreferrer" style={{ color: 'var(--brand,#A78BFA)' }}>{shortAddr(curve)}</a></Row>}
+      {created && <Row label="Created">{created}</Row>}
     </div>
   );
 }
