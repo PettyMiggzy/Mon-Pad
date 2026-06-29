@@ -155,6 +155,14 @@ export type V3Trade = {
 
 export type Candle = { time: number; open: number; high: number; low: number; close: number };
 
+// ── getLogs window sizing ───────────────────────────────────────────────────
+// The RPC caps eth_getLogs to a 100-block range (returns -32614 / HTTP 413 above
+// that). So we scan in <=100-block chunks. After moving to a getLogs-friendly RPC,
+// widen these via env (NEXT_PUBLIC_GETLOGS_CHUNK / _LOOKBACK) — no code change.
+const LOGS_CHUNK = BigInt(process.env.NEXT_PUBLIC_GETLOGS_CHUNK || '99');           // blocks per getLogs call
+const LOGS_LOOKBACK = BigInt(process.env.NEXT_PUBLIC_GETLOGS_LOOKBACK || '2000');   // token-page chart/trades window
+const LOGS_CARD_LOOKBACK = BigInt(process.env.NEXT_PUBLIC_GETLOGS_CARD_LOOKBACK || '500'); // homepage cards (lighter)
+
 /**
  * Read recent Trade events for a curve. Scans a bounded window of recent blocks,
  * chunking the range so public RPCs that cap getLogs spans still work. Newest first.
@@ -162,7 +170,7 @@ export type Candle = { time: number; open: number; high: number; low: number; cl
 // 6s cache keyed by curve+window so the token page's stats + the chart/trades
 // component share a single RPC round instead of each scanning independently.
 const _tradesCache = new Map<string, { at: number; p: Promise<V3Trade[]> }>();
-export function getV3Trades(curve: Address, lookbackBlocks = 12_000n, chunk = 1_000n): Promise<V3Trade[]> {
+export function getV3Trades(curve: Address, lookbackBlocks = LOGS_LOOKBACK, chunk = LOGS_CHUNK): Promise<V3Trade[]> {
   const key = `${curve}:${lookbackBlocks}:${chunk}`;
   const now = Date.now();
   const hit = _tradesCache.get(key);
@@ -173,7 +181,7 @@ export function getV3Trades(curve: Address, lookbackBlocks = 12_000n, chunk = 1_
   return p;
 }
 
-async function _getV3Trades(curve: Address, lookbackBlocks = 12_000n, chunk = 1_000n): Promise<V3Trade[]> {
+async function _getV3Trades(curve: Address, lookbackBlocks = LOGS_LOOKBACK, chunk = LOGS_CHUNK): Promise<V3Trade[]> {
   if (!curve || curve === ('0x0000000000000000000000000000000000000000' as Address)) return [];
   let head: bigint;
   try { head = await publicClient.getBlockNumber(); } catch { return []; }
@@ -232,7 +240,7 @@ const TRANSFER_EVENT = parseAbiItem('event Transfer(address indexed from, addres
 const _holdersCache = new Map<string, { at: number; p: Promise<V3Holder[]> }>();
 
 /** Top holders of a token, computed from Transfer logs. Excludes zero/dead + `exclude` (e.g. the curve). */
-export function getV3Holders(token: Address, exclude: string[] = [], lookbackBlocks = 40_000n, chunk = 2_000n): Promise<V3Holder[]> {
+export function getV3Holders(token: Address, exclude: string[] = [], lookbackBlocks = LOGS_LOOKBACK, chunk = LOGS_CHUNK): Promise<V3Holder[]> {
   const key = `${(token || '').toLowerCase()}|${exclude.join(',')}`;
   const now = Date.now();
   const hit = _holdersCache.get(key);
@@ -278,7 +286,7 @@ async function _getV3Holders(token: Address, exclude: string[], lookbackBlocks: 
 /** Small recent-window scan → volume (MON) + a price sparkline for token cards. */
 export async function getV3CardStats(curve: Address): Promise<{ volMon: number; spark: number[] }> {
   try {
-    const trades = await getV3Trades(curve, 6_000n, 1_500n); // small window; cached
+    const trades = await getV3Trades(curve, LOGS_CARD_LOOKBACK, LOGS_CHUNK); // small window; cached
     const volMon = trades.reduce((s, t) => s + (t.mon || 0), 0);
     const priced = trades.filter((t) => t.price > 0).sort((a, b) => a.time - b.time).map((t) => t.price);
     let spark = priced;

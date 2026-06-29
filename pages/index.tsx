@@ -74,7 +74,7 @@ export default function Home() {
         // Enrich cards with volume + price sparkline (per-token recent trades; throttled + capped).
         try {
           const curveByAddr = new Map(rows.map((t) => [t.token.toLowerCase(), t.curve]));
-          const top = mapped.slice(0, 24); // cap so we don't hammer the RPC on big lists
+          const top = mapped.slice(0, 8); // cap so we don't hammer the RPC (getLogs is 100-block-capped)
           for (let i = 0; i < top.length && !cancelled; i += 5) {
             const batch = top.slice(i, i + 5);
             const results = await Promise.all(batch.map(async (t) => {
