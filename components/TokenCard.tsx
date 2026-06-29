@@ -187,6 +187,23 @@ export default function TokenCard({ token, index = 0 }: Props) {
           </div>
         </div>
 
+        {/* Creator */}
+        {token.creator && (
+          <div
+            style={{
+              fontSize: 10,
+              color: 'var(--fg-muted, rgba(255,255,255,0.45))',
+              marginTop: -4,
+              marginBottom: 8,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            by {token.creator.slice(0, 6)}…{token.creator.slice(-4)}
+          </div>
+        )}
+
         <Sparkline points={token.sparkline ?? []} />
       {/* Market cap + 24h volume */}
         <div
@@ -199,7 +216,7 @@ export default function TokenCard({ token, index = 0 }: Props) {
           }}
         >
           <span>MC</span>
-          <span style={{ color: 'var(--fg, #fff)', fontWeight: 500 }}>
+          <span style={{ color: '#4ADE80', fontWeight: 700 }}>
             {fmtMon(token.marketCapMon)} MON
           </span>
         </div>

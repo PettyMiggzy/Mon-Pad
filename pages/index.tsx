@@ -90,109 +90,60 @@ export default function Home() {
         <PromoBanner />
       </div>
 
-      {/* Hero strip */}
-      <section
+      {/* Compact app header — leads straight into the coin grid */}
+      <motion.section
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35 }}
         style={{
-          padding: '40px 16px',
-          maxWidth: 720,
+          maxWidth: 1280,
           margin: '0 auto',
-          textAlign: 'center',
+          padding: '16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          flexWrap: 'wrap',
         }}
       >
-        <motion.h1
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-          style={{
-            fontSize: 32,
-            fontWeight: 800,
-            color: 'var(--p1, #ECE9F8)',
-            lineHeight: 1.2,
-            margin: 0,
-          }}
-        >
-          Fair launch. Pure curve. Real money.
-        </motion.h1>
-        <motion.p
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.08 }}
-          style={{
-            marginTop: 12,
-            fontSize: 15,
-            color: 'var(--p2, rgba(220, 215, 240, 0.7))',
-          }}
-        >
-          500 MON to launch. 260k to graduate. Live on Monad.
-        </motion.p>
-
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.16 }}
-          style={{
-            marginTop: 24,
-            display: 'flex',
-            justifyContent: 'center',
-            gap: 12,
-            flexWrap: 'wrap',
-          }}
-        >
-          <Link
-            href="/create"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              padding: '10px 20px',
-              borderRadius: 8,
-              background: 'var(--brand, #8B5CF6)',
-              color: '#FFFFFF',
-              fontWeight: 700,
-              fontSize: 14,
-              textDecoration: 'none',
-              border: '1px solid var(--brand, #8B5CF6)',
-            }}
-          >
-            Launch a token
-          </Link>
+        <div style={{ minWidth: 0 }}>
+          <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--p1, #ECE9F8)', margin: 0, lineHeight: 1.2 }}>
+            Launch a coin on Monad
+          </h1>
+          <p style={{ marginTop: 4, fontSize: 13, color: 'var(--p2, rgba(220, 215, 240, 0.65))' }}>
+            Fair curve · 500 MON to start · liquidity locked at graduation
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
           <button
             type="button"
             onClick={scrollToGrid}
             style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              padding: '10px 20px',
-              borderRadius: 8,
-              background: 'transparent',
-              color: 'var(--brand, #8B5CF6)',
-              fontWeight: 700,
-              fontSize: 14,
-              border: '1px solid var(--brand, #8B5CF6)',
-              cursor: 'pointer',
+              display: 'inline-flex', alignItems: 'center', padding: '10px 16px', borderRadius: 10,
+              background: 'transparent', color: 'var(--brand, #8B5CF6)', fontWeight: 700, fontSize: 14,
+              border: '1px solid var(--bd, rgba(139, 92, 246, 0.3))', cursor: 'pointer',
             }}
           >
-            Explore tokens
+            Explore
           </button>
-        </motion.div>
+          <Link
+            href="/create"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 18px', borderRadius: 10,
+              background: 'var(--brand, #8B5CF6)', color: '#fff', fontWeight: 700, fontSize: 14,
+              textDecoration: 'none', boxShadow: '0 0 20px rgba(139, 92, 246, 0.35)',
+            }}
+          >
+            + Create coin
+          </Link>
+        </div>
 
         {!configured && (
-          <div
-            style={{
-              marginTop: 20,
-              padding: '8px 12px',
-              borderRadius: 8,
-              border: '1px solid var(--bd, rgba(139, 92, 246, 0.15))',
-              background: 'var(--bg-card, rgba(28, 24, 56, 0.6))',
-              color: 'var(--p2, rgba(220, 215, 240, 0.7))',
-              fontSize: 12,
-              textAlign: 'left',
-            }}
-          >
-            ⚠️ Contract addresses not configured. Set NEXT_PUBLIC_FACTORY_V2,
-            NEXT_PUBLIC_HUB, NEXT_PUBLIC_POOL_FACTORY, NEXT_PUBLIC_GRADUATOR in .env.local.
+          <div style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--bd, rgba(139, 92, 246, 0.15))', background: 'var(--bg-card, rgba(28, 24, 56, 0.6))', color: 'var(--p2, rgba(220, 215, 240, 0.7))', fontSize: 12 }}>
+            ⚠️ Contracts not configured — set NEXT_PUBLIC_FACTORY_V3 / NEXT_PUBLIC_GRADUATOR_V3.
           </div>
         )}
-      </section>
+      </motion.section>
 
       {/* Sticky filter tabs */}
       <div
