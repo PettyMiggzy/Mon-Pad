@@ -1,4 +1,4 @@
-import { MOCK_MODE, SERVER_URL, INDEXER_URL } from './constants';
+import { MOCK_MODE, SERVER_URL } from './constants';
 import * as mocks from './mocks';
 
 export type TokenSummary = {
@@ -166,10 +166,23 @@ export const api = {
         reader.readAsDataURL(file);
       });
     }
-    const form = new FormData();
-    form.append('file', file);
-    const res = await fetch(`${INDEXER_URL}/api/upload`, { method: 'POST', body: form });
-    if (!res.ok) throw new Error('Upload failed');
+    // Read as a base64 data URL and POST it to our OWN same-origin API route
+    // (/api/upload → Supabase Storage). No dependency on an external backend.
+    const dataUrl: string = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error('could not read file'));
+      reader.readAsDataURL(file);
+    });
+    const res = await fetch('/api/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dataUrl, type: file.type }),
+    });
+    if (!res.ok) {
+      const msg = await res.json().catch(() => ({} as { error?: string }));
+      throw new Error(msg?.error || 'Upload failed');
+    }
     return res.json();
   },
 };
