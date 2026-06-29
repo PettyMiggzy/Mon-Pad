@@ -56,6 +56,20 @@ export default function Home() {
         }));
         setTokens(mapped);
         setLoading(false);
+
+        // Enrich cards with off-chain logos (same-origin Supabase-backed route; best-effort).
+        try {
+          const addrs = mapped.map((t) => t.address).join(',');
+          if (addrs) {
+            const metas = await fetch(`/api/token-meta?addresses=${addrs}`).then((r) => (r.ok ? r.json() : []));
+            if (!cancelled && Array.isArray(metas) && metas.length) {
+              const byAddr = new Map<string, string>(
+                metas.filter((m: any) => m?.image_url).map((m: any) => [String(m.address).toLowerCase(), m.image_url as string]),
+              );
+              if (byAddr.size) setTokens((prev) => prev.map((t) => ({ ...t, imageUrl: byAddr.get(t.address.toLowerCase()) || t.imageUrl })));
+            }
+          }
+        } catch { /* logos are optional */ }
       } catch {
         if (cancelled) return;
         setTokens([]);

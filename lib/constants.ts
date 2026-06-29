@@ -112,7 +112,10 @@ export const DEAD_ADDRESS = '0x000000000000000000000000000000000000dEaD' as cons
 
 // --- Backend (monpad-server) ---------------------------------------------
 export const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL || '';
-export const INDEXER_URL = process.env.NEXT_PUBLIC_INDEXER_URL || SERVER_URL;
+// INDEXER_URL is intentionally NOT a fallback to SERVER_URL: the live-ticker /
+// token poll only runs against a dedicated indexer. Without one set, the app
+// reads everything on-chain and the ticker stays quiet (no 404 spam).
+export const INDEXER_URL = process.env.NEXT_PUBLIC_INDEXER_URL || '';
 export const MOCK_MODE = process.env.NEXT_PUBLIC_MOCK_MODE === '1';
 
 // --- Bonding curve constants (mirrors MonPadCurveV2.sol lines 142-144) ---
