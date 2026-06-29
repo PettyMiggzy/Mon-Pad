@@ -14,7 +14,11 @@ const monadChain = {
   rpcUrls: { default: { http: [MONAD_RPC_URL] } },
 } as const;
 
-export const publicClient = createPublicClient({ chain: monadChain, transport: http(MONAD_RPC_URL) });
+// retryCount: 1 so a rejected request (e.g. a provider 413/429) doesn't retry-storm.
+export const publicClient = createPublicClient({
+  chain: monadChain,
+  transport: http(MONAD_RPC_URL, { retryCount: 1, timeout: 12_000 }),
+});
 
 // Loose wrappers — the V3 ABIs are imported JSON; bypass viem's heavy ABI generics.
 const read = (p: any): Promise<any> => (publicClient.readContract as any)(p);
@@ -64,7 +68,19 @@ export async function getCurveState(curve: Address) {
 }
 
 /** Newest-first list of V3 launches read straight from the factory. */
-export async function listV3Tokens(limit = 60): Promise<V3Token[]> {
+// Short TTL cache so the homepage (grid + 3 rails) collapses its 4 concurrent
+// calls into one RPC round instead of hammering the endpoint (avoids 429/413).
+let _listCache: { limit: number; at: number; p: Promise<V3Token[]> } | null = null;
+export function listV3Tokens(limit = 60): Promise<V3Token[]> {
+  const now = Date.now();
+  if (_listCache && _listCache.limit === limit && now - _listCache.at < 6000) return _listCache.p;
+  const p = _listV3Tokens(limit);
+  _listCache = { limit, at: now, p };
+  p.catch(() => { if (_listCache && _listCache.p === p) _listCache = null; }); // don't cache failures
+  return p;
+}
+
+async function _listV3Tokens(limit = 60): Promise<V3Token[]> {
   if (FACTORY_V3 === ('0x0000000000000000000000000000000000000000' as Address)) return [];
   const counts = (await read({ address: FACTORY_V3, abi: factoryV3Abi, functionName: 'allCounts' })) as readonly [bigint, bigint];
   const n = Number(counts[0]);
@@ -140,7 +156,7 @@ export type Candle = { time: number; open: number; high: number; low: number; cl
  * Read recent Trade events for a curve. Scans a bounded window of recent blocks,
  * chunking the range so public RPCs that cap getLogs spans still work. Newest first.
  */
-export async function getV3Trades(curve: Address, lookbackBlocks = 200_000n, chunk = 9_000n): Promise<V3Trade[]> {
+export async function getV3Trades(curve: Address, lookbackBlocks = 12_000n, chunk = 1_000n): Promise<V3Trade[]> {
   if (!curve || curve === ('0x0000000000000000000000000000000000000000' as Address)) return [];
   let head: bigint;
   try { head = await publicClient.getBlockNumber(); } catch { return []; }

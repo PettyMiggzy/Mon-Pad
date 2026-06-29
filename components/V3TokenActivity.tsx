@@ -40,13 +40,15 @@ export default function V3TokenActivity({ curve, symbol }: { curve?: Address; sy
     let cancelled = false;
     let timer: any;
     const load = async () => {
+      // Skip polling while the tab is hidden — no point hammering the RPC in the background.
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
       try {
         const t = await getV3Trades(curve);
         if (!cancelled) { setTrades(t); setLoading(false); }
       } catch { if (!cancelled) setLoading(false); }
     };
     load();
-    timer = setInterval(load, 12000); // poll for fresh trades
+    timer = setInterval(load, 20000); // poll for fresh trades (paused when tab hidden)
     return () => { cancelled = true; clearInterval(timer); };
   }, [curve]);
 
