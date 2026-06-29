@@ -90,7 +90,7 @@ function Candles({ data }: { data: { time: number; open: number; high: number; l
         const lwc: any = await import('lightweight-charts');
         if (disposed || !ref.current) return;
         chart = lwc.createChart(ref.current, {
-          height: 300,
+          height: 360,
           width: ref.current.clientWidth || undefined,
           layout: { background: { color: 'transparent' }, textColor: '#aaa' },
           grid: { vertLines: { color: 'rgba(255,255,255,0.04)' }, horzLines: { color: 'rgba(255,255,255,0.04)' } },
@@ -126,7 +126,7 @@ function Candles({ data }: { data: { time: number; open: number; high: number; l
       if (chart) { try { window.removeEventListener('resize', (chart as any)._onResize); chart.remove(); } catch {} }
     };
   }, [data]);
-  return <div ref={ref} style={{ width: '100%', height: 300 }} />;
+  return <div ref={ref} style={{ width: '100%', height: 360 }} />;
 }
 
 function TradesList({ trades, symbol }: { trades: V3Trade[]; symbol?: string }) {
