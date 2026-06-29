@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import Link from 'next/link';
 import type { TokenSummary } from '../lib/api';
 import TokenCard from './TokenCard';
 
@@ -38,13 +39,30 @@ export default function TokenGrid({ tokens, loading = false, emptyMessage }: Pro
         animate={{ opacity: 1 }}
         transition={{ duration: 0.3 }}
         style={{
-          padding: '80px 24px',
+          padding: '64px 24px',
           textAlign: 'center',
-          color: 'var(--p2, rgba(220, 215, 240, 0.5))',
-          fontSize: 14,
+          border: '1px dashed var(--bd, rgba(139, 92, 246, 0.25))',
+          borderRadius: 16,
+          background: 'var(--bg-card, rgba(28, 24, 56, 0.4))',
         }}
       >
-        {emptyMessage ?? 'No tokens yet — be the first to launch.'}
+        <div style={{ fontSize: 40, marginBottom: 12 }}>🪙</div>
+        <div style={{ color: 'var(--p1, #ECE9F8)', fontSize: 16, fontWeight: 700, marginBottom: 6 }}>
+          {emptyMessage ?? 'No coins yet'}
+        </div>
+        <div style={{ color: 'var(--p2, rgba(220, 215, 240, 0.6))', fontSize: 13, marginBottom: 18 }}>
+          Be the first to launch on Mon-Pad.
+        </div>
+        <Link
+          href="/create"
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 20px', borderRadius: 10,
+            background: 'var(--brand, #8B5CF6)', color: '#fff', fontWeight: 700, fontSize: 14,
+            textDecoration: 'none', boxShadow: '0 0 20px rgba(139, 92, 246, 0.35)',
+          }}
+        >
+          + Create coin
+        </Link>
       </motion.div>
     );
   }
