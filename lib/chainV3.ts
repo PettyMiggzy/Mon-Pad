@@ -223,3 +223,69 @@ export function tradesToCandles(trades: V3Trade[], tfSeconds = 300): Candle[] {
   }
   return Array.from(buckets.values()).sort((a, b) => a.time - b.time);
 }
+
+// ─── Holders (derived from the token's Transfer logs; no indexer) ────────────
+export type V3Holder = { address: string; balance: string; pct: number };
+const _ZERO = '0x0000000000000000000000000000000000000000';
+const _DEAD = '0x000000000000000000000000000000000000dead';
+const TRANSFER_EVENT = parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 value)');
+const _holdersCache = new Map<string, { at: number; p: Promise<V3Holder[]> }>();
+
+/** Top holders of a token, computed from Transfer logs. Excludes zero/dead + `exclude` (e.g. the curve). */
+export function getV3Holders(token: Address, exclude: string[] = [], lookbackBlocks = 40_000n, chunk = 2_000n): Promise<V3Holder[]> {
+  const key = `${(token || '').toLowerCase()}|${exclude.join(',')}`;
+  const now = Date.now();
+  const hit = _holdersCache.get(key);
+  if (hit && now - hit.at < 30_000) return hit.p;
+  const p = _getV3Holders(token, exclude, lookbackBlocks, chunk);
+  _holdersCache.set(key, { at: now, p });
+  p.catch(() => { if (_holdersCache.get(key)?.p === p) _holdersCache.delete(key); });
+  return p;
+}
+
+async function _getV3Holders(token: Address, exclude: string[], lookbackBlocks: bigint, chunk: bigint): Promise<V3Holder[]> {
+  if (!token || token === (_ZERO as Address)) return [];
+  let head: bigint;
+  try { head = await publicClient.getBlockNumber(); } catch { return []; }
+  const from = head > lookbackBlocks ? head - lookbackBlocks : 0n;
+  const bal = new Map<string, bigint>();
+  for (let start = head; start >= from; start -= chunk + 1n) {
+    const end = start;
+    const begin = start > chunk ? start - chunk : 0n;
+    let logs: any[] = [];
+    try { logs = (await (publicClient.getLogs as any)({ address: token, event: TRANSFER_EVENT, fromBlock: begin, toBlock: end })) as any[]; }
+    catch { if (begin === 0n) break; continue; }
+    for (const lg of logs) {
+      const a = lg.args || {};
+      const v = (a.value as bigint) ?? 0n;
+      const f = ((a.from as string) || '').toLowerCase();
+      const t = ((a.to as string) || '').toLowerCase();
+      if (f && f !== _ZERO) bal.set(f, (bal.get(f) ?? 0n) - v);
+      if (t && t !== _ZERO) bal.set(t, (bal.get(t) ?? 0n) + v);
+    }
+    if (begin === 0n) break;
+  }
+  const excl = new Set([_ZERO, _DEAD, ...exclude.map((e) => (e || '').toLowerCase())].filter(Boolean));
+  const SUPPLY = 1_000_000_000n * 10n ** 18n;
+  return [...bal.entries()]
+    .filter(([a, v]) => v > 0n && !excl.has(a))
+    .sort((x, y) => (y[1] > x[1] ? 1 : y[1] < x[1] ? -1 : 0))
+    .slice(0, 50)
+    .map(([a, v]) => ({ address: a, balance: v.toString(), pct: Number((v * 10000n) / SUPPLY) / 100 }));
+}
+
+// ─── Lightweight per-card stats (volume + sparkline) for the homepage ────────
+/** Small recent-window scan → volume (MON) + a price sparkline for token cards. */
+export async function getV3CardStats(curve: Address): Promise<{ volMon: number; spark: number[] }> {
+  try {
+    const trades = await getV3Trades(curve, 6_000n, 1_500n); // small window; cached
+    const volMon = trades.reduce((s, t) => s + (t.mon || 0), 0);
+    const priced = trades.filter((t) => t.price > 0).sort((a, b) => a.time - b.time).map((t) => t.price);
+    let spark = priced;
+    if (priced.length > 20) {
+      const step = priced.length / 20;
+      spark = Array.from({ length: 20 }, (_, i) => priced[Math.floor(i * step)]);
+    }
+    return { volMon, spark };
+  } catch { return { volMon: 0, spark: [] }; }
+}

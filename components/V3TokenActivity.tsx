@@ -5,7 +5,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Address } from 'viem';
-import { getV3Trades, tradesToCandles, type V3Trade } from '@/lib/chainV3';
+import { getV3Trades, tradesToCandles, getV3Holders, type V3Trade, type V3Holder } from '@/lib/chainV3';
 import { MONAD_EXPLORER } from '@/lib/constants';
 
 const TIMEFRAMES: { label: string; sec: number }[] = [
@@ -29,11 +29,23 @@ function fmt(n: number, max = 4): string {
   return n.toLocaleString(undefined, { maximumFractionDigits: max });
 }
 
-export default function V3TokenActivity({ curve, symbol, refreshKey }: { curve?: Address; symbol?: string; refreshKey?: number }) {
+export default function V3TokenActivity({ curve, symbol, token, refreshKey }: { curve?: Address; symbol?: string; token?: Address; refreshKey?: number }) {
   const [trades, setTrades] = useState<V3Trade[]>([]);
   const [loading, setLoading] = useState(true);
   const [tf, setTf] = useState(300);
-  const [tab, setTab] = useState<'chart' | 'trades'>('chart');
+  const [tab, setTab] = useState<'chart' | 'trades' | 'holders'>('chart');
+  const [holders, setHolders] = useState<V3Holder[] | null>(null);
+
+  // Lazy-load holders only when the tab is opened (the scan is heavier).
+  useEffect(() => {
+    if (tab !== 'holders' || !token) return;
+    let cancelled = false;
+    setHolders(null);
+    getV3Holders(token, curve ? [curve] : [])
+      .then((h) => { if (!cancelled) setHolders(h); })
+      .catch(() => { if (!cancelled) setHolders([]); });
+    return () => { cancelled = true; };
+  }, [tab, token, curve, refreshKey]);
 
   useEffect(() => {
     if (!curve) return;
@@ -60,13 +72,16 @@ export default function V3TokenActivity({ curve, symbol, refreshKey }: { curve?:
       <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
         <button onClick={() => setTab('chart')} style={tabStyle(tab === 'chart')}>Chart</button>
         <button onClick={() => setTab('trades')} style={tabStyle(tab === 'trades')}>Trades{trades.length ? ` (${trades.length})` : ''}</button>
+        {token && <button onClick={() => setTab('holders')} style={tabStyle(tab === 'holders')}>Holders{holders ? ` (${holders.length})` : ''}</button>}
         <div style={{ flex: 1 }} />
         {tab === 'chart' && TIMEFRAMES.map((f) => (
           <button key={f.sec} onClick={() => setTf(f.sec)} style={tfStyle(tf === f.sec)}>{f.label}</button>
         ))}
       </div>
 
-      {loading ? (
+      {tab === 'holders' ? (
+        <HoldersList holders={holders} symbol={symbol} />
+      ) : loading ? (
         <div style={{ padding: 32, textAlign: 'center', color: '#888', fontSize: 13 }}>Loading on-chain activity…</div>
       ) : trades.length === 0 ? (
         <div style={{ padding: 32, textAlign: 'center', color: '#888', fontSize: 13 }}>No trades yet — be the first.</div>
@@ -143,6 +158,27 @@ function TradesList({ trades, symbol }: { trades: V3Trade[]; symbol?: string }) 
           <span>{fmt(t.tokens, 0)}</span>
           <span style={{ color: '#888' }}>{shortAddr(t.trader)}</span>
           <span style={{ color: '#666' }}>{ago(t.time)}</span>
+        </a>
+      ))}
+    </div>
+  );
+}
+
+function HoldersList({ holders, symbol }: { holders: V3Holder[] | null; symbol?: string }) {
+  if (holders === null) return <div style={{ padding: 32, textAlign: 'center', color: '#888', fontSize: 13 }}>Loading holders…</div>;
+  if (holders.length === 0) return <div style={{ padding: 32, textAlign: 'center', color: '#888', fontSize: 13 }}>No holders yet.</div>;
+  return (
+    <div style={{ maxHeight: 340, overflowY: 'auto' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '36px 1fr 90px 70px', gap: 8, fontSize: 11, color: '#666', padding: '4px 6px', position: 'sticky', top: 0, background: '#16121f' }}>
+        <span>#</span><span>Holder</span><span style={{ textAlign: 'right' }}>{symbol || 'Tokens'}</span><span style={{ textAlign: 'right' }}>%</span>
+      </div>
+      {holders.map((h, i) => (
+        <a key={h.address} href={`${MONAD_EXPLORER}/address/${h.address}`} target="_blank" rel="noreferrer"
+           style={{ display: 'grid', gridTemplateColumns: '36px 1fr 90px 70px', gap: 8, fontSize: 12, padding: '6px', textDecoration: 'none', color: '#ddd', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+          <span style={{ color: '#666' }}>{i + 1}</span>
+          <span style={{ color: '#888' }}>{shortAddr(h.address)}</span>
+          <span style={{ textAlign: 'right' }}>{fmt(Number(h.balance) / 1e18, 0)}</span>
+          <span style={{ textAlign: 'right', color: 'var(--brand,#A78BFA)' }}>{h.pct.toFixed(2)}%</span>
         </a>
       ))}
     </div>

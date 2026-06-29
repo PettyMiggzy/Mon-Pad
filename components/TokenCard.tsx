@@ -229,7 +229,7 @@ export default function TokenCard({ token, index = 0 }: Props) {
             marginBottom: 8,
           }}
         >
-          <span>24h Vol</span>
+          <span>Volume</span>
           <span style={{ color: 'var(--fg, #fff)', fontWeight: 500 }}>
             {fmtMon(token.volume24hMon)} MON
           </span>
