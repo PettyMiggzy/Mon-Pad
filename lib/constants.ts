@@ -135,5 +135,9 @@ export const CURVE = {
   CREATOR_GRADUATION_REWARD: CREATOR_GRADUATION_REWARD_MON * 10n ** 18n,
 } as const;
 
+// Monorail aggregator (keyless — the public pathfinder/api endpoints need no key).
+// `source` is NOT auth: it's the Chogi App ID revenue tag. Every swap routed with
+// it accrues the 1% partner fee (100% to the Chogi treasury). Pass it on quotes.
 export const MONORAIL_API = process.env.NEXT_PUBLIC_MONORAIL_API || 'https://pathfinder.monorail.xyz';
-export const MONORAIL_PARTNER_ID = process.env.NEXT_PUBLIC_MONORAIL_PARTNER_ID || '1176408161626';
+export const MONORAIL_DATA_API = process.env.NEXT_PUBLIC_MONORAIL_DATA_API || 'https://api.monorail.xyz';
+export const MONORAIL_PARTNER_ID = process.env.NEXT_PUBLIC_MONORAIL_PARTNER_ID || '1176408161625'; // Chogi App ID

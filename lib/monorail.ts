@@ -74,7 +74,7 @@ export async function getMonorailQuote(
     from: params.fromAddress,
     to: params.toAddress,
     slippage: String(params.slippageBps),
-    deadline: String(params.deadlineSec ?? 180),
+    deadline: String(params.deadlineSec ?? 300),
     sender: params.sender,
     ...(MONORAIL_PARTNER_ID ? { source: MONORAIL_PARTNER_ID } : {}),
   });
@@ -84,8 +84,12 @@ export async function getMonorailQuote(
   if (!res.ok) {
     throw new Error(`Monorail quote http ${res.status}`);
   }
-  const data = (await res.json()) as MonorailQuote;
+  const data = (await res.json()) as MonorailQuote & { message?: string };
+  // The pathfinder returns 200 with a `message` (e.g. "no valid routes found")
+  // instead of a transaction when it can't route — surface it rather than a
+  // silent null so the UI can explain why.
   if (!data?.transaction?.to || !data?.transaction?.data) {
+    if (data?.message) throw new Error(data.message);
     return null;
   }
   return data;

@@ -9,6 +9,7 @@ import { ZERO_ADDRESS, MONORAIL_API, WMON, FACTORY_V3 } from '@/lib/constants';
 import { api } from '@/lib/api';
 import { curveV3Abi, factoryV3Abi, tokenAbi } from '@/lib/abis';
 import { getMonorailQuote, toExecutable, quoteSummary, type MonorailQuote } from '@/lib/monorail';
+import { publicClient } from '@/lib/chainV3';
 import {
   previewBuy, previewSell, applySlippage,
   preflightBuy, preflightSell, needsApprove, MAX_UINT256,
@@ -19,6 +20,16 @@ import Head from 'next/head';
 import { useRouter } from 'next/router';
 
 type TxState = { status: 'idle' | 'pending' | 'success' | 'error'; message?: string };
+
+// Minimal WMON (canonical wrapped-native) ABI: deposit to wrap, plus the ERC20
+// bits we need to let the Monorail router pull WMON via transferFrom.
+const WMON_ABI = [
+  { type: 'function', name: 'deposit', stateMutability: 'payable', inputs: [], outputs: [] },
+  { type: 'function', name: 'approve', stateMutability: 'nonpayable', inputs: [{ name: 'spender', type: 'address' }, { name: 'amount', type: 'uint256' }], outputs: [{ type: 'bool' }] },
+  { type: 'function', name: 'allowance', stateMutability: 'view', inputs: [{ name: 'owner', type: 'address' }, { name: 'spender', type: 'address' }], outputs: [{ type: 'uint256' }] },
+] as const;
+
+const isNativeAddr = (a: string) => a.toLowerCase() === ZERO_ADDRESS.toLowerCase();
 
 function StatusPill({ state }: { state: TxState }) {
   if (state.status === 'idle') return null;
@@ -353,9 +364,56 @@ export default function SwapPage() {
         }
         setTx({ status: 'pending', message: 'confirming...' });
       } else {
-        // monorail
-        if (!mQuote) throw new Error('no quote');
-        const exec = toExecutable(mQuote);
+        // ── Monorail aggregator ────────────────────────────────────────────
+        // Always re-quote fresh at submit time: the displayed quote can be up to
+        // a few seconds old, and a stale min_output is what trips the router's
+        // SlippageExceeded() revert.
+        const sender = address as `0x${string}`;
+        const amtIn = parseUnits(amountIn, from.decimals);
+        let q = await getMonorailQuote({
+          fromAddress: from.address, toAddress: to.address,
+          amount: amountIn, slippageBps, sender,
+        });
+        if (!q) throw new Error('no route');
+
+        let swapFrom = from.address;
+
+        // Native-MON multi-hop routes revert inside the router's native handling.
+        // Wrap MON→WMON first, then route from WMON (ERC20) — the Chogi fix.
+        if (isNativeAddr(from.address) && (q.hops ?? 1) > 1) {
+          setTx({ status: 'pending', message: 'wrapping MON…' });
+          const wrapHash = await writeContractAsync({
+            address: WMON as Address, abi: WMON_ABI, functionName: 'deposit', value: amtIn,
+          } as any);
+          setTxHash(wrapHash);
+          await publicClient.waitForTransactionReceipt({ hash: wrapHash });
+          q = await getMonorailQuote({
+            fromAddress: WMON, toAddress: to.address,
+            amount: amountIn, slippageBps, sender,
+          });
+          if (!q) throw new Error('no route after wrap');
+          swapFrom = WMON;
+        }
+
+        // ERC20 input (a real token, or WMON after wrapping) must approve the
+        // router before it can pull funds. Native MON skips this.
+        const router = q.transaction.to;
+        if (!isNativeAddr(swapFrom)) {
+          const current = (await publicClient.readContract({
+            address: swapFrom as Address, abi: WMON_ABI, functionName: 'allowance', args: [sender, router],
+          })) as bigint;
+          if (current < amtIn) {
+            setTx({ status: 'pending', message: `approving ${swapFrom === WMON ? 'WMON' : from.symbol}…` });
+            const apHash = await writeContractAsync({
+              address: swapFrom as Address, abi: WMON_ABI, functionName: 'approve', args: [router, MAX_UINT256],
+            } as any);
+            setTxHash(apHash);
+            await publicClient.waitForTransactionReceipt({ hash: apHash });
+          }
+        }
+
+        setTx({ status: 'pending', message: 'swapping…' });
+        const exec = toExecutable(q);
         const hash = await sendTransactionAsync({ to: exec.to, data: exec.data, value: exec.value });
         setTxHash(hash);
         setTx({ status: 'pending', message: 'confirming...' });
