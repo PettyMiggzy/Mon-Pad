@@ -4,12 +4,12 @@
   "chainId": "143",
   "deployer": "0xbbDB9561c981E72290EF5d138d781C14A825fAd5",
   "addresses": {
-    "factory": "0x38e4056Db9BB7b3e499A3C6Ec8c5D6C69409458D",
-    "graduator": "0xa858791D36C4c911F483E60af31f1480F6fAe292",
-    "curveImpl": "0xE78460e9770D3Cb1D5fEC3ec6E24891c38AE2936",
-    "tokenImpl": "0x9C97c5648D9C6387845857bC673e805D8eDAc1C1",
+    "factory": "0xf19C4BA8Ea9DAAbdd7BCfE4Ea1e42fED880ca928",
+    "graduator": "0x655C975a6ae34Ac07005d7D541dc06E716e363dC",
+    "curveImpl": "0x8a3B9a9f5f4e194B66Edf794De8dc022d5a41739",
+    "tokenImpl": "0xb66bB3700b9eb955c069ddB7E5d9a7A162fccF26",
     "wmon": "0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A",
-    "npm": "0xa9f6B6656e32F223d778b01642F32D00F5310526",
+    "npm": "0x7197e214c0b767cfb76fb734ab638e2c192f4e53",
     "monshi": "0xB744F5CDb792d8187640214C4A1c9aCE29af7777"
   },
   "config": {
