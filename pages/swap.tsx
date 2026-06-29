@@ -5,9 +5,9 @@ import { ArrowDownUp, ChevronDown, RefreshCw } from 'lucide-react';
 import TokenPicker from '@/components/TokenPicker';
 import type { TokenOption } from '@/components/TokenPicker';
 import { parseEther, parseUnits, formatUnits, type Address } from 'viem';
-import { CONTRACTS, ZERO_ADDRESS, MONORAIL_API, WMON } from '@/lib/constants';
+import { ZERO_ADDRESS, MONORAIL_API, WMON, FACTORY_V3 } from '@/lib/constants';
 import { api } from '@/lib/api';
-import { curveAbi, factoryAbi, tokenAbi } from '@/lib/abis';
+import { curveV3Abi, factoryV3Abi, tokenAbi } from '@/lib/abis';
 import { getMonorailQuote, toExecutable, quoteSummary, type MonorailQuote } from '@/lib/monorail';
 import {
   previewBuy, previewSell, applySlippage,
@@ -130,16 +130,16 @@ export default function SwapPage() {
   const crossCurve = useMemo(() => checkCrossCurve(from, to), [from, to]);
 
   // ----- Factory reads (cached at mount, refreshed every 5 min) -----
-  const factoryAddr = CONTRACTS.factoryV2 as Address;
+  const factoryAddr = FACTORY_V3 as Address;
   const factoryReads = (useReadContracts as any)({
     contracts: (factoryAddr !== ZERO_ADDRESS ? [
-      { address: factoryAddr, abi: factoryAbi as any, functionName: 'buyFeeCreatorBps' },
-      { address: factoryAddr, abi: factoryAbi as any, functionName: 'buyFeeBufferBps' },
-      { address: factoryAddr, abi: factoryAbi as any, functionName: 'sellFeeCreatorBps' },
-      { address: factoryAddr, abi: factoryAbi as any, functionName: 'sellFeeStakingBps' },
-      { address: factoryAddr, abi: factoryAbi as any, functionName: 'sellFeePlatformBps' },
-      { address: factoryAddr, abi: factoryAbi as any, functionName: 'pauseAllBuys' },
-      { address: factoryAddr, abi: factoryAbi as any, functionName: 'pauseAllSells' },
+      { address: factoryAddr, abi: factoryV3Abi as any, functionName: 'buyFeeCreatorBps' },
+      { address: factoryAddr, abi: factoryV3Abi as any, functionName: 'buyFeeBufferBps' },
+      { address: factoryAddr, abi: factoryV3Abi as any, functionName: 'sellFeeCreatorBps' },
+      { address: factoryAddr, abi: factoryV3Abi as any, functionName: 'sellFeeStakingBps' },
+      { address: factoryAddr, abi: factoryV3Abi as any, functionName: 'sellFeePlatformBps' },
+      { address: factoryAddr, abi: factoryV3Abi as any, functionName: 'pauseAllBuys' },
+      { address: factoryAddr, abi: factoryV3Abi as any, functionName: 'pauseAllSells' },
     ] : []) as any,
   });
 
@@ -178,11 +178,11 @@ export default function SwapPage() {
   // ----- Per-curve reads (reserves + pause + blocked + graduated) -----
   const curveReads = (useReadContracts as any)({
     contracts: (curveAddr && curveTokenAddr ? [
-      { address: curveAddr, abi: curveAbi as any, functionName: 'getReserves' },
-      { address: curveAddr, abi: curveAbi as any, functionName: 'pauseBuys' },
-      { address: curveAddr, abi: curveAbi as any, functionName: 'pauseSells' },
-      { address: curveAddr, abi: curveAbi as any, functionName: 'graduated' },
-      { address: factoryAddr, abi: factoryAbi as any, functionName: 'blocked', args: [curveTokenAddr] },
+      { address: curveAddr, abi: curveV3Abi as any, functionName: 'getCurveReserves' },
+      { address: curveAddr, abi: curveV3Abi as any, functionName: 'pauseBuys' },
+      { address: curveAddr, abi: curveV3Abi as any, functionName: 'pauseSells' },
+      { address: curveAddr, abi: curveV3Abi as any, functionName: 'graduated' },
+      { address: factoryAddr, abi: factoryV3Abi as any, functionName: 'blocked', args: [curveTokenAddr] },
     ] : []) as any,
     query: { enabled: !!curveAddr && !!curveTokenAddr, refetchInterval: 8_000 },
   });
@@ -335,7 +335,7 @@ export default function SwapPage() {
           const monIn = parseEther(amountIn);
           const hash = await writeContractAsync({
             address: curveAddr,
-            abi: curveAbi as any,
+            abi: curveV3Abi as any,
             functionName: 'buy',
             args: [minOutWei],
             value: monIn,
@@ -345,7 +345,7 @@ export default function SwapPage() {
           const tokensIn = parseUnits(amountIn, from.decimals);
           const hash = await writeContractAsync({
             address: curveAddr,
-            abi: curveAbi as any,
+            abi: curveV3Abi as any,
             functionName: 'sell',
             args: [tokensIn, minOutWei],
           } as any);
