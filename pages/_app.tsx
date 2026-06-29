@@ -32,15 +32,15 @@ export default function App({ Component, pageProps }: AppProps) {
           property="og:description"
           content="Fair token launches on Monad. 500 MON to launch, 260k to graduate. Creators earn fees on every trade."
         />
-       <meta property="og:image" content="https://www.monpad.net/banner.jpg" />
+       <meta property="og:image" content="https://www.monpad.net/Pad.png" />
         <meta property="og:image:width" content="1280" />
-        <meta property="og:image:height" content="426" />
+        <meta property="og:image:height" content="960" />
         <meta property="og:type" content="website" />
         <meta property="og:url" content="https://www.monpad.net" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="Mon-Pad — Fair Launch on Monad" />
         <meta name="twitter:description" content="Fair token launches on Monad. 500 MON to launch, 260k to graduate. Creators earn fees on every trade." />
-        <meta name="twitter:image" content="https://www.monpad.net/banner.jpg" />
+        <meta name="twitter:image" content="https://www.monpad.net/Pad.png" />
         <link rel="icon" type="image/png" href="/favicon.png" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <link rel="manifest" href="/manifest.json" />

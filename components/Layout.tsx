@@ -87,8 +87,8 @@ export function Layout({ children }: { children: ReactNode }) {
         >
           <img
             src="/monpad-text-logo.png"
-            alt="monshipad"
-            className="h-8 w-auto md:h-10 select-none"
+            alt="Mon-Pad"
+            className="h-12 w-auto md:h-16 select-none"
             draggable={false}
           />
         </Link>
