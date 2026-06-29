@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/router';
-import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, usePublicClient } from 'wagmi';
 import { parseEther, decodeEventLog, type Address } from 'viem';
 import { factoryV3Abi } from '@/lib/abis';
 import { api } from '@/lib/api';
 import {
   FACTORY_V3, V3_CREATION_FEE_MON, V3_GRADUATION_TARGET_MON, V3_CREATOR_REWARD_MON,
-  V3_MAX_TRADE_TAX_BPS, V3_MAX_DEV_BUY_BPS,
+  V3_MAX_TRADE_TAX_BPS, V3_MAX_DEV_BUY_BPS, factoryIsSuperseded,
 } from '@/lib/constants';
 import Head from 'next/head';
 
@@ -45,8 +45,10 @@ export default function CreatePage() {
 
   const [tx, setTx] = useState<TxState>({ status: 'idle' });
   const { writeContractAsync } = useWriteContract();
+  const publicClient = usePublicClient();
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
   const { data: receipt, isSuccess } = useWaitForTransactionReceipt({ hash: txHash });
+  const factoryRetired = factoryIsSuperseded();
 
   if (isSuccess && receipt && tx.status === 'pending') {
     let newAddr: string | undefined;
@@ -82,6 +84,12 @@ export default function CreatePage() {
 
   async function launch() {
     if (!address) return;
+    // Refuse to transact with a retired factory (stale NEXT_PUBLIC_FACTORY_V3) — it
+    // uses the old curve + a compromised treasury and would just burn gas on revert.
+    if (factoryRetired) {
+      setTx({ status: 'error', message: 'App is pointed at a retired factory. Set NEXT_PUBLIC_FACTORY_V3 to the current factory and redeploy.' });
+      return;
+    }
     if (!name || !symbol) { setTx({ status: 'error', message: 'Name and symbol required' }); return; }
 
     const cfBurn = bps(cfBurnPct), cfLp = bps(cfLpPct), taxBurn = bps(taxBurnPct), taxLp = bps(taxLpPct);
@@ -101,8 +109,20 @@ export default function CreatePage() {
         });
       } catch {}
 
+      // Use the ACTUAL on-chain fee (applies the MONSHI holder discount) so holders
+      // pay the discounted fee instead of overpaying — and the surplus never becomes
+      // an unintended dev-buy. Falls back to the listed fee if the read fails.
+      let feeWei = parseEther(V3_CREATION_FEE_MON.toString());
+      try {
+        const onchainFee = await publicClient!.readContract({
+          address: FACTORY_V3 as Address, abi: factoryV3Abi as any,
+          functionName: 'creationFeeFor', args: [address],
+        }) as bigint;
+        if (onchainFee && onchainFee > 0n) feeWei = onchainFee;
+      } catch { /* keep listed fee */ }
+
       const feeConfig = { cfBurnTokenBps: cfBurn, cfLpBps: cfLp, taxBurnTokenBps: taxBurn, taxLpBps: taxLp };
-      const value = parseEther(V3_CREATION_FEE_MON.toString()) + devBuyWei;
+      const value = feeWei + devBuyWei;
       const hash = await writeContractAsync({
         address: FACTORY_V3 as Address,
         abi: factoryV3Abi as any,
@@ -125,6 +145,13 @@ export default function CreatePage() {
         <link key="canonical" rel="canonical" href={canonical} />
       </Head>
       <h1 style={{ marginBottom: 24 }}>Launch a token</h1>
+      {factoryRetired && (
+        <div style={{ marginBottom: 16, padding: '12px 14px', borderRadius: 8, border: '1px solid var(--err, #F87171)', background: 'rgba(248,113,113,0.08)', color: 'var(--err, #F87171)', fontSize: 13, lineHeight: 1.5 }}>
+          ⚠️ This app is pointed at a <b>retired factory</b> ({FACTORY_V3.slice(0, 6)}…{FACTORY_V3.slice(-4)}).
+          Launching is disabled to protect your MON. Set <code>NEXT_PUBLIC_FACTORY_V3</code> to the
+          current factory and redeploy.
+        </div>
+      )}
       <div style={{ display: 'grid', gap: 16 }}>
         <Field label="Name" value={name} onChange={setName} placeholder="Awesome Coin" maxLength={32} />
         <Field label="Symbol" value={symbol} onChange={(v) => setSymbol(v.toUpperCase())} placeholder="AWESOME" maxLength={10} />
@@ -164,8 +191,8 @@ export default function CreatePage() {
         <Stat label="Total supply" value="1,000,000,000" />
       </div>
 
-      <button onClick={launch} disabled={!address || !name || !symbol || tx.status === 'pending'} style={{ width: '100%', marginTop: 16, padding: 14, background: 'var(--brand, #A78BFA)', color: '#000', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 16, cursor: (!address || !name || !symbol) ? 'not-allowed' : 'pointer', opacity: (!address || !name || !symbol) ? 0.5 : 1 }}>
-        {!address ? 'Connect wallet' : `Launch (${V3_CREATION_FEE_MON} MON${devBuy && Number(devBuy) > 0 ? ` + ${devBuy} dev buy` : ''})`}
+      <button onClick={launch} disabled={!address || !name || !symbol || tx.status === 'pending' || factoryRetired} style={{ width: '100%', marginTop: 16, padding: 14, background: 'var(--brand, #A78BFA)', color: '#000', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 16, cursor: (!address || !name || !symbol || factoryRetired) ? 'not-allowed' : 'pointer', opacity: (!address || !name || !symbol || factoryRetired) ? 0.5 : 1 }}>
+        {!address ? 'Connect wallet' : factoryRetired ? 'Unavailable (misconfigured factory)' : `Launch (${V3_CREATION_FEE_MON} MON${devBuy && Number(devBuy) > 0 ? ` + ${devBuy} dev buy` : ''})`}
       </button>
       <StatusPill state={tx} />
     </div>

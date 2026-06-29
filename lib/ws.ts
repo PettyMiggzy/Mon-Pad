@@ -56,6 +56,9 @@ export function useTradeFeed(maxItems = 30): Trade[] {
 
     const startPolling = () => {
       if (pollTimer) return;
+      // No indexer configured → nothing to poll (avoids 404 spam on /api/recent-trades).
+      // Per-token trades still come straight from chain via V3TokenActivity.
+      if (!INDEXER_URL) return;
       pollTimer = setInterval(async () => {
         try {
           const res = await fetch(`${INDEXER_URL}/api/recent-trades`);
@@ -133,6 +136,8 @@ export function useTokenUpdates(addr: string | undefined): TokenSummary | null {
 
     const startPolling = () => {
       if (pollTimer) return;
+      // No indexer configured → skip (token state is read on-chain elsewhere).
+      if (!INDEXER_URL) return;
       pollTimer = setInterval(async () => {
         try {
           const res = await fetch(`${INDEXER_URL}/api/token/${addr}`);

@@ -41,10 +41,38 @@ export function contractsConfigured(): boolean {
 // --- V3 (native-MON pad, LIVE on Monad mainnet 143) ----------------------
 // Redeployed 2026-06-28 with the rebalanced curve (nad.fun-style 180k virtual MON)
 // + 100 MON creation-fee buffer + 25% buyback skim on creator tax above 2%.
-// Treasury + buyback baked in as 0x5db7…575f; owner 0x5db7. Override via env if redeployed.
-export const FACTORY_V3 = (process.env.NEXT_PUBLIC_FACTORY_V3 ?? '0xf82bFD436ea36515DFF5A6933980F86813D4f3Fa') as Address;
-export const GRADUATOR_V3 = (process.env.NEXT_PUBLIC_GRADUATOR_V3 ?? '0x9770b2a62d719b67E4Be206b0B0158b1448eB666') as Address;
+// Treasury + buyback baked in as 0x5db7…575f; owner 0x5db7.
+// This default is the source of truth for the current, audited live deploy; a stale
+// env var must never silently downgrade the app to an older deploy (that's exactly
+// what burned a creation fee once — see resolveFactory below).
+export const FACTORY_V3_DEFAULT = '0xf82bFD436ea36515DFF5A6933980F86813D4f3Fa' as Address;
+export const GRADUATOR_V3_DEFAULT = '0x9770b2a62d719b67E4Be206b0B0158b1448eB666' as Address;
+
+// Retired factories — NEVER transact with these. They use the pre-rebalance curve
+// and route fees to a compromised treasury (abandoned EIP-7702-delegated wallet).
+export const SUPERSEDED_FACTORIES: ReadonlySet<string> = new Set(
+  [
+    '0x9007E499EdafBEC87Cc363fbE8Fd2B31142F4C01',
+    '0x9ae8376ef5F22e02e217b1A4081686ea9e488E9C',
+  ].map((a) => a.toLowerCase()),
+);
+
+// Self-heal: if NEXT_PUBLIC_FACTORY_V3 is (stale-)set to a retired factory, ignore
+// it and use the safe default. Env vars normally override code — but a *known-bad*
+// override should never win. This makes a plain redeploy fix the live site without
+// anyone having to edit Vercel env vars.
+function resolveFactory(): Address {
+  const env = process.env.NEXT_PUBLIC_FACTORY_V3;
+  if (!env) return FACTORY_V3_DEFAULT;
+  if (SUPERSEDED_FACTORIES.has(env.toLowerCase())) return FACTORY_V3_DEFAULT;
+  return env as Address;
+}
+export const FACTORY_V3 = resolveFactory();
+export const GRADUATOR_V3 = (process.env.NEXT_PUBLIC_GRADUATOR_V3 ?? GRADUATOR_V3_DEFAULT) as Address;
 export function v3Configured(): boolean { return FACTORY_V3 !== ZERO_ADDRESS; }
+export function factoryIsSuperseded(addr: string = FACTORY_V3): boolean {
+  return SUPERSEDED_FACTORIES.has((addr || '').toLowerCase());
+}
 
 // V3 economics (native MON; pegged ~$5k at deploy, tunable via factory timelock)
 export const V3_CREATION_FEE_MON = 500n;
