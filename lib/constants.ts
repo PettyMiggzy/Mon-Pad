@@ -91,7 +91,15 @@ export const V3_TOTAL_SUPPLY = 1_000_000_000n;
 
 // --- Chain (SPEC: Monad mainnet) -----------------------------------------
 export const MONAD_CHAIN_ID = 143 as const;
-export const MONAD_RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'https://rpc.monad.xyz';
+// RPC routing — the QuickNode URL is kept SERVER-SIDE only (RPC_URL) and never
+// shipped to the browser. In the browser, all RPC goes through the same-origin
+// /api/rpc proxy; on the server we hit the real endpoint directly (faster, no
+// self-proxy loop). process.env.RPC_URL is non-public so it is stripped from the
+// client bundle. Do NOT set NEXT_PUBLIC_RPC_URL/_FALLBACK/_WSS (those would leak).
+export const MONAD_RPC_URL =
+  typeof window !== 'undefined'
+    ? `${window.location.origin}/api/rpc`
+    : process.env.RPC_URL || 'https://rpc.monad.xyz';
 export const MONAD_EXPLORER = 'https://monadscan.com';
 
 // --- Tokenomics constants from SPEC --------------------------------------
