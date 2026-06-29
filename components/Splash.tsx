@@ -10,8 +10,10 @@ export default function Splash() {
   const [fading, setFading] = useState(false);
 
   useEffect(() => {
-    const fadeTimer = setTimeout(() => setFading(true), 1500);
-    const unmountTimer = setTimeout(() => setVisible(false), 1900);
+    // Primary: fade when the video ends (onEnded). These are just safety caps
+    // so the splash can never hang if onEnded doesn't fire.
+    const fadeTimer = setTimeout(() => setFading(true), 5000);
+    const unmountTimer = setTimeout(() => setVisible(false), 5400);
     return () => {
       clearTimeout(fadeTimer);
       clearTimeout(unmountTimer);
