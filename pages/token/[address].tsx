@@ -57,6 +57,18 @@ export default function TokenPage() {
   const name = (meta.data?.[0]?.result as string) || 'Token';
   const symbol = (meta.data?.[1]?.result as string) || '';
 
+  // Off-chain metadata (logo + socials + description) — same-origin, best-effort.
+  const [tokenMeta, setTokenMeta] = useState<{ image_url?: string; description?: string; twitter?: string; telegram?: string; website?: string } | null>(null);
+  useEffect(() => {
+    if (!addr) return;
+    let cancelled = false;
+    fetch(`/api/token-meta?address=${addr}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (!cancelled) setTokenMeta(d); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [addr]);
+
   const state = useReadContracts(({
     contracts: curve ? [
       { address: curve, abi: curveV3Abi as any, functionName: 'getCurveReserves' },
@@ -88,15 +100,38 @@ export default function TokenPage() {
         <link key="canonical" rel="canonical" href={`https://www.monpad.net/token/${addr}`} />
       </Head>
 
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-        <h1 style={{ margin: 0, fontSize: 24 }}>{name}</h1>
-        <span style={{ color: '#888' }}>${symbol}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        {tokenMeta?.image_url && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={tokenMeta.image_url}
+            alt={symbol || name}
+            width={48}
+            height={48}
+            style={{ borderRadius: 10, objectFit: 'cover', flexShrink: 0, border: '1px solid rgba(255,255,255,0.1)' }}
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+          />
+        )}
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+          <h1 style={{ margin: 0, fontSize: 24 }}>{name}</h1>
+          <span style={{ color: '#888' }}>${symbol}</span>
+        </div>
       </div>
       <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
         {creator && <>by <Link href={`/profile/${creator}`} style={{ color: 'var(--brand, #A78BFA)' }}>{shortAddr(creator)}</Link>{' · '}</>}
         <a href={`${MONAD_EXPLORER}/address/${addr}`} target="_blank" rel="noreferrer" style={{ color: 'var(--brand, #A78BFA)' }}>contract</a>
         {curve && <>{' · '}<a href={`${MONAD_EXPLORER}/address/${curve}`} target="_blank" rel="noreferrer" style={{ color: 'var(--brand, #A78BFA)' }}>curve</a></>}
       </div>
+      {tokenMeta?.description && (
+        <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 8, lineHeight: 1.5 }}>{tokenMeta.description}</p>
+      )}
+      {(tokenMeta?.twitter || tokenMeta?.telegram || tokenMeta?.website) && (
+        <div style={{ display: 'flex', gap: 12, marginTop: 6, fontSize: 12 }}>
+          {tokenMeta.website && <a href={tokenMeta.website} target="_blank" rel="noreferrer" style={{ color: 'var(--brand, #A78BFA)' }}>Website</a>}
+          {tokenMeta.twitter && <a href={tokenMeta.twitter} target="_blank" rel="noreferrer" style={{ color: 'var(--brand, #A78BFA)' }}>Twitter</a>}
+          {tokenMeta.telegram && <a href={tokenMeta.telegram} target="_blank" rel="noreferrer" style={{ color: 'var(--brand, #A78BFA)' }}>Telegram</a>}
+        </div>
+      )}
 
       <GraduationBar progress={progress} remaining={remaining} graduated={graduated} canGrad={canGrad} curve={curve} />
       <TradePanel token={addr} curve={curve} symbol={symbol} reserves={reserves} graduated={graduated} tradeTax={tradeTax} />

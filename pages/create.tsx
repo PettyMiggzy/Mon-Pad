@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/router';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt, usePublicClient } from 'wagmi';
@@ -50,7 +50,8 @@ export default function CreatePage() {
   const { data: receipt, isSuccess } = useWaitForTransactionReceipt({ hash: txHash });
   const factoryRetired = factoryIsSuperseded();
 
-  if (isSuccess && receipt && tx.status === 'pending') {
+  useEffect(() => {
+    if (!isSuccess || !receipt || tx.status !== 'pending') return;
     let newAddr: string | undefined;
     for (const log of receipt.logs) {
       if (log.address.toLowerCase() !== FACTORY_V3.toLowerCase()) continue;
@@ -60,8 +61,18 @@ export default function CreatePage() {
       } catch { /* not the Launch event */ }
     }
     setTx({ status: 'success', message: 'Token launched!' });
-    if (newAddr) setTimeout(() => router.push(`/token/${newAddr}`), 1200);
-  }
+    if (newAddr) {
+      // Persist off-chain metadata (logo + socials) keyed by the new token address.
+      // Same-origin → Supabase; best-effort, never blocks the redirect.
+      fetch('/api/token-meta', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ address: newAddr, name, symbol, imageUrl, description, twitter, telegram, website, creator: address }),
+      }).catch(() => {});
+      const dest = newAddr;
+      setTimeout(() => router.push(`/token/${dest}`), 1200);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSuccess, receipt]);
 
   async function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -101,13 +112,8 @@ export default function CreatePage() {
 
     setTx({ status: 'pending', message: 'submitting...' });
     try {
-      // off-chain metadata (best-effort; backend may be down)
-      try {
-        await fetch(`${process.env.NEXT_PUBLIC_INDEXER_URL || ''}/api/launches/prepare`, {
-          method: 'POST', headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ name, symbol, description, twitter, telegram, website, imageUrl, creator: address }),
-        });
-      } catch {}
+      // (off-chain metadata is saved AFTER the tx confirms, keyed by the new token
+      // address — see the success effect above.)
 
       // Use the ACTUAL on-chain fee (applies the MONSHI holder discount) so holders
       // pay the discounted fee instead of overpaying — and the surplus never becomes

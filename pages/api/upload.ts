@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 // Token-logo uploads. The browser POSTs a base64 data URL to this SAME-ORIGIN
 // route (no external backend needed); the route streams it into the Supabase
@@ -22,9 +22,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: 'POST only' });
   }
 
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
     return res.status(500).json({
       error: 'Image storage not configured — set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in Vercel, then redeploy.',
     });
@@ -50,7 +49,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const ext = (contentType.split('/')[1] || 'png').split('+')[0].replace(/[^a-z0-9]/gi, '').slice(0, 5) || 'png';
     const path = `tokens/${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
 
-    const supabase = createClient(url, key, { auth: { persistSession: false } });
     const { error } = await supabase.storage.from(BUCKET).upload(path, buf, {
       contentType,
       upsert: false,
