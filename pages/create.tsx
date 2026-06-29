@@ -127,18 +127,6 @@ export default function CreatePage() {
         if (onchainFee && onchainFee > 0n) feeWei = onchainFee;
       } catch { /* keep listed fee */ }
 
-      // Use the ACTUAL on-chain fee (applies the MONSHI holder discount) so holders
-      // pay the discounted fee instead of overpaying — and the surplus never becomes
-      // an unintended dev-buy. Falls back to the listed fee if the read fails.
-      let feeWei = parseEther(V3_CREATION_FEE_MON.toString());
-      try {
-        const onchainFee = await publicClient!.readContract({
-          address: FACTORY_V3 as Address, abi: factoryV3Abi as any,
-          functionName: 'creationFeeFor', args: [address],
-        }) as bigint;
-        if (onchainFee && onchainFee > 0n) feeWei = onchainFee;
-      } catch { /* keep listed fee */ }
-
       const feeConfig = { cfBurnTokenBps: cfBurn, cfLpBps: cfLp, taxBurnTokenBps: taxBurn, taxLpBps: taxLp };
       const value = feeWei + devBuyWei;
       const hash = await writeContractAsync({
