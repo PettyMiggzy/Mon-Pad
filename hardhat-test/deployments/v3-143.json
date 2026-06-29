@@ -4,10 +4,10 @@
   "chainId": "143",
   "deployer": "0xbbDB9561c981E72290EF5d138d781C14A825fAd5",
   "addresses": {
-    "factory": "0xf82bFD436ea36515DFF5A6933980F86813D4f3Fa",
-    "graduator": "0x9770b2a62d719b67E4Be206b0B0158b1448eB666",
-    "curveImpl": "0xf5184f2255797f5AD5fa92Ca273FdBb07EbaB623",
-    "tokenImpl": "0x7B26281D9AA463452814453d946FE21898B3269e",
+    "factory": "0x38e4056Db9BB7b3e499A3C6Ec8c5D6C69409458D",
+    "graduator": "0xa858791D36C4c911F483E60af31f1480F6fAe292",
+    "curveImpl": "0xE78460e9770D3Cb1D5fEC3ec6E24891c38AE2936",
+    "tokenImpl": "0x9C97c5648D9C6387845857bC673e805D8eDAc1C1",
     "wmon": "0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A",
     "npm": "0xa9f6B6656e32F223d778b01642F32D00F5310526",
     "monshi": "0xB744F5CDb792d8187640214C4A1c9aCE29af7777"
@@ -16,9 +16,9 @@
     "platform": "0x57C8A5AeC1c172fE41416A2FAE6eBDD92b552A16",
     "treasury": "0x5db7ca9d2ce3f414b3fd94ec0fcaf9f3ab1a575f",
     "buyback": "0x5db7ca9d2ce3f414b3fd94ec0fcaf9f3ab1a575f",
-    "creationFee": "500000000000000000000",
-    "graduationTarget": "260000000000000000000000",
-    "graduationCreatorReward": "41700000000000000000000",
-    "graduationTreasuryCut": "10400000000000000000000"
+    "creationFee": "1000000000000000000",
+    "graduationTarget": "20000000000000000000",
+    "graduationCreatorReward": "10000000000000000000",
+    "graduationTreasuryCut": "2000000000000000000"
   }
 }

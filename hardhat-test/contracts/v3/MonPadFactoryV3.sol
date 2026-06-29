@@ -68,16 +68,18 @@ contract MonPadFactoryV3 {
     uint256 public treasuryPending;  // accrued creation fees, pulled to treasuryWallet (audit H-1)
 
     // ── ECONOMICS (native MON; tunable, $5k-pegged defaults) ──
-    uint256 public creationFee = 500 ether;              // ~"not free" anti-spam
+    // ⚠️ TEST ECONOMICS (low-fee end-to-end test deploy). Production values were
+    //    500 / 260_000 / 41_700 / 10_400 — restore those before the real launch.
+    uint256 public creationFee = 1 ether;                // TEST: 1 MON to create
     /// @dev Slice of the creation fee seeded into each new curve as a real-MON buffer
     ///      (immediate exit liquidity + removes the sole-holder full-sell rounding edge).
     ///      The remainder of the fee accrues to treasuryPending.
     uint256 public constant CREATION_BUFFER_MON = 100 ether;
     uint256 public maxDevBuyBps = 200;                   // 2% supply cap on dev buy
     uint256 public minDevBuyMon = 0;
-    uint256 public graduationTarget = 260_000 ether;     // ~$5,000 at deploy-time MON price
-    uint256 public graduationCreatorReward = 41_700 ether; // ~$800
-    uint256 public graduationTreasuryCut = 10_400 ether;   // ~$200
+    uint256 public graduationTarget = 20 ether;          // TEST: graduate at 20 MON
+    uint256 public graduationCreatorReward = 10 ether;   // TEST
+    uint256 public graduationTreasuryCut = 2 ether;      // TEST
 
     // MONSHI discount
     uint256 public monshiDiscountThreshold = 1_000_000 ether; // hold >= this MONSHI
