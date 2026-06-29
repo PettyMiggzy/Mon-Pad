@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { ConnectButton, useConnectModal } from '@rainbow-me/rainbowkit';
 import { useAccount } from 'wagmi';
 import { Home, Plus, ArrowLeftRight, Coins, User, Shield, BookOpen, FileText } from 'lucide-react';
 import { isAdmin } from '@/lib/constants';
@@ -48,6 +48,7 @@ function NavLink({
 
 export function Layout({ children }: { children: ReactNode }) {
   const { address } = useAccount();
+  const { openConnectModal } = useConnectModal();
   const router = useRouter();
   const admin = address ? isAdmin(address) : false;
   const onProfile = router.pathname.startsWith('/profile');
@@ -172,7 +173,9 @@ export function Layout({ children }: { children: ReactNode }) {
             Profile
           </Link>
         ) : (
-          <div
+          <button
+            type="button"
+            onClick={() => openConnectModal?.()}
             style={{
               display: 'flex',
               flexDirection: 'column',
@@ -180,12 +183,16 @@ export function Layout({ children }: { children: ReactNode }) {
               gap: 2,
               padding: '8px 0',
               fontSize: 11,
-              color: 'rgba(220, 215, 240, 0.3)',
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              color: 'rgba(220, 215, 240, 0.5)',
+              fontFamily: 'inherit',
             }}
           >
             <User size={20} />
             Profile
-          </div>
+          </button>
         )}
         {admin && (
           <Link
