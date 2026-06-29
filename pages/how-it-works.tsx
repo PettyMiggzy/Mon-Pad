@@ -5,7 +5,7 @@ import { ArrowRight, Shield, Coins, TrendingUp, Lock, Sparkles, MessageCircle, B
 const FAQ = [
   {
     q: "Do I need MONSHI to use Mon-Pad?",
-    a: "No. MONSHI gets you bonuses (waived stake fee, bonus rewards) but everything works without it.",
+    a: "No. Holding at least 1,000,000 MONSHI gives you 50% off the creation fee (250 MON instead of 500), but everything works without it.",
   },
   {
     q: "What if my token doesn't graduate?",
@@ -13,23 +13,23 @@ const FAQ = [
   },
   {
     q: "Can the team rug me?",
-    a: "No. The graduation LP is locked permanently. Creators can't withdraw the LP — they can only earn the trading fees from sells (0.5% forever).",
+    a: "No. At graduation the liquidity pool's LP NFT is burned, so it's locked permanently — creators can't withdraw it. They only ever earn trading fees (0.5% of every sell, forever).",
+  },
+  {
+    q: "What does a creator earn?",
+    a: "The creator slice of every trade (1% of buys, 0.5% of sells) on the curve and after graduation, plus a 41,700 MON (≈$800) reward when the token graduates. Creators can also route fees/tax into buyback-and-burn or LP.",
   },
   {
     q: "How is this different from Pump.fun?",
-    a: "Pump.fun is on Solana with their own AMM. Mon-Pad is on Monad with real Uniswap V3 graduation. Creators on Mon-Pad earn forever (not just before graduation). Staking rewards built in.",
+    a: "Pump.fun is on Solana with its own AMM. Mon-Pad is on Monad with real Uniswap V3 graduation and permanently locked liquidity. Creators earn fees forever (not just pre-graduation) and get built-in buyback-burn and add-to-LP tools.",
   },
   {
     q: "How is this different from nad.fun?",
-    a: "We focus on creator economics (2% fee revenue forever per token), deeper DeFi integration (staking, MONSHI tie-ins), and fair-launch ethos. Pricing is the same range for users.",
-  },
-  {
-    q: "When can I unstake?",
-    a: "Anytime, but unstaking before your lock ends charges the tier's early fee (varies by tier, see the Staking page). Free-tier stakers who fall below 2M MONSHI before unstake also pay a 20% dropout penalty.",
+    a: "Same fair-launch, native-MON approach, but Mon-Pad adds creator tools (optional per-trade tax routed to buyback-burn / LP) and a MONSHI flywheel — a slice of every sell buys and burns MONSHI.",
   },
   {
     q: "What's MONSHI?",
-    a: "MONSHI is a community token on Monad that we partner with for fee distribution. Holding MONSHI waives stake fees and gives bonus rewards. Not required.",
+    a: "MONSHI is a community token on Monad. Holding ≥1M gets you 50% off creation fees, and a slice of every sell (plus any creator tax above 2%) automatically buys and burns MONSHI. Not required to use the pad.",
   },
 ];
 
@@ -128,12 +128,13 @@ export default function HowItWorks() {
           </div>
           <div className="bg-card border border-border rounded-2xl p-5 text-center">
             <div className="text-xs text-white/50 uppercase tracking-wide mb-1">Virtual reserve</div>
-            <div className="text-2xl font-bold text-brand-purple">117K MON</div>
+            <div className="text-2xl font-bold text-brand-purple">180K MON</div>
             <div className="text-xs text-white/50 mt-1">anti-snipe</div>
           </div>
           <div className="bg-card border border-border rounded-2xl p-5 text-center">
             <div className="text-xs text-white/50 uppercase tracking-wide mb-1">Graduation target</div>
-            <div className="text-2xl font-bold text-brand-purple">425K MON</div>
+            <div className="text-2xl font-bold text-brand-purple">260K MON</div>
+            <div className="text-xs text-white/50 mt-1">≈ $5,000 net of fees</div>
           </div>
         </div>
       </section>
@@ -159,17 +160,17 @@ export default function HowItWorks() {
               <tr className="border-t border-border">
                 <td className="px-4 py-3 font-medium">Sell</td>
                 <td className="px-4 py-3">2%</td>
-                <td className="px-4 py-3">1% platform + 0.5% creator + 0.5% staking rewards</td>
+                <td className="px-4 py-3">1% platform + 0.5% creator + 0.5% MONSHI buyback &amp; burn</td>
               </tr>
               <tr className="border-t border-border">
                 <td className="px-4 py-3 font-medium">Token creation</td>
                 <td className="px-4 py-3">500 MON</td>
-                <td className="px-4 py-3">100 MON seeds curve liquidity; remainder to treasury</td>
+                <td className="px-4 py-3">100 MON seeds curve liquidity; remainder to treasury (50% off for MONSHI holders)</td>
               </tr>
               <tr className="border-t border-border">
-                <td className="px-4 py-3 font-medium">Early unstake</td>
-                <td className="px-4 py-3">Varies</td>
-                <td className="px-4 py-3">Per-tier early fee + 20% dropout penalty if free staker</td>
+                <td className="px-4 py-3 font-medium">Creator tax (optional)</td>
+                <td className="px-4 py-3">0–10%</td>
+                <td className="px-4 py-3">Set by the creator, on top of the 2% base → buyback &amp; burn / LP</td>
               </tr>
             </tbody>
           </table>
@@ -193,7 +194,7 @@ export default function HowItWorks() {
           </li>
           <li className="flex gap-3 items-start">
             <span className="flex-shrink-0 w-6 h-6 rounded-full bg-brand-purple/10 text-brand-purple flex items-center justify-center font-bold text-xs mt-0.5">3</span>
-            <span className="text-white/70 leading-relaxed">Creator receives <strong className="text-white">25,000 MON graduation reward</strong> (claimable via the Token page).</span>
+            <span className="text-white/70 leading-relaxed">Creator receives a <strong className="text-white">41,700 MON graduation reward</strong> (≈ $800), and the treasury takes 10,400 MON (≈ $200) — both claimable via the Token page.</span>
           </li>
         </ol>
         <p className="text-base text-white/70 leading-relaxed">
@@ -201,16 +202,26 @@ export default function HowItWorks() {
         </p>
       </section>
 
-      {/* Section 6: Staking teaser */}
+      {/* Section 6: MONSHI + creator tools */}
       <section className="mt-16">
-        <h2 className="text-3xl font-bold text-white mb-6">Staking</h2>
+        <h2 className="text-3xl font-bold text-white mb-6">MONSHI &amp; creator tools</h2>
         <p className="text-base text-white/70 leading-relaxed mb-4">
-          Token holders can stake to earn a share of sell fees from the tokens they back. Lock durations: <strong className="text-white">7 / 30 / 90 / 180 days</strong> (longer locks earn more rewards weight). 2% stake fee, waived if you hold MONSHI. Early unstake charges the tier's early fee (set per tier by Mon-Pad governance). Free-tier stakers who fall below 2M MONSHI before unstake also pay a 20% dropout penalty.
+          Hold <strong className="text-white">≥ 1,000,000 MONSHI</strong> and your creation fee is cut 50% (250 MON instead of 500).
+          Every launch also feeds the MONSHI ecosystem: <strong className="text-white">0.5% of every sell</strong>, plus
+          25% of any creator tax above 2%, automatically buys &amp; burns MONSHI.
         </p>
-        <p className="text-base text-white/70 leading-relaxed">
-          MONSHI stakers get bonus rewards — 40% of platform sell fees flow to MONSHI buyback.
+        <p className="text-base text-white/70 leading-relaxed mb-4">
+          On top of the base fees, creators can turn on their own <strong className="text-white">buyback &amp; burn</strong> and
+          <strong className="text-white"> add-to-LP</strong> routing (funded by an optional 0–10% per-trade tax and/or their dev fee) —
+          so trading volume automatically reduces supply and/or deepens liquidity. See the <Link href="/docs" className="text-brand-purple hover:underline">Docs</Link> for the full mechanics.
         </p>
-        {/* TODO: link to /stake once Batch 2d ships */}
+        <div className="bg-card border border-border rounded-2xl p-5">
+          <div className="inline-block px-3 py-1 mb-2 rounded-full bg-brand-purple/10 border border-brand-purple/30 text-brand-purple text-xs font-medium tracking-wide uppercase">On the roadmap</div>
+          <p className="text-sm text-white/70 leading-relaxed">
+            <strong className="text-white">Staking</strong> — stake project tokens launched on Mon-Pad to earn a share of revenue
+            plus holder bonuses — is in active development and ships after mainnet stabilizes.
+          </p>
+        </div>
       </section>
 
       {/* Section 7: Safety & Audits */}
@@ -221,7 +232,7 @@ export default function HowItWorks() {
             <Shield className="text-brand-purple flex-shrink-0 mt-1" size={28} />
             <div className="space-y-3 text-base text-white/70 leading-relaxed">
               <p>
-                Audited by Claude Code via three rounds of review. The graduation LP is locked permanently — creators cannot withdraw it. Treasury, buyback, and platform wallets are env-driven and visible on-chain.
+                Reviewed across multiple audit rounds and source-verified on the Monad explorer. The graduation LP is burned (locked permanently) — creators cannot withdraw it. Treasury, buyback, and platform wallets are visible on-chain, and economic parameters change only through a 24-hour timelock with 2-step ownership.
               </p>
               <p>
                 Read the contract source and audit notes on the <Link href="/docs" className="text-brand-purple hover:underline">Docs page</Link>.
