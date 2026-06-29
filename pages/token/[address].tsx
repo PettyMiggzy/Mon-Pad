@@ -140,6 +140,14 @@ export default function TokenPage() {
   const priceMon = effMon > 0n && effTok > 0n ? Number(formatEther(effMon)) / Number(formatEther(effTok)) : 0;
   const mcapMon = priceMon * 1_000_000_000;
 
+  // MON/USD for USD display (DexScreener via same-origin /api/mon-price).
+  const [monUsd, setMonUsd] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/mon-price').then((r) => (r.ok ? r.json() : null)).then((d) => { if (!cancelled && d?.usd) setMonUsd(d.usd); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
   return (
     <div style={{ maxWidth: 1180, margin: '0 auto', padding: 16, color: '#fff' }}>
       <Head>
@@ -170,8 +178,8 @@ export default function TokenPage() {
         </div>
         <div style={{ flex: 1 }} />
         <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
-          <HeaderStat label="Price" value={`${fmtNum(priceMon, 8)} MON`} />
-          <HeaderStat label="Market cap" value={`${fmtNum(mcapMon)} MON`} />
+          <HeaderStat label="Price" value={`${fmtNum(priceMon, 8)} MON`} sub={monUsd ? `$${fmtNum(priceMon * monUsd, 8)}` : undefined} />
+          <HeaderStat label="Market cap" value={`${fmtNum(mcapMon)} MON`} sub={monUsd ? `$${fmtNum(mcapMon * monUsd)}` : undefined} />
           <HeaderStat label="Change" value={`${stats.change >= 0 ? '+' : ''}${stats.change.toFixed(1)}%`} color={stats.change > 0 ? '#4ADE80' : stats.change < 0 ? '#F87171' : undefined} />
         </div>
       </div>
@@ -182,7 +190,7 @@ export default function TokenPage() {
       {/* DEX-style: chart + trades on the left, trade panel + stats on the right */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4" style={{ marginTop: 16 }}>
         <main className="lg:col-span-2" style={{ minWidth: 0 }}>
-          <V3TokenActivity curve={curve} symbol={symbol} refreshKey={tradeNonce} />
+          <V3TokenActivity curve={curve} symbol={symbol} token={addr} refreshKey={tradeNonce} />
         </main>
         <aside style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <GraduationBar progress={progress} remaining={remaining} graduated={graduated} canGrad={canGrad} curve={curve} onTraded={refreshAfterTrade} />
@@ -192,7 +200,7 @@ export default function TokenPage() {
               You hold <b style={{ color: '#fff' }}>{Number(formatEther(balance)).toLocaleString(undefined, { maximumFractionDigits: 2 })}</b> ${symbol}
             </div>
           )}
-          <StatsCard priceMon={priceMon} mcapMon={mcapMon} stats={stats} />
+          <StatsCard priceMon={priceMon} mcapMon={mcapMon} stats={stats} monUsd={monUsd} />
           <CreatorPanel curve={curve} creator={creator} wallet={wallet} graduated={graduated} />
           <OtherInfo addr={addr} curve={curve} creator={creator} createdAt={tokenMeta?.created_at} />
         </aside>
@@ -212,32 +220,35 @@ function fmtNum(n: number, maxFrac = 2): string {
   return n.toLocaleString(undefined, { maximumFractionDigits: maxFrac });
 }
 
-function HeaderStat({ label, value, color }: { label: string; value: string; color?: string }) {
+function HeaderStat({ label, value, color, sub }: { label: string; value: string; color?: string; sub?: string }) {
   return (
     <div style={{ textAlign: 'right' }}>
       <div style={{ fontSize: 10, color: '#888', textTransform: 'uppercase', letterSpacing: 0.4 }}>{label}</div>
       <div style={{ fontSize: 15, fontWeight: 700, color: color || '#fff' }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: '#888' }}>{sub}</div>}
     </div>
   );
 }
 
-function StatTile({ label, value, color }: { label: string; value: string; color?: string }) {
+function StatTile({ label, value, color, sub }: { label: string; value: string; color?: string; sub?: string }) {
   return (
     <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: '8px 10px' }}>
       <div style={{ fontSize: 10, color: '#888', textTransform: 'uppercase', letterSpacing: 0.4 }}>{label}</div>
       <div style={{ fontSize: 14, fontWeight: 700, color: color || '#fff', marginTop: 2 }}>{value}</div>
+      {sub && <div style={{ fontSize: 10, color: '#888' }}>{sub}</div>}
     </div>
   );
 }
 
-function StatsCard({ priceMon, mcapMon, stats }: { priceMon: number; mcapMon: number; stats: { vol: number; txns: number; buys: number; sells: number; traders: number; change: number } }) {
+function StatsCard({ priceMon, mcapMon, stats, monUsd }: { priceMon: number; mcapMon: number; stats: { vol: number; txns: number; buys: number; sells: number; traders: number; change: number }; monUsd: number }) {
+  const usd = (m: number) => (monUsd ? `$${fmtNum(m * monUsd, m < 1 ? 8 : 2)}` : undefined);
   return (
     <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 10, padding: 12 }}>
       <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Stats</div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        <StatTile label="Price" value={`${fmtNum(priceMon, 8)} MON`} />
-        <StatTile label="Market cap" value={`${fmtNum(mcapMon)} MON`} />
-        <StatTile label="Volume" value={`${fmtNum(stats.vol)} MON`} />
+        <StatTile label="Price" value={`${fmtNum(priceMon, 8)} MON`} sub={usd(priceMon)} />
+        <StatTile label="Market cap" value={`${fmtNum(mcapMon)} MON`} sub={usd(mcapMon)} />
+        <StatTile label="Volume" value={`${fmtNum(stats.vol)} MON`} sub={usd(stats.vol)} />
         <StatTile label="Txns" value={String(stats.txns)} />
         <StatTile label="Buys / Sells" value={`${stats.buys} / ${stats.sells}`} color={stats.buys >= stats.sells ? '#4ADE80' : '#F87171'} />
         <StatTile label="Traders" value={String(stats.traders)} />
@@ -368,8 +379,15 @@ function TradePanel({ token, curve, symbol, reserves, graduated, tradeTax, balan
 
   if (graduated) {
     return (
-      <div style={{ marginTop: 16, background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: 16, textAlign: 'center', color: '#aaa', fontSize: 13 }}>
-        This token graduated — trade it on the DEX. <Link href="/swap" style={{ color: 'var(--brand,#A78BFA)' }}>Open swap</Link>
+      <div style={{ marginTop: 16, background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.4)', borderRadius: 8, padding: 16, color: '#ddd', fontSize: 13, lineHeight: 1.6 }}>
+        🎓 <b style={{ color: '#fff' }}>Graduated</b> — now trading on a Uniswap V3 pool (liquidity locked).
+        <div style={{ marginTop: 8, display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+          <Link href="/swap" style={{ color: 'var(--brand,#A78BFA)' }}>Swap in-app</Link>
+          {token && <a href={`${MONAD_EXPLORER}/token/${token}`} target="_blank" rel="noreferrer" style={{ color: 'var(--brand,#A78BFA)' }}>View on explorer</a>}
+        </div>
+        <div style={{ marginTop: 8, fontSize: 11, color: '#888' }}>
+          Freshly graduated? DEX aggregators (and in-app swap routing) can take a few minutes to index a brand-new pool. The pool is live on-chain immediately.
+        </div>
       </div>
     );
   }

@@ -6,7 +6,7 @@ import PromoBanner from '@/components/PromoBanner';
 import TokenGrid from '@/components/TokenGrid';
 import HomeRail from '@/components/HomeRail';
 import { type TokenSummary } from '@/lib/api';
-import { listV3Tokens } from '@/lib/chainV3';
+import { listV3Tokens, getV3CardStats } from '@/lib/chainV3';
 import { v3Configured } from '@/lib/constants';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
@@ -70,6 +70,29 @@ export default function Home() {
             }
           }
         } catch { /* logos are optional */ }
+
+        // Enrich cards with volume + price sparkline (per-token recent trades; throttled + capped).
+        try {
+          const curveByAddr = new Map(rows.map((t) => [t.token.toLowerCase(), t.curve]));
+          const top = mapped.slice(0, 24); // cap so we don't hammer the RPC on big lists
+          for (let i = 0; i < top.length && !cancelled; i += 5) {
+            const batch = top.slice(i, i + 5);
+            const results = await Promise.all(batch.map(async (t) => {
+              const curve = curveByAddr.get(t.address.toLowerCase());
+              if (!curve) return null;
+              const s = await getV3CardStats(curve as any).catch(() => null);
+              return s ? { address: t.address.toLowerCase(), s } : null;
+            }));
+            if (cancelled) break;
+            const upd = new Map(results.filter(Boolean).map((r: any) => [r.address, r.s]));
+            if (upd.size) setTokens((prev) => prev.map((t) => {
+              const s = upd.get(t.address.toLowerCase());
+              if (!s) return t;
+              const volWei = (BigInt(Math.round(s.volMon * 1e6)) * 1_000_000_000_000n).toString();
+              return { ...t, volume24hMon: volWei, sparkline: s.spark };
+            }));
+          }
+        } catch { /* card stats optional */ }
       } catch {
         if (cancelled) return;
         setTokens([]);
