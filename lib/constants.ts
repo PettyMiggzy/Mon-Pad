@@ -39,17 +39,21 @@ export function contractsConfigured(): boolean {
 }
 
 // --- V3 (native-MON pad, LIVE on Monad mainnet 143) ----------------------
-// Redeployed 2026-06-28 with the rebalanced curve (nad.fun-style 180k virtual MON)
-// + 100 MON creation-fee buffer + 25% buyback skim on creator tax above 2%.
-// Treasury + buyback baked in as 0x5db7…575f; owner 0x5db7.
-// This default is the source of truth for the current, audited live deploy; a stale
-// env var must never silently downgrade the app to an older deploy (that's exactly
-// what burned a creation fee once — see resolveFactory below).
-export const FACTORY_V3_DEFAULT = '0xf82bFD436ea36515DFF5A6933980F86813D4f3Fa' as Address;
-export const GRADUATOR_V3_DEFAULT = '0x9770b2a62d719b67E4Be206b0B0158b1448eB666' as Address;
+// ⚠️ TEST MODE: the live site is pointed at a LOW-FEE test deploy (1 MON to create,
+//    20 MON to graduate) for end-to-end testing. Hard-coded so it works with NO
+//    Vercel env vars — the NEXT_PUBLIC_FACTORY_V3 / _GRADUATOR_V3 env vars are
+//    intentionally ignored (see resolveFactory below).
+//
+//    To restore PRODUCTION (full-fee, audited) deploy, set:
+//      FACTORY_V3_DEFAULT   = 0xf82bFD436ea36515DFF5A6933980F86813D4f3Fa
+//      GRADUATOR_V3_DEFAULT = 0x9770b2a62d719b67E4Be206b0B0158b1448eB666
+//    and the V3_* economics below back to 500 / 260_000 / 41_700 / 10_400,
+//    and re-enable the env-aware resolveFactory() (commented inside).
+export const FACTORY_V3_DEFAULT = '0x38e4056Db9BB7b3e499A3C6Ec8c5D6C69409458D' as Address;   // TEST factory
+export const GRADUATOR_V3_DEFAULT = '0xa858791D36C4c911F483E60af31f1480F6fAe292' as Address; // TEST graduator
 
-// Retired factories — NEVER transact with these. They use the pre-rebalance curve
-// and route fees to a compromised treasury (abandoned EIP-7702-delegated wallet).
+// Retired factories — NEVER transact with these (pre-rebalance curve / compromised
+// treasury). Includes the prior production factory while we're in test mode.
 export const SUPERSEDED_FACTORIES: ReadonlySet<string> = new Set(
   [
     '0x9007E499EdafBEC87Cc363fbE8Fd2B31142F4C01',
@@ -57,28 +61,24 @@ export const SUPERSEDED_FACTORIES: ReadonlySet<string> = new Set(
   ].map((a) => a.toLowerCase()),
 );
 
-// Self-heal: if NEXT_PUBLIC_FACTORY_V3 is (stale-)set to a retired factory, ignore
-// it and use the safe default. Env vars normally override code — but a *known-bad*
-// override should never win. This makes a plain redeploy fix the live site without
-// anyone having to edit Vercel env vars.
+// TEST MODE: hard-code to the test deploy, ignoring env entirely.
+// (Production version was env-aware with a superseded-factory self-heal.)
 function resolveFactory(): Address {
-  const env = process.env.NEXT_PUBLIC_FACTORY_V3;
-  if (!env) return FACTORY_V3_DEFAULT;
-  if (SUPERSEDED_FACTORIES.has(env.toLowerCase())) return FACTORY_V3_DEFAULT;
-  return env as Address;
+  return FACTORY_V3_DEFAULT;
 }
 export const FACTORY_V3 = resolveFactory();
-export const GRADUATOR_V3 = (process.env.NEXT_PUBLIC_GRADUATOR_V3 ?? GRADUATOR_V3_DEFAULT) as Address;
+export const GRADUATOR_V3 = GRADUATOR_V3_DEFAULT;
 export function v3Configured(): boolean { return FACTORY_V3 !== ZERO_ADDRESS; }
 export function factoryIsSuperseded(addr: string = FACTORY_V3): boolean {
   return SUPERSEDED_FACTORIES.has((addr || '').toLowerCase());
 }
 
-// V3 economics (native MON; pegged ~$5k at deploy, tunable via factory timelock)
-export const V3_CREATION_FEE_MON = 500n;
-export const V3_GRADUATION_TARGET_MON = 260_000n;
-export const V3_CREATOR_REWARD_MON = 41_700n;
-export const V3_TREASURY_CUT_MON = 10_400n;
+// V3 economics — ⚠️ TEST MODE values (match the low-fee test factory).
+// Production values: 500 / 260_000 / 41_700 / 10_400.
+export const V3_CREATION_FEE_MON = 1n;
+export const V3_GRADUATION_TARGET_MON = 20n;
+export const V3_CREATOR_REWARD_MON = 10n;
+export const V3_TREASURY_CUT_MON = 2n;
 export const V3_MAX_DEV_BUY_BPS = 200;     // 2% supply cap on dev buy
 export const V3_MAX_TRADE_TAX_BPS = 1000;  // 10% creator per-trade tax cap
 export const V3_BUY_FEE_CREATOR_BPS = 100;
