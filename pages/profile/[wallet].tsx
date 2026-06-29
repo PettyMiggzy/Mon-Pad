@@ -4,6 +4,7 @@ import { useAccount } from 'wagmi';
 import Link from 'next/link';
 import Head from 'next/head';
 import { api, type TokenSummary, type Profile } from '@/lib/api';
+import { listV3Tokens } from '@/lib/chainV3';
 import { fmtMon, shortAddr, isAddress } from '@/lib/format';
 
 type Tab = 'created' | 'holdings';
@@ -130,14 +131,27 @@ export default function ProfilePage() {
     setLoading(true);
     Promise.all([
       api.getProfile(walletStr).catch(() => null),
-      api.listTokens().catch(() => [] as TokenSummary[]),
+      // Created tokens come straight from chain (no backend dependency).
+      listV3Tokens(60).catch(() => []),
     ])
       .then(([p, allTokens]) => {
         if (cancelled) return;
         setProfile(p);
-        const mine = (allTokens || []).filter(
-          (t) => t.creator && t.creator.toLowerCase() === walletStr.toLowerCase()
-        );
+        const mine: TokenSummary[] = (allTokens || [])
+          .filter((t) => t.creator && t.creator.toLowerCase() === walletStr.toLowerCase())
+          .map((t) => ({
+            address: t.token,
+            name: t.name,
+            symbol: t.symbol,
+            imageUrl: undefined,
+            creator: t.creator,
+            marketCapMon: (BigInt(t.priceWeiPerToken) * 1_000_000_000n).toString(),
+            volume24hMon: '0',
+            monRaisedNet: t.monRaisedNet,
+            graduated: t.graduated,
+            createdAt: 0,
+            sparkline: [],
+          }));
         setCreatedTokens(mine);
       })
       .finally(() => {
@@ -182,7 +196,7 @@ export default function ProfilePage() {
   // as a primary value - it's mock data in MOCK_MODE=1 and would lie to users.
   const launches = createdTokens.length;
   const graduatedCount = createdTokens.filter((t) => t.graduated).length;
-  const joined = profile?.stats.memberSince ? formatJoined(profile.stats.memberSince) : '—';
+  const joined = profile?.stats?.memberSince ? formatJoined(profile.stats.memberSince) : '—';
 
   return (
     <>
