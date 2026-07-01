@@ -12,7 +12,7 @@ import { getMonorailQuote, toExecutable, quoteSummary, type MonorailQuote } from
 import { publicClient, resolveTokenMeta } from '@/lib/chainV3';
 import {
   previewBuy, previewSell, applySlippage,
-  preflightBuy, preflightSell, needsApprove, MAX_UINT256,
+  preflightBuy, preflightSell, needsApprove,
   type CurveReserves, type CurveFees, type PreflightState, type PreflightResult
 } from '@/lib/curveSwap';
 import { routeForSwap, checkCrossCurve, type Route } from '@/lib/swapRouter';
@@ -342,7 +342,8 @@ export default function SwapPage() {
             address: from.address as Address,
             abi: tokenAbi as any,
             functionName: 'approve',
-            args: [curveAddr, MAX_UINT256],
+            // Exact-amount approve (not MAX_UINT256) — clears MetaMask/Blockaid spending-cap warning.
+            args: [curveAddr, parseUnits(amountIn, from.decimals)],
           } as any);
           setTxHash(approveHash);
           await new Promise((res) => setTimeout(res, 1500));
@@ -415,7 +416,7 @@ export default function SwapPage() {
           if (current < amtIn) {
             setTx({ status: 'pending', message: `approving ${swapFrom === WMON ? 'WMON' : from.symbol}…` });
             const apHash = await writeContractAsync({
-              address: swapFrom as Address, abi: WMON_ABI, functionName: 'approve', args: [router, MAX_UINT256],
+              address: swapFrom as Address, abi: WMON_ABI, functionName: 'approve', args: [router, amtIn],
             } as any);
             setTxHash(apHash);
             await publicClient.waitForTransactionReceipt({ hash: apHash });
