@@ -27,6 +27,7 @@ const MIN_BUY_USD        = Number(process.env.MIN_BUY_USD || '100');       // an
 const POLL_MS            = Number(process.env.POLL_MS || '6000');          // chain poll cadence
 const CHUNK              = BigInt(process.env.GETLOGS_CHUNK || '99');       // getLogs is 100-block capped
 const MAX_CATCHUP        = BigInt(process.env.MAX_CATCHUP_BLOCKS || '2000'); // on first run / after downtime
+const GRAD_BACKFILL      = BigInt(process.env.GRAD_BACKFILL_BLOCKS || '500'); // rescan a newly-graduated pool over the discovery gap
 const TOKENS_REFRESH_MS  = Number(process.env.TOKENS_REFRESH_MS || '120000'); // re-scan factory for new launches
 const TREND_WINDOW_SEC   = Number(process.env.TREND_WINDOW_SEC || '3600');    // rolling window for "trending"
 const TREND_THRESHOLD_USD= Number(process.env.TREND_THRESHOLD_USD || '500');  // window volume to be "trending"
@@ -88,12 +89,15 @@ const V3_SWAP_EVENT = parseAbiItem('event Swap(address indexed sender, address i
 function loadJson(url, fallback) { try { return JSON.parse(fs.readFileSync(url, 'utf8')); } catch { return fallback; } }
 function saveJson(url, obj) { try { fs.writeFileSync(url, JSON.stringify(obj)); } catch (e) { console.error('save failed', e.message); } }
 
-const state = loadJson(STATE_FILE, { lastBlock: null });
+const state = loadJson(STATE_FILE, { lastBlock: null, seenTx: [] });
 const curves = new Map();      // curveAddr(lower) -> { token, curve, symbol, name }
 const gradPools = new Map();   // poolAddr(lower) -> { token, curve, symbol, name, tokenIsToken0 }
 const recentTrades = [];       // { token, usd, mon, time } rolling window for trending
 const trendedAt = new Map();   // token(lower) -> unix seconds last announced trending
-const seenTx = new Set();      // txHash:logIndex dedupe (buys)
+// txHash:logIndex dedupe (buys/boosts). Restored from state.json so a crash/restart
+// between announcing and persisting lastBlock does NOT replay alerts / re-grant boosts.
+const seenTx = new Set(Array.isArray(state.seenTx) ? state.seenTx : []);
+let gradInitialized = false;   // skip backfill spam on the very first pool discovery pass
 
 // ── Telegram ─────────────────────────────────────────────────────────────
 async function tg(method, body) {
@@ -179,11 +183,17 @@ async function enrichToken(info) {
 }
 
 // ── Token registry (from the factory) ─────────────────────────────────────
+// Only scan NEW indices each cycle (from lastTokenCount up to the current count),
+// instead of re-reading allCurves(0..n-1) every time — that grew unbounded with
+// every launch and steadily raised RPC pressure. lastTokenCount only advances after
+// the new indices are processed; a mid-loop RPC throw leaves it so the next cycle
+// retries the same indices.
+let lastTokenCount = 0;
 async function refreshTokens() {
   try {
     const counts = await client.readContract({ address: FACTORY_V3, abi: factoryAbi, functionName: 'allCounts' });
     const n = Number(counts[0]);
-    for (let i = 0; i < n; i++) {
+    for (let i = lastTokenCount; i < n; i++) {
       const curve = (await client.readContract({ address: FACTORY_V3, abi: factoryAbi, functionName: 'allCurves', args: [BigInt(i)] })).toLowerCase();
       if (curves.has(curve)) continue;
       const token = (await client.readContract({ address: FACTORY_V3, abi: factoryAbi, functionName: 'allTokens', args: [BigInt(i)] }));
@@ -193,6 +203,7 @@ async function refreshTokens() {
       ]);
       curves.set(curve, { token, curve, symbol, name });
     }
+    lastTokenCount = n;
   } catch (e) { console.error('refreshTokens failed:', e.message); }
 }
 
@@ -276,13 +287,17 @@ async function grantBoost(tokenAddr, durationSec, monshiPaid, payer) {
   ].join('\n'));
 }
 
+// Returns the highest block fully scanned. On a getLogs failure we STOP and return
+// the safe high-water so tick() does not advance past the unscanned range — a paid
+// boost in a skipped chunk would otherwise be lost forever (MONSHI already burned).
 async function scanBoosts(from, to) {
-  if (!BOOST_CONTRACT) return;
+  if (!BOOST_CONTRACT) return to;
+  let safe = from - 1n;
   for (let start = from; start <= to; start += CHUNK + 1n) {
     const end = start + CHUNK > to ? to : start + CHUNK;
     let logs;
     try { logs = await client.getLogs({ address: BOOST_CONTRACT, event: BOOSTED_EVENT, fromBlock: start, toBlock: end }); }
-    catch (e) { console.error(`boost getLogs ${start}-${end} failed:`, e.shortMessage || e.message); continue; }
+    catch (e) { console.error(`boost getLogs ${start}-${end} failed:`, e.shortMessage || e.message); return safe; }
     for (const lg of logs) {
       const key = `boost:${lg.transactionHash}:${lg.logIndex}`;
       if (seenTx.has(key)) continue; seenTx.add(key);
@@ -291,7 +306,9 @@ async function scanBoosts(from, to) {
       try { await grantBoost(lg.args.token, durationSec, monshiPaid, lg.args.payer); }
       catch (e) { console.error('grantBoost failed:', e.message); }
     }
+    safe = end;
   }
+  return safe;
 }
 function windowVolumeUsd(tokenLower, sinceSec) {
   let v = 0;
@@ -336,14 +353,17 @@ async function checkTrending() {
 }
 
 // ── Scan loop ───────────────────────────────────────────────────────────────
+// Returns the highest block fully scanned (see scanBoosts). Stops at the first
+// failed chunk so tick() won't advance lastBlock past dropped buy alerts.
 async function scanRange(from, to) {
   const usd = await getMonUsd();
+  let safe = from - 1n;
   for (let start = from; start <= to; start += CHUNK + 1n) {
     const end = start + CHUNK > to ? to : start + CHUNK;
     let logs;
     try {
       logs = await client.getLogs({ event: TRADE_EVENT, fromBlock: start, toBlock: end });
-    } catch (e) { console.error(`getLogs ${start}-${end} failed:`, e.shortMessage || e.message); continue; }
+    } catch (e) { console.error(`getLogs ${start}-${end} failed:`, e.shortMessage || e.message); return safe; }
     for (const lg of logs) {
       const info = curves.get(lg.address.toLowerCase());
       if (!info) continue;                    // not one of our (current-factory) tokens
@@ -362,16 +382,19 @@ async function scanRange(from, to) {
         } catch (e) { console.error('announce failed:', e.message); }
       }
     }
+    safe = end;
   }
   if (seenTx.size > 5000) { // keep the dedupe set bounded
     const keep = [...seenTx].slice(-2000); seenTx.clear(); keep.forEach((k) => seenTx.add(k));
   }
+  return safe;
 }
 
 // Resolve the official Uniswap V3 pool for each GRADUATED token, so we can watch
 // its Swap events (post-graduation buys no longer hit the curve's Trade event).
 async function refreshGradPools() {
   const tracked = new Set([...gradPools.values()].map((g) => g.token.toLowerCase()));
+  const newlyAdded = [];
   for (const info of curves.values()) {
     if (tracked.has(info.token.toLowerCase())) continue;
     let graduated = false;
@@ -381,44 +404,81 @@ async function refreshGradPools() {
       const pool = (await client.readContract({ address: OFFICIAL_V3_FACTORY, abi: v3FactoryAbi, functionName: 'getPool', args: [info.token, WMON, POOL_FEE] })).toLowerCase();
       if (!pool || pool === '0x0000000000000000000000000000000000000000') continue;
       const t0 = await client.readContract({ address: pool, abi: poolAbi, functionName: 'token0' });
-      gradPools.set(pool, { ...info, tokenIsToken0: t0.toLowerCase() === info.token.toLowerCase() });
+      const g = { ...info, tokenIsToken0: t0.toLowerCase() === info.token.toLowerCase() };
+      gradPools.set(pool, g);
+      newlyAdded.push([pool, g]);
       console.log(`[grad] watching Uni-V3 pool ${pool} for ${info.symbol}`);
     } catch { /* pool not created yet */ }
+  }
+  // A token graduates between ticks; tick() has already advanced lastBlock past the
+  // graduation, so buys in the discovery gap were never scanned for this pool.
+  // Backfill those (skip the very first pass so startup doesn't re-announce old buys).
+  if (gradInitialized) {
+    for (const [pool, g] of newlyAdded) await backfillGradPool(pool, g).catch((e) => console.error('grad backfill failed:', e.message));
+  }
+  gradInitialized = true;
+}
+
+// Process one Uniswap V3 Swap log for a graduated pool: record it for organic
+// trending and announce if it clears MIN_BUY_USD. Deduped by tx:logIndex.
+async function handleGradSwap(g, lg, usd) {
+  const key = `grad:${lg.transactionHash}:${lg.logIndex}`;
+  if (seenTx.has(key)) return; seenTx.add(key);
+  const { amount0, amount1 } = lg.args;
+  // Token side leaving the pool (negative) = a BUY; the other (positive) side is WMON in.
+  let wmonIn = 0n, tokensOut = 0n;
+  if (g.tokenIsToken0) { if (amount0 < 0n) { tokensOut = -amount0; wmonIn = amount1; } }
+  else { if (amount1 < 0n) { tokensOut = -amount1; wmonIn = amount0; } }
+  if (wmonIn <= 0n || tokensOut <= 0n) return; // sell or zero — skip
+  const mon = Number(formatEther(wmonIn));
+  const dollars = mon * usd;
+  // Feed graduated buys into the trending window too, so a graduated token can cross
+  // TREND_THRESHOLD_USD organically (curve tokens already do this via scanRange).
+  recentTrades.push({ token: g.token.toLowerCase(), usd: dollars, mon, time: Math.floor(Date.now() / 1000) });
+  if (dollars < MIN_BUY_USD) return;
+  let buyer = lg.args.recipient;
+  try { const tx = await client.getTransaction({ hash: lg.transactionHash }); if (tx?.from) buyer = tx.from; } catch {}
+  try {
+    const enr = await enrichToken(g).catch(() => null);
+    await announceBuy(g, mon, dollars, Number(formatEther(tokensOut)), buyer, lg.transactionHash, enr);
+  } catch (e) { console.error('grad announce failed:', e.message); }
+}
+
+// One-time bounded rescan of a single newly-discovered pool over the recent window,
+// to catch buys that landed in the graduation→discovery gap.
+async function backfillGradPool(pool, g) {
+  const head = await client.getBlockNumber();
+  const from = head > GRAD_BACKFILL ? head - GRAD_BACKFILL : 0n;
+  const usd = await getMonUsd();
+  for (let start = from; start <= head; start += CHUNK + 1n) {
+    const end = start + CHUNK > head ? head : start + CHUNK;
+    let logs;
+    try { logs = await client.getLogs({ address: pool, event: V3_SWAP_EVENT, fromBlock: start, toBlock: end }); }
+    catch (e) { console.error(`grad backfill getLogs ${start}-${end} failed:`, e.shortMessage || e.message); continue; }
+    for (const lg of logs) await handleGradSwap(g, lg, usd);
   }
 }
 
 // Scan graduated tokens' Uniswap V3 pools for buys (WMON in → token out).
+// Returns the highest block fully scanned (see scanBoosts/scanRange).
 async function scanGradPools(from, to) {
-  if (gradPools.size === 0) return;
+  if (gradPools.size === 0) return to;
   const addrs = [...gradPools.keys()];
   const usd = await getMonUsd();
+  let safe = from - 1n;
   for (let start = from; start <= to; start += CHUNK + 1n) {
     const end = start + CHUNK > to ? to : start + CHUNK;
     let logs;
     try { logs = await client.getLogs({ address: addrs, event: V3_SWAP_EVENT, fromBlock: start, toBlock: end }); }
-    catch (e) { console.error(`grad getLogs ${start}-${end} failed:`, e.shortMessage || e.message); continue; }
+    catch (e) { console.error(`grad getLogs ${start}-${end} failed:`, e.shortMessage || e.message); return safe; }
     for (const lg of logs) {
       const g = gradPools.get(lg.address.toLowerCase());
       if (!g) continue;
-      const key = `grad:${lg.transactionHash}:${lg.logIndex}`;
-      if (seenTx.has(key)) continue; seenTx.add(key);
-      const { amount0, amount1 } = lg.args;
-      // Token side leaving the pool (negative) = a BUY; the other (positive) side is WMON in.
-      let wmonIn = 0n, tokensOut = 0n;
-      if (g.tokenIsToken0) { if (amount0 < 0n) { tokensOut = -amount0; wmonIn = amount1; } }
-      else { if (amount1 < 0n) { tokensOut = -amount1; wmonIn = amount0; } }
-      if (wmonIn <= 0n || tokensOut <= 0n) continue; // sell or zero — skip
-      const mon = Number(formatEther(wmonIn));
-      const dollars = mon * usd;
-      if (dollars < MIN_BUY_USD) continue;
-      let buyer = lg.args.recipient;
-      try { const tx = await client.getTransaction({ hash: lg.transactionHash }); if (tx?.from) buyer = tx.from; } catch {}
-      try {
-        const enr = await enrichToken(g).catch(() => null);
-        await announceBuy(g, mon, dollars, Number(formatEther(tokensOut)), buyer, lg.transactionHash, enr);
-      } catch (e) { console.error('grad announce failed:', e.message); }
+      await handleGradSwap(g, lg, usd);
     }
+    safe = end;
   }
+  return safe;
 }
 
 async function tick() {
@@ -426,11 +486,18 @@ async function tick() {
     const head = await client.getBlockNumber();
     let from = state.lastBlock != null ? BigInt(state.lastBlock) + 1n : (head > MAX_CATCHUP ? head - MAX_CATCHUP : 0n);
     if (from > head) return;
-    await scanRange(from, head);       // pre-graduation curve buys (any pad token)
-    await scanGradPools(from, head);   // graduated tokens' Uniswap V3 pool buys
-    await scanBoosts(from, head);
-    state.lastBlock = head.toString();
-    saveJson(STATE_FILE, state);
+    const rangeSafe = await scanRange(from, head);       // pre-graduation curve buys (any pad token)
+    const gradSafe  = await scanGradPools(from, head);   // graduated tokens' Uniswap V3 pool buys
+    const boostSafe = await scanBoosts(from, head);      // paid boosts
+    // Advance lastBlock only to the block ALL scanners fully covered. If any chunk
+    // failed, its range is rescanned next tick (seenTx dedupes already-announced
+    // events) rather than being skipped forever.
+    const advanceTo = [rangeSafe, gradSafe, boostSafe].reduce((m, v) => (v < m ? v : m), head);
+    if (advanceTo >= from) {
+      state.lastBlock = advanceTo.toString();
+      state.seenTx = [...seenTx].slice(-2000); // persist dedupe so a restart doesn't replay
+      saveJson(STATE_FILE, state);
+    }
   } catch (e) { console.error('tick failed:', e.message); }
 }
 

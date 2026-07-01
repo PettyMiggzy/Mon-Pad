@@ -21,6 +21,18 @@ const SELL_FEE_BASE = BigInt(V3_SELL_FEE_CREATOR_BPS + V3_SELL_FEE_STAKING_BPS +
 type TxState = { status: 'idle' | 'pending' | 'success' | 'error'; message?: string };
 function shortAddr(a?: string) { return a ? `${a.slice(0, 6)}...${a.slice(-4)}` : '?'; }
 
+// Sanitize creator-supplied social links before using them as an href. Only
+// http(s) URLs are allowed; javascript:/data:/etc. are rejected (would otherwise
+// be a stored-XSS vector in the wallet-connected origin). Bare domains get https://.
+function safeUrl(u?: string | null): string | undefined {
+  if (!u || typeof u !== 'string') return undefined;
+  const s = u.trim();
+  if (!s) return undefined;
+  if (/^https?:\/\//i.test(s)) return s;
+  if (/^[a-z0-9.-]+\.[a-z]{2,}([/?#]|$)/i.test(s)) return `https://${s}`; // bare domain
+  return undefined; // reject javascript:, data:, mailto:, @handles, etc.
+}
+
 type Reserves = { vm: bigint; vt: bigint; rm: bigint; rt: bigint };
 
 function curveTokensFor(reserves: Reserves, monForBuy: bigint): bigint {
@@ -172,9 +184,9 @@ export default function TokenPage() {
             {creator && <span>by <Link href={`/profile/${creator}`} style={{ color: 'var(--brand, #A78BFA)' }}>{shortAddr(creator)}</Link></span>}
             <a href={`${MONAD_EXPLORER}/address/${addr}`} target="_blank" rel="noreferrer" style={{ color: 'var(--brand, #A78BFA)' }}>contract</a>
             {curve && <a href={`${MONAD_EXPLORER}/address/${curve}`} target="_blank" rel="noreferrer" style={{ color: 'var(--brand, #A78BFA)' }}>curve</a>}
-            {tokenMeta?.website && <a href={tokenMeta.website} target="_blank" rel="noreferrer" style={{ color: 'var(--brand, #A78BFA)' }}>web</a>}
-            {tokenMeta?.twitter && <a href={tokenMeta.twitter} target="_blank" rel="noreferrer" style={{ color: 'var(--brand, #A78BFA)' }}>x</a>}
-            {tokenMeta?.telegram && <a href={tokenMeta.telegram} target="_blank" rel="noreferrer" style={{ color: 'var(--brand, #A78BFA)' }}>tg</a>}
+            {safeUrl(tokenMeta?.website) && <a href={safeUrl(tokenMeta?.website)} target="_blank" rel="noreferrer noopener" style={{ color: 'var(--brand, #A78BFA)' }}>web</a>}
+            {safeUrl(tokenMeta?.twitter) && <a href={safeUrl(tokenMeta?.twitter)} target="_blank" rel="noreferrer noopener" style={{ color: 'var(--brand, #A78BFA)' }}>x</a>}
+            {safeUrl(tokenMeta?.telegram) && <a href={safeUrl(tokenMeta?.telegram)} target="_blank" rel="noreferrer noopener" style={{ color: 'var(--brand, #A78BFA)' }}>tg</a>}
           </div>
         </div>
         <div style={{ flex: 1 }} />
@@ -270,9 +282,14 @@ function fmtNum(n: number, maxFrac = 2): string {
   // Tiny values: render 0.0₇304 instead of "3.04e-8" (count = leading zeros after the
   // decimal). Crypto-native + readable; matches DexScreener/DEXTools.
   if (a < 0.0001) {
-    const exp = Math.floor(Math.log10(a));
+    let exp = Math.floor(Math.log10(a));
+    // Round the mantissa to 4 sig figs FIRST; if it carries to 10.000 the value
+    // crossed a decade, so bump the exponent (otherwise zeros/digits disagree and
+    // the rendered price is off by 10x, e.g. 0.000099999).
+    let mant = Math.round((a / Math.pow(10, exp)) * 1000); // 1000..10000
+    if (mant >= 10000) { mant = 1000; exp += 1; }
     const zeros = -exp - 1;
-    const digits = (a / Math.pow(10, exp)).toFixed(3).replace('.', ''); // 4 significant figures (DexScreener style)
+    const digits = String(mant); // 4 significant figures (DexScreener style)
     return `${n < 0 ? '-' : ''}0.0${toSub(zeros)}${digits}`;
   }
   return n.toLocaleString(undefined, { maximumFractionDigits: Math.max(maxFrac, 4) });

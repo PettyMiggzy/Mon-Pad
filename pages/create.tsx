@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/router';
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, usePublicClient } from 'wagmi';
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, usePublicClient, useSignMessage } from 'wagmi';
 import { parseEther, decodeEventLog, type Address } from 'viem';
 import { factoryV3Abi } from '@/lib/abis';
 import { api } from '@/lib/api';
@@ -45,6 +45,7 @@ export default function CreatePage() {
 
   const [tx, setTx] = useState<TxState>({ status: 'idle' });
   const { writeContractAsync } = useWriteContract();
+  const { signMessageAsync } = useSignMessage();
   const publicClient = usePublicClient();
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
   const { data: receipt, isSuccess } = useWaitForTransactionReceipt({ hash: txHash });
@@ -63,12 +64,18 @@ export default function CreatePage() {
     setTx({ status: 'success', message: 'Token launched!' });
     if (newAddr) {
       // Persist off-chain metadata (logo + socials) keyed by the new token address.
-      // Same-origin → Supabase; best-effort, never blocks the redirect.
-      fetch('/api/token-meta', {
-        method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ address: newAddr, name, symbol, imageUrl, description, twitter, telegram, website, creator: address }),
-      }).catch(() => {});
+      // We sign a message so the server can verify we're the on-chain creator and
+      // store this authoritatively (an unsigned squatter can't overwrite it). The
+      // signature is gas-free; if the user skips it the write is still best-effort.
       const dest = newAddr;
+      (async () => {
+        let signature: string | undefined;
+        try { if (address) signature = await signMessageAsync({ account: address, message: `Mon-Pad: set metadata for token ${dest.toLowerCase()}` }); } catch { /* skipped */ }
+        fetch('/api/token-meta', {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ address: dest, name, symbol, imageUrl, description, twitter, telegram, website, signature }),
+        }).catch(() => {});
+      })();
       setTimeout(() => router.push(`/token/${dest}`), 1200);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

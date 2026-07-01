@@ -27,6 +27,7 @@ export type CurveFees = {
   sellCreatorBps: number;
   sellStakingBps: number;
   sellPlatformBps: number;
+  tradeTaxBps?: number; // creator-set per-trade tax (taxBurnTokenBps + taxLpBps); charged on BOTH sides
 };
 
 export type PreflightState = {
@@ -52,7 +53,8 @@ export function previewBuy(
   if (monIn <= 0n) return 0n;
   const creatorFee = (monIn * BigInt(f.buyCreatorBps)) / 10000n;
   const bufferFee = (monIn * BigInt(f.buyBufferBps)) / 10000n;
-  const monForBuy = monIn - creatorFee - bufferFee;
+  const taxTotal = (monIn * BigInt(f.tradeTaxBps ?? 0)) / 10000n; // contract subtracts tax off-the-top too
+  const monForBuy = monIn - creatorFee - bufferFee - taxTotal;
   if (monForBuy <= 0n) return 0n;
 
   const currentMon = r.virtualMonReserve + r.realMonReserve;
@@ -94,7 +96,8 @@ export function previewSell(
   const creatorFee = (gross * BigInt(f.sellCreatorBps)) / 10000n;
   const stakingFee = (gross * BigInt(f.sellStakingBps)) / 10000n;
   const platformFee = (gross * BigInt(f.sellPlatformBps)) / 10000n;
-  return gross - creatorFee - stakingFee - platformFee;
+  const taxTotal = (gross * BigInt(f.tradeTaxBps ?? 0)) / 10000n; // contract subtracts tax on sells too
+  return gross - creatorFee - stakingFee - platformFee - taxTotal;
 }
 
 // Apply slippage bps to a quoted output to produce a minOut floor.

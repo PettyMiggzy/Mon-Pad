@@ -464,7 +464,11 @@ contract MonPadCurveV3 {
         realMonReserve   += monAmt;
         realTokenReserve -= tokensOut;
         monRaised        += monAmt;
-        monRaisedNet     += monAmt;
+        // NOTE: intentionally NOT added to monRaisedNet. monRaisedNet drives bondedBps()
+        // and the graduation trigger; buyback-burn MON is recycled fee/tax capital, not
+        // net new buyer inflow, so counting it would over-report bonding progress and let
+        // a token graduate before gradTarget of genuine buy-in (audit Low). It still
+        // increases realMonReserve (price) and monRaised (gross) as expected.
         totalBurnedTokens += tokensOut;
 
         _safeTransfer(token, DEAD, tokensOut);

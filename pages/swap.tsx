@@ -25,6 +25,7 @@ type TxState = { status: 'idle' | 'pending' | 'success' | 'error'; message?: str
 // bits we need to let the Monorail router pull WMON via transferFrom.
 const WMON_ABI = [
   { type: 'function', name: 'deposit', stateMutability: 'payable', inputs: [], outputs: [] },
+  { type: 'function', name: 'withdraw', stateMutability: 'nonpayable', inputs: [{ name: 'amount', type: 'uint256' }], outputs: [] },
   { type: 'function', name: 'approve', stateMutability: 'nonpayable', inputs: [{ name: 'spender', type: 'address' }, { name: 'amount', type: 'uint256' }], outputs: [{ type: 'bool' }] },
   { type: 'function', name: 'allowance', stateMutability: 'view', inputs: [{ name: 'owner', type: 'address' }, { name: 'spender', type: 'address' }], outputs: [{ type: 'uint256' }] },
 ] as const;
@@ -150,6 +151,11 @@ export default function SwapPage() {
 
   // Route decision
   const route: Route = useMemo(() => routeForSwap(from, to), [from, to]);
+  // Pure wrap / unwrap between native MON and WMON. These are 1:1 and must be done
+  // DIRECTLY on the WMON contract (deposit/withdraw) — routing WMON→native through
+  // Monorail reverts (Internal JSON-RPC error), and wrapping needs no aggregator.
+  const isWrap = useMemo(() => isNativeAddr(from.address) && to.address.toLowerCase() === WMON.toLowerCase(), [from.address, to.address]);
+  const isUnwrap = useMemo(() => from.address.toLowerCase() === WMON.toLowerCase() && isNativeAddr(to.address), [from.address, to.address]);
   const crossCurve = useMemo(() => checkCrossCurve(from, to), [from, to]);
 
   // ----- Factory reads (cached at mount, refreshed every 5 min) -----
@@ -206,9 +212,17 @@ export default function SwapPage() {
       { address: curveAddr, abi: curveV3Abi as any, functionName: 'pauseSells' },
       { address: curveAddr, abi: curveV3Abi as any, functionName: 'graduated' },
       { address: factoryAddr, abi: factoryV3Abi as any, functionName: 'blocked', args: [curveTokenAddr] },
+      { address: curveAddr, abi: curveV3Abi as any, functionName: 'tradeTaxBps' },
     ] : []) as any,
     query: { enabled: !!curveAddr && !!curveTokenAddr, refetchInterval: 8_000 },
   });
+  // Per-token creator tax (charged on both sides by the contract) — must be in the
+  // preview or quotes are inflated and the on-chain slippage check reverts.
+  const tradeTaxBps = Number((curveReads.data?.[5]?.result as bigint | undefined) ?? 0n);
+  const feesWithTax: CurveFees | null = useMemo(
+    () => (fees ? { ...fees, tradeTaxBps } : null),
+    [fees, tradeTaxBps],
+  );
 
   const reserves: CurveReserves | null = useMemo(() => {
     const r = curveReads.data?.[0]?.result;
@@ -242,7 +256,7 @@ export default function SwapPage() {
 
   useEffect(() => {
     if (route !== 'curve') { setCurveOut(null); setPreflight(null); return; }
-    if (!reserves || !fees || !preflightState) return;
+    if (!reserves || !feesWithTax || !preflightState) return;
     if (!amountIn || isNaN(Number(amountIn)) || Number(amountIn) <= 0) { setCurveOut(null); return; }
     const handle = setTimeout(() => {
       const pre = isBuy ? preflightBuy(preflightState) : preflightSell(preflightState);
@@ -251,17 +265,17 @@ export default function SwapPage() {
       try {
         if (isBuy) {
           const monIn = parseEther(amountIn);
-          setCurveOut(previewBuy(monIn, reserves, fees));
+          setCurveOut(previewBuy(monIn, reserves, feesWithTax));
           setCurveDecimals(to.decimals);
         } else if (isSell) {
           const tokensIn = parseUnits(amountIn, from.decimals);
-          setCurveOut(previewSell(tokensIn, reserves, fees));
+          setCurveOut(previewSell(tokensIn, reserves, feesWithTax));
           setCurveDecimals(18);
         }
       } catch { setCurveOut(null); }
     }, 300);
     return () => clearTimeout(handle);
-  }, [amountIn, route, reserves, fees, preflightState, isBuy, isSell, from.decimals, to.decimals, refreshTick]);
+  }, [amountIn, route, reserves, feesWithTax, preflightState, isBuy, isSell, from.decimals, to.decimals, refreshTick]);
 
   // ----- Monorail quote (5s debounce, remote) -----
   const [mQuote, setMQuote] = useState<MonorailQuote | null>(null);
@@ -270,6 +284,7 @@ export default function SwapPage() {
 
   useEffect(() => {
     if (route !== 'monorail') { setMQuote(null); return; }
+    if (isWrap || isUnwrap) { setMQuote(null); return; } // 1:1 direct wrap/unwrap, no Monorail quote
     if (!amountIn || isNaN(Number(amountIn)) || Number(amountIn) <= 0) { setMQuote(null); return; }
     abortRef.current?.abort();
     const ctrl = new AbortController();
@@ -291,10 +306,11 @@ export default function SwapPage() {
       } finally { setLoadingQuote(false); }
     }, 700);
     return () => { clearTimeout(handle); ctrl.abort(); };
-  }, [amountIn, route, from.address, to.address, slippageBps, address, refreshTick]);
+  }, [amountIn, route, from.address, to.address, slippageBps, address, refreshTick, isWrap, isUnwrap]);
 
   // ----- Display outputs -----
   const outAmount = useMemo(() => {
+    if (isWrap || isUnwrap) return amountIn || ''; // 1:1
     if (route === 'curve' && curveOut !== null) {
       return formatUnits(curveOut, curveDecimals);
     }
@@ -302,9 +318,10 @@ export default function SwapPage() {
       return quoteSummary(mQuote).outputFormatted;
     }
     return '';
-  }, [route, curveOut, curveDecimals, mQuote]);
+  }, [route, curveOut, curveDecimals, mQuote, isWrap, isUnwrap, amountIn]);
 
   const minOut = useMemo(() => {
+    if (isWrap || isUnwrap) return amountIn || ''; // 1:1, no slippage
     if (route === 'curve' && curveOut !== null) {
       return formatUnits(applySlippage(curveOut, slippageBps), curveDecimals);
     }
@@ -312,7 +329,7 @@ export default function SwapPage() {
       return quoteSummary(mQuote).minOutputFormatted;
     }
     return '';
-  }, [route, curveOut, curveDecimals, mQuote, slippageBps]);
+  }, [route, curveOut, curveDecimals, mQuote, slippageBps, isWrap, isUnwrap, amountIn]);
 
   const priceImpactPct = route === 'monorail' && mQuote ? quoteSummary(mQuote).priceImpactPct : null;
 
@@ -338,8 +355,20 @@ export default function SwapPage() {
 
   async function handleSwap() {
     if (!address) return;
+    setTxHash(undefined); // clear any prior tx so a stale confirmed receipt can't read as success
     setTx({ status: 'pending', message: 'submitting...' });
     try {
+      // ── Pure wrap / unwrap (native MON ⇄ WMON): 1:1, direct on the WMON contract.
+      // Monorail reverts routing WMON→native, so never send these through it.
+      if (isWrap || isUnwrap) {
+        const amt = parseUnits(amountIn, from.decimals);
+        const hash = isWrap
+          ? await writeContractAsync({ address: WMON as Address, abi: WMON_ABI, functionName: 'deposit', value: amt } as any)
+          : await writeContractAsync({ address: WMON as Address, abi: WMON_ABI, functionName: 'withdraw', args: [amt] } as any);
+        setTxHash(hash);
+        setTx({ status: 'pending', message: isWrap ? 'wrapping…' : 'unwrapping…' });
+        return;
+      }
       if (route === 'curve') {
         if (!curveAddr || !curveOut) throw new Error('no curve quote');
         const minOutWei = applySlippage(curveOut, slippageBps);
@@ -352,8 +381,9 @@ export default function SwapPage() {
             // Exact-amount approve (not MAX_UINT256) — clears MetaMask/Blockaid spending-cap warning.
             args: [curveAddr, parseUnits(amountIn, from.decimals)],
           } as any);
-          setTxHash(approveHash);
-          await new Promise((res) => setTimeout(res, 1500));
+          // NOTE: do not setTxHash for the approve — only the final swap tx should
+          // drive the "confirmed" state (else an approve confirming reads as success).
+          await publicClient.waitForTransactionReceipt({ hash: approveHash });
         }
         if (isBuy) {
           const monIn = parseEther(amountIn);
@@ -403,7 +433,6 @@ export default function SwapPage() {
           const wrapHash = await writeContractAsync({
             address: WMON as Address, abi: WMON_ABI, functionName: 'deposit', value: amtIn,
           } as any);
-          setTxHash(wrapHash);
           await publicClient.waitForTransactionReceipt({ hash: wrapHash });
           q = await getMonorailQuote({
             fromAddress: WMON, toAddress: to.address,
@@ -425,7 +454,6 @@ export default function SwapPage() {
             const apHash = await writeContractAsync({
               address: swapFrom as Address, abi: WMON_ABI, functionName: 'approve', args: [router, amtIn],
             } as any);
-            setTxHash(apHash);
             await publicClient.waitForTransactionReceipt({ hash: apHash });
           }
         }
@@ -449,7 +477,9 @@ export default function SwapPage() {
   }
 
   // ----- Submit gate -----
-  const hasQuote = route === 'curve' ? curveOut !== null && curveOut > 0n : !!mQuote;
+  const hasQuote = (isWrap || isUnwrap)
+    ? (!!amountIn && Number(amountIn) > 0)
+    : (route === 'curve' ? curveOut !== null && curveOut > 0n : !!mQuote);
   const preflightOk = route !== 'curve' || (preflight?.ok ?? true);
   const disableReason = crossCurve.disabled
     ? crossCurve.reason
