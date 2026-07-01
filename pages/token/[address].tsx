@@ -210,6 +210,24 @@ export default function TokenPage() {
   );
 }
 
+// Inline "shortAddr + copy" used in info rows: click copies the FULL address.
+function CopyText({ addr }: { addr?: string }) {
+  const [copied, setCopied] = useState(false);
+  if (!addr) return null;
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
+      <button
+        onClick={async (e) => { e.preventDefault(); try { await navigator.clipboard.writeText(addr); setCopied(true); setTimeout(() => setCopied(false), 1200); } catch {} }}
+        title={`Copy ${addr}`}
+        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'monospace', fontSize: 12, color: copied ? '#4ADE80' : 'var(--brand,#A78BFA)', display: 'inline-flex', alignItems: 'center', gap: 5 }}
+      >
+        {`${addr.slice(0, 6)}…${addr.slice(-4)}`}<span style={{ fontFamily: 'system-ui, sans-serif' }}>{copied ? '✓' : '⧉'}</span>
+      </button>
+      <a href={`${MONAD_EXPLORER}/address/${addr}`} target="_blank" rel="noreferrer" title="View on explorer" style={{ color: '#667', fontSize: 12, textDecoration: 'none' }}>↗</a>
+    </span>
+  );
+}
+
 // Copyable contract-address chip — one click copies the FULL address.
 function CopyChip({ addr, label = 'CA' }: { addr?: string; label?: string }) {
   const [copied, setCopied] = useState(false);
@@ -310,8 +328,8 @@ function OtherInfo({ addr, curve, creator, createdAt }: { addr?: Address; curve?
     <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 10, padding: 12 }}>
       <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>Other info</div>
       {creator && <Row label="Creator"><Link href={`/profile/${creator}`} style={{ color: 'var(--brand,#A78BFA)' }}>{shortAddr(creator)}</Link></Row>}
-      {addr && <Row label="Contract"><a href={`${MONAD_EXPLORER}/address/${addr}`} target="_blank" rel="noreferrer" style={{ color: 'var(--brand,#A78BFA)' }}>{shortAddr(addr)}</a></Row>}
-      {curve && <Row label="Curve"><a href={`${MONAD_EXPLORER}/address/${curve}`} target="_blank" rel="noreferrer" style={{ color: 'var(--brand,#A78BFA)' }}>{shortAddr(curve)}</a></Row>}
+      {addr && <Row label="Contract"><CopyText addr={addr} /></Row>}
+      {curve && <Row label="Curve"><CopyText addr={curve} /></Row>}
       {created && <Row label="Created">{created}</Row>}
     </div>
   );

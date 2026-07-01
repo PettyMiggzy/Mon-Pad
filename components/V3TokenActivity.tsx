@@ -33,19 +33,20 @@ export default function V3TokenActivity({ curve, symbol, token, refreshKey }: { 
   const [trades, setTrades] = useState<V3Trade[]>([]);
   const [loading, setLoading] = useState(true);
   const [tf, setTf] = useState(300);
-  const [tab, setTab] = useState<'chart' | 'trades' | 'holders'>('chart');
+  // Chart is always shown; the lower panel toggles between the live trade feed and holders.
+  const [lowerTab, setLowerTab] = useState<'trades' | 'holders'>('trades');
   const [holders, setHolders] = useState<V3Holder[] | null>(null);
 
-  // Lazy-load holders only when the tab is opened (the scan is heavier).
+  // Lazy-load holders only when that panel is opened (the scan is heavier).
   useEffect(() => {
-    if (tab !== 'holders' || !token) return;
+    if (lowerTab !== 'holders' || !token) return;
     let cancelled = false;
     setHolders(null);
     getV3Holders(token, curve ? [curve] : [])
       .then((h) => { if (!cancelled) setHolders(h); })
       .catch(() => { if (!cancelled) setHolders([]); });
     return () => { cancelled = true; };
-  }, [tab, token, curve, refreshKey]);
+  }, [lowerTab, token, curve, refreshKey]);
 
   useEffect(() => {
     if (!curve) return;
@@ -60,36 +61,64 @@ export default function V3TokenActivity({ curve, symbol, token, refreshKey }: { 
       } catch { if (!cancelled) setLoading(false); }
     };
     load();
-    timer = setInterval(load, 20000); // poll for fresh trades (paused when tab hidden)
+    timer = setInterval(load, 15000); // poll for fresh trades (paused when tab hidden)
     return () => { cancelled = true; clearInterval(timer); };
     // refreshKey bumps after a trade → reload immediately instead of waiting for the poll.
   }, [curve, refreshKey]);
 
   const candles = useMemo(() => tradesToCandles(trades, tf), [trades, tf]);
 
+  const panel: React.CSSProperties = { background: 'rgba(255,255,255,0.03)', borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)' };
+
   return (
-    <div style={{ marginTop: 16, background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: 12 }}>
-      <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
-        <button onClick={() => setTab('chart')} style={tabStyle(tab === 'chart')}>Chart</button>
-        <button onClick={() => setTab('trades')} style={tabStyle(tab === 'trades')}>Trades{trades.length ? ` (${trades.length})` : ''}</button>
-        {token && <button onClick={() => setTab('holders')} style={tabStyle(tab === 'holders')}>Holders{holders ? ` (${holders.length})` : ''}</button>}
-        <div style={{ flex: 1 }} />
-        {tab === 'chart' && TIMEFRAMES.map((f) => (
-          <button key={f.sec} onClick={() => setTf(f.sec)} style={tfStyle(tf === f.sec)}>{f.label}</button>
-        ))}
+    <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {/* ── Price chart ─────────────────────────────────────────── */}
+      <div style={{ ...panel, padding: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: '#cbd5e1', letterSpacing: 0.3 }}>PRICE CHART</span>
+          <span style={{ fontSize: 11, color: '#666' }}>MON / {symbol || 'token'}</span>
+          <div style={{ flex: 1 }} />
+          {TIMEFRAMES.map((f) => (
+            <button key={f.sec} onClick={() => setTf(f.sec)} style={tfStyle(tf === f.sec)}>{f.label}</button>
+          ))}
+        </div>
+        {loading ? (
+          <div style={{ padding: 48, textAlign: 'center', color: '#888', fontSize: 13 }}>Loading on-chain activity…</div>
+        ) : trades.length === 0 ? (
+          <div style={{ padding: 48, textAlign: 'center', color: '#888', fontSize: 13 }}>No trades yet — be the first.</div>
+        ) : (
+          <Candles data={candles} />
+        )}
       </div>
 
-      {tab === 'holders' ? (
-        <HoldersList holders={holders} symbol={symbol} />
-      ) : loading ? (
-        <div style={{ padding: 32, textAlign: 'center', color: '#888', fontSize: 13 }}>Loading on-chain activity…</div>
-      ) : trades.length === 0 ? (
-        <div style={{ padding: 32, textAlign: 'center', color: '#888', fontSize: 13 }}>No trades yet — be the first.</div>
-      ) : tab === 'chart' ? (
-        <Candles data={candles} />
-      ) : (
-        <TradesList trades={trades} symbol={symbol} />
-      )}
+      {/* ── Live trades / holders (always under the chart) ──────── */}
+      <div style={{ ...panel, padding: 12 }}>
+        <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
+          <button onClick={() => setLowerTab('trades')} style={tabStyle(lowerTab === 'trades')}>
+            Live trades{trades.length ? ` (${trades.length})` : ''}
+          </button>
+          {token && (
+            <button onClick={() => setLowerTab('holders')} style={tabStyle(lowerTab === 'holders')}>
+              Holders{holders ? ` (${holders.length})` : ''}
+            </button>
+          )}
+          <div style={{ flex: 1 }} />
+          {lowerTab === 'trades' && (
+            <span style={{ fontSize: 10, color: '#4ADE80', alignSelf: 'center', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ width: 6, height: 6, borderRadius: 999, background: '#4ADE80', display: 'inline-block', boxShadow: '0 0 6px #4ADE80' }} />live
+            </span>
+          )}
+        </div>
+        {lowerTab === 'holders' ? (
+          <HoldersList holders={holders} symbol={symbol} />
+        ) : loading ? (
+          <div style={{ padding: 24, textAlign: 'center', color: '#888', fontSize: 13 }}>Loading trades…</div>
+        ) : trades.length === 0 ? (
+          <div style={{ padding: 24, textAlign: 'center', color: '#888', fontSize: 13 }}>No trades yet — be the first.</div>
+        ) : (
+          <TradesList trades={trades} symbol={symbol} />
+        )}
+      </div>
     </div>
   );
 }
