@@ -13,7 +13,7 @@ const PRIMARY_NAV = [
   { href: '/swap', label: 'Swap', icon: ArrowLeftRight, desktopOnly: false },
   { href: '/launch', label: 'Orrery', icon: Orbit, desktopOnly: false },
   { href: '/club', label: 'Club', icon: Gem, desktopOnly: true },
-  { href: '/district', label: 'District', icon: Building2, desktopOnly: true },
+  { href: '/district', label: 'City', icon: Building2, desktopOnly: true },
   { href: '/stake', label: 'Stake', icon: Coins, desktopOnly: false },
   { href: '/how-it-works', label: 'How it works', icon: BookOpen, desktopOnly: true },
   { href: '/docs', label: 'Docs', icon: FileText, desktopOnly: true },
