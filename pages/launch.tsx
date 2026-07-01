@@ -40,7 +40,7 @@ function demoBodies(n: number): Rocket[] {
     out.push({
       name: `Demo ${i}`, symbol: `D${i}`, address: '',
       progress: graduated ? 1 : Math.min(0.98, 0.05 + p * 0.9),
-      graduated, boosted,
+      graduated, boosted, ambient: true,
       mcMon: 500 + Math.abs((Math.cos(i * 7.13) * 9000)),
     });
   }
@@ -65,6 +65,7 @@ function fmtMon(n?: number) {
 
 export default function LaunchPage() {
   const [rockets, setRockets] = useState<Rocket[] | null>(null);
+  const [realCount, setRealCount] = useState(0);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<OrreryFilter>('all');
   const [hovered, setHovered] = useState<Rocket | null>(null);
@@ -72,41 +73,62 @@ export default function LaunchPage() {
   useEffect(() => {
     let cancelled = false;
     listV3Tokens(300)
-      .then((toks) => {
+      .then(async (toks) => {
         if (cancelled) return;
         const real: Rocket[] = toks.map((t) => {
           let mcMon = 0;
           try { mcMon = Number(formatEther(BigInt(t.priceWeiPerToken))) * 1e9; } catch { mcMon = 0; }
-          return { name: t.name, symbol: t.symbol, address: t.token, progress: t.progress, graduated: t.graduated, mcMon };
+          return { name: t.name, symbol: t.symbol, address: t.token, progress: t.progress, graduated: t.graduated, mcMon, ambient: false };
         });
+        // Pull each real project's logo (PFP) so it shows on its orbiting coin.
+        const addrs = real.map((r) => r.address).filter(Boolean);
+        if (addrs.length) {
+          try {
+            const res = await fetch(`/api/token-meta?addresses=${addrs.slice(0, 100).join(',')}`);
+            if (res.ok) {
+              const rows = (await res.json()) as { address: string; image_url?: string }[];
+              const imgs = new Map(rows.map((r) => [r.address.toLowerCase(), r.image_url]));
+              real.forEach((r) => { const u = imgs.get(r.address.toLowerCase()); if (u) r.img = u; });
+            }
+          } catch { /* logos are best-effort */ }
+        }
+        if (cancelled) return;
+        setRealCount(real.length);
         // Mark the highest-progress live token as boosted so the gold state shows.
         let topIdx = -1, topP = -1;
         real.forEach((r, i) => { if (!r.graduated && r.progress > topP) { topP = r.progress; topIdx = i; } });
         if (topIdx >= 0) real[topIdx].boosted = true;
-        // Blend demo bodies behind the real ones so the bay is populated.
-        const pad = real.length < 140 ? demoBodies(160 - real.length) : [];
+        // Ambient demo bodies fill out the galaxy; real projects are always promoted
+        // to the front (hero/mid) in the scene, so they read as the actual ecosystem.
+        const pad = demoBodies(Math.max(0, 90 - real.length));
         setRockets([...real, ...pad]);
       })
-      .catch(() => { if (!cancelled) setRockets(demoBodies(160)); });
+      .catch(() => { if (!cancelled) { setRealCount(0); setRockets(demoBodies(120)); } });
     return () => { cancelled = true; };
   }, []);
 
   const list = rockets || [];
+  // Real on-chain projects only (demo bodies are ambient backdrop) — the leaderboard
+  // and counts describe the ACTUAL ecosystem; fall back to all if none are live yet.
+  const realList = useMemo(() => {
+    const r = list.filter((t) => !t.ambient);
+    return r.length ? r : list;
+  }, [list]);
   const counts = useMemo(() => ({
-    fueling: list.filter((t) => !t.graduated).length,
-    near: list.filter((t) => !t.graduated && t.progress >= 0.9).length,
-    grad: list.filter((t) => t.graduated).length,
-    boost: list.filter((t) => t.boosted).length,
-  }), [list]);
+    fueling: realList.filter((t) => !t.graduated).length,
+    near: realList.filter((t) => !t.graduated && t.progress >= 0.9).length,
+    grad: realList.filter((t) => t.graduated).length,
+    boost: realList.filter((t) => t.boosted).length,
+  }), [realList]);
 
   const trendCut = useMemo(() => {
-    const s = list.map(score).sort((a, b) => b - a);
+    const s = realList.map(score).sort((a, b) => b - a);
     return s[Math.floor(s.length * 0.25)] ?? 0;
-  }, [list]);
+  }, [realList]);
 
   const leaderboard = useMemo(() => {
     const q = query.toLowerCase();
-    return list
+    return realList
       .filter((t) => {
         if (q && !(t.symbol?.toLowerCase().includes(q) || t.name?.toLowerCase().includes(q) || t.address?.toLowerCase().includes(q))) return false;
         if (filter === 'boosted') return t.boosted;
@@ -119,7 +141,7 @@ export default function LaunchPage() {
       .sort((a, b) => b.s - a.s)
       .slice(0, 18)
       .map((x) => x.t);
-  }, [list, query, filter, trendCut]);
+  }, [realList, query, filter, trendCut]);
 
   const open = (a?: string) => { if (a) window.location.href = `/token/${a}`; };
 
@@ -172,6 +194,7 @@ export default function LaunchPage() {
 
         {/* Live cohort counts */}
         <div style={{ position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 14, background: 'rgba(10,6,20,0.6)', border: '1px solid rgba(139,92,246,0.3)', borderRadius: 10, padding: '7px 14px', fontSize: 12, color: '#cbd5e1' }}>
+          <span title={realCount ? 'live on-chain projects' : 'no live projects yet — showing demo'}>🛰 <b style={{ color: '#fff' }}>{realCount}</b> live{realCount ? '' : ' (demo)'}</span>
           <span>🟣 Fueling <b style={{ color: '#fff' }}>{counts.fueling}</b></span>
           <span>🟠 Near-grad <b style={{ color: '#fff' }}>{counts.near}</b></span>
           <span>🟢 Graduated <b style={{ color: '#fff' }}>{counts.grad}</b></span>
