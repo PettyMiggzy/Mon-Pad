@@ -37,6 +37,11 @@ const MON_USD_FALLBACK   = Number(process.env.MON_USD_FALLBACK || '0');       //
 // Trend duration comes from the on-chain event; pricing/tiers live in the contract.
 const BOOST_CONTRACT     = (process.env.BOOST_CONTRACT || '0xE50Ab41eAE60309d06a6aaA699f5E5786D78e4DA').toLowerCase();
 const ADMIN_ID           = process.env.ADMIN_ID || '';                        // Telegram id allowed to run admin actions
+// DexScreener per-token enrichment (keyless read API; Monad chainId 'monad')
+const DS_TTL_MS      = Number(process.env.DS_CACHE_TTL_MS || '60000');        // cache a listed pair
+const DS_NEG_TTL_MS  = Number(process.env.DS_NEG_CACHE_TTL_MS || '300000');   // cache "not listed yet"
+const CURVE_TTL_MS   = Number(process.env.CURVE_PRICE_TTL_MS || '15000');     // cache on-chain curve price
+const TOTAL_SUPPLY   = 1_000_000_000;                                         // fixed 1e9 supply (matches V3_TOTAL_SUPPLY)
 const STATE_FILE         = new URL('./state.json', import.meta.url);
 const BOOSTS_FILE        = new URL('./boosts.json', import.meta.url);
 
@@ -114,6 +119,58 @@ async function getMonUsd() {
   return monUsd;
 }
 
+// ── DexScreener per-token enrichment ──────────────────────────────────────
+// Prefer DexScreener data when the token is listed (graduated Uni-V3 pool, or a
+// future indexed curve); fall back to on-chain curve price before it's listed.
+const dsCache = new Map();    // token(lower) -> { pair, at, ttl }
+const priceCache = new Map(); // curve(lower) -> { mon, at }
+
+async function fetchDexPair(token) {
+  const key = token.toLowerCase();
+  const hit = dsCache.get(key);
+  if (hit && Date.now() - hit.at < hit.ttl) return hit.pair;
+  try {
+    const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${token}`);
+    const d = await r.json();
+    const pairs = (d.pairs || []).filter((p) => p.chainId === 'monad' && p.baseToken?.address?.toLowerCase() === key && Number(p.priceUsd) > 0);
+    const pair = pairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0] || null;
+    dsCache.set(key, { pair, at: Date.now(), ttl: pair ? DS_TTL_MS : DS_NEG_TTL_MS });
+    return pair;
+  } catch {
+    if (hit) return hit.pair;                 // serve stale on error
+    dsCache.set(key, { pair: null, at: Date.now(), ttl: 10_000 });
+    return null;
+  }
+}
+
+async function curvePriceMon(curve) {
+  const key = (curve || '').toLowerCase();
+  const hit = priceCache.get(key);
+  if (hit && Date.now() - hit.at < CURVE_TTL_MS) return hit.mon;
+  try {
+    const wei = await client.readContract({ address: curve, abi: curveAbi, functionName: 'priceWeiPerToken' });
+    const mon = Number(formatEther(wei));
+    priceCache.set(key, { mon, at: Date.now() });
+    return mon;
+  } catch { return hit ? hit.mon : 0; }
+}
+
+/** { source, listed, priceUsd, marketCapUsd, priceChangeH24, pairUrl } */
+async function enrichToken(info) {
+  const pair = await fetchDexPair(info.token);
+  if (pair) {
+    const priceUsd = Number(pair.priceUsd);
+    return {
+      source: 'dexscreener', listed: true, priceUsd,
+      marketCapUsd: Number(pair.marketCap) || Number(pair.fdv) || priceUsd * TOTAL_SUPPLY,
+      priceChangeH24: pair.priceChange?.h24 ?? null,
+      pairUrl: pair.url || `https://dexscreener.com/monad/${pair.pairAddress}`,
+    };
+  }
+  const priceUsd = (await curvePriceMon(info.curve)) * (await getMonUsd());
+  return { source: 'curve', listed: false, priceUsd, marketCapUsd: priceUsd * TOTAL_SUPPLY, priceChangeH24: null, pairUrl: null };
+}
+
 // ── Token registry (from the factory) ─────────────────────────────────────
 async function refreshTokens() {
   try {
@@ -132,24 +189,42 @@ async function refreshTokens() {
   } catch (e) { console.error('refreshTokens failed:', e.message); }
 }
 
-// ── Buy alerts ─────────────────────────────────────────────────────────────
-function emojiRow(usd) {
-  // one 🟢 per ~$50, capped, so bigger buys look bigger.
-  const n = Math.max(3, Math.min(48, Math.floor(usd / 50)));
-  return '🟢'.repeat(n);
+// ── Buy alerts (tiered by USD size) ──────────────────────────────────────────
+function buyTier(usd) {
+  if (usd >= 5000) return { emoji: '🐋', label: 'WHALE', unit: 250 };
+  if (usd >= 1000) return { emoji: '🦈', label: 'SHARK', unit: 100 };
+  if (usd >= 300)  return { emoji: '🐬', label: 'DOLPHIN', unit: 40 };
+  return { emoji: '🐟', label: 'FISH', unit: 15 };
 }
-async function announceBuy(info, mon, usd, tokensOut, trader, tx) {
-  const line = [
-    `🚀 <b>${esc(info.name || info.symbol)}</b> ($${esc(info.symbol)}) BUY`,
-    emojiRow(usd),
+function emojiWall(usd, tier) {
+  return tier.emoji.repeat(Math.max(1, Math.min(40, Math.floor(usd / tier.unit))));
+}
+// Inline buttons: Buy on Mon-Pad + Chart (DexScreener when listed, else Mon-Pad) + Txn.
+function buyButtons(info, enr, tx) {
+  const rows = [[{ text: '🟣 Buy on Mon-Pad', url: `${SITE}/token/${info.token}` }]];
+  const r2 = [enr?.listed && enr.pairUrl
+    ? { text: '📊 Chart (DexScreener)', url: enr.pairUrl }
+    : { text: '📈 Chart (Mon-Pad)', url: `${SITE}/token/${info.token}` }];
+  if (tx) r2.push({ text: '🔎 Txn', url: `${EXPLORER}/tx/${tx}` });
+  rows.push(r2);
+  return { reply_markup: { inline_keyboard: rows } };
+}
+async function announceBuy(info, mon, usd, tokensOut, trader, tx, enr) {
+  const tier = buyTier(usd);
+  const lines = [
+    `${tier.emoji} <b>${esc(info.name || info.symbol)}</b> ($${esc(info.symbol)}) — ${tier.label} BUY`,
+    emojiWall(usd, tier),
     ``,
     `💵 <b>${fmtUsd(usd)}</b>  (${fmtMon(mon)} MON)`,
     `🪙 Got: ${fmtMon(tokensOut)} $${esc(info.symbol)}`,
-    `👤 <a href="${EXPLORER}/address/${trader}">${short(trader)}</a> · <a href="${EXPLORER}/tx/${tx}">txn</a>`,
-    ``,
-    `📈 <a href="${SITE}/token/${info.token}">Chart / Trade on Mon-Pad</a>`,
-  ].join('\n');
-  await send(line);
+  ];
+  if (enr && enr.marketCapUsd > 0) {
+    let mc = `💰 MC: <b>${fmtUsd(enr.marketCapUsd)}</b>${enr.listed ? '' : ' (curve)'}`;
+    if (enr.priceChangeH24 != null) mc += `  ·  24h ${enr.priceChangeH24 >= 0 ? '▲' : '▼'} ${Math.abs(enr.priceChangeH24).toFixed(1)}%`;
+    lines.push(mc);
+  }
+  lines.push(`👤 <a href="${EXPLORER}/address/${trader}">${short(trader)}</a>`);
+  await send(lines.join('\n'), buyButtons(info, enr, tx));
 }
 
 // ── Trending ───────────────────────────────────────────────────────────────
@@ -239,17 +314,17 @@ async function checkTrending() {
     const vol = windowVolumeUsd(tokenLower, since);
     const boost = boostByToken.get(tokenLower);
     trendedAt.set(tokenLower, now);
+    const enr = await enrichToken(info).catch(() => null);
     const head = boost ? `🚀🔥 <b>BOOSTED &amp; TRENDING</b>` : `🔥 <b>NOW TRENDING</b>`;
     const line = [
       `${head}`,
       ``,
       `<b>${esc(info.name || info.symbol)}</b> ($${esc(info.symbol)})`,
+      enr && enr.marketCapUsd > 0 ? `💰 MC: <b>${fmtUsd(enr.marketCapUsd)}</b>${enr.listed ? '' : ' (curve)'}` : '',
       `📊 ${fmtUsd(vol)} volume / ${Math.round(TREND_WINDOW_SEC / 60)}m`,
       boost && boost.by ? `⭐ boosted by ${esc(boost.by)}` : '',
-      ``,
-      `📈 <a href="${SITE}/token/${info.token}">Trade on Mon-Pad</a>`,
     ].filter(Boolean).join('\n');
-    await send(line);
+    await send(line, buyButtons(info, enr, null));
   }
 }
 
@@ -274,8 +349,10 @@ async function scanRange(from, to) {
       const time = Number(a.tradedAt ?? 0n) || Math.floor(Date.now() / 1000);
       if (a.isBuy) recentTrades.push({ token: info.token.toLowerCase(), usd: dollars, mon, time });
       if (a.isBuy && dollars >= MIN_BUY_USD) {
-        try { await announceBuy(info, mon, dollars, tokensOut, a.trader, lg.transactionHash); }
-        catch (e) { console.error('announce failed:', e.message); }
+        try {
+          const enr = await enrichToken(info).catch(() => null);
+          await announceBuy(info, mon, dollars, tokensOut, a.trader, lg.transactionHash, enr);
+        } catch (e) { console.error('announce failed:', e.message); }
       }
     }
   }
