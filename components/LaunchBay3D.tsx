@@ -14,7 +14,7 @@
 
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Stars, Html, Sparkles, useTexture, Billboard } from '@react-three/drei';
-import { Suspense, useEffect, useMemo, useRef } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 
 export type Rocket = {
@@ -25,6 +25,8 @@ export type Rocket = {
   graduated: boolean;
   boosted?: boolean;
   mcMon?: number;     // market cap in MON (price * supply)
+  img?: string;       // real token logo (PFP) — shown as a coin on hero bodies
+  ambient?: boolean;  // demo/backdrop body (not a real on-chain project)
 };
 
 export type OrreryFilter = 'all' | 'trending' | 'boosted' | 'neargrad' | 'graduated';
@@ -135,6 +137,18 @@ function HeroRocket({ token, onHover, onOpen }: { token: Rocket; onHover: (t: Ro
   const glow = token.boosted ? 1.3 : token.graduated ? 0.9 : 0.5 + token.progress * 0.6;
   const scale = token.graduated ? 1.15 : 0.8 + token.progress * 0.5;
 
+  // Real token logo → shown as a coin. Loaded imperatively so a broken/blocked
+  // image just falls back to the rocket instead of crashing the canvas.
+  const [logo, setLogo] = useState<THREE.Texture | null>(null);
+  useEffect(() => {
+    if (!token.img) { setLogo(null); return; }
+    let alive = true;
+    const loader = new THREE.TextureLoader();
+    loader.setCrossOrigin('anonymous');
+    loader.load(token.img, (t) => { if (alive) { t.colorSpace = THREE.SRGBColorSpace; setLogo(t); } }, undefined, () => { if (alive) setLogo(null); });
+    return () => { alive = false; };
+  }, [token.img]);
+
   useFrame(({ clock }) => {
     if (!grp.current) return;
     const t = clock.elapsedTime;
@@ -151,8 +165,19 @@ function HeroRocket({ token, onHover, onOpen }: { token: Rocket; onHover: (t: Ro
       onPointerOut={() => { onHover(null); document.body.style.cursor = 'auto'; }}
       onClick={(e) => { e.stopPropagation(); if (token.address) onOpen(token.address); }}
     >
-      <RocketModel color={color} glow={glow} />
-      {token.graduated && <Exhaust />}
+      {logo ? (
+        // Real project coin: logo disc + colored state ring, always facing camera.
+        <Billboard position={[0, 1, 0]}>
+          <mesh position={[0, 0, -0.01]}><ringGeometry args={[1.35, 1.65, 44]} /><meshBasicMaterial color={color} toneMapped={false} side={THREE.DoubleSide} /></mesh>
+          <mesh><circleGeometry args={[1.35, 44]} /><meshBasicMaterial map={logo} toneMapped={false} /></mesh>
+          {token.graduated && <Exhaust />}
+        </Billboard>
+      ) : (
+        <>
+          <RocketModel color={color} glow={glow} />
+          {token.graduated && <Exhaust />}
+        </>
+      )}
       {token.boosted && <Sparkles count={18} scale={2.6} size={4} speed={0.5} color={GOLD} />}
       <Html position={[0, 2.7, 0]} center distanceFactor={18} style={{ pointerEvents: 'none', userSelect: 'none' }}>
         <div style={{
@@ -376,12 +401,16 @@ function Scene({ rockets, query, filter, onHover, onOpen }: {
       return { heroes: rockets, mid: [] as Rocket[], tail: [] as Rocket[] };
     }
     const scored = rockets.map((t, i) => ({ t, i, sig: significance(t, i) }));
-    const rest = scored.filter((x) => !x.t.boosted).sort((a, b) => b.sig - a.sig);
+    // Rank REAL projects (non-ambient) ahead of demo/backdrop bodies, then by
+    // significance — so actual on-chain tokens always take the hero/mid (detailed,
+    // logo-bearing, clickable) slots and demo is just ambient dust.
+    const rank = (x: { t: Rocket; sig: number }) => (x.t.ambient ? 0 : 1000) + x.sig + (x.t.boosted ? 300 : 0);
+    const ordered = [...scored].sort((a, b) => rank(b) - rank(a));
     const heroIdx = new Set<number>();
-    scored.forEach((x) => { if (x.t.boosted) heroIdx.add(x.i); }); // never drop a boosted token
-    for (const x of rest) { if (heroIdx.size >= HERO_MAX) break; heroIdx.add(x.i); }
+    scored.forEach((x) => { if (x.t.boosted && !x.t.ambient) heroIdx.add(x.i); }); // never drop a real boosted token
+    for (const x of ordered) { if (heroIdx.size >= HERO_MAX) break; heroIdx.add(x.i); }
     const heroes = scored.filter((x) => heroIdx.has(x.i)).map((x) => x.t);
-    const remaining = rest.filter((x) => !heroIdx.has(x.i)).map((x) => x.t);
+    const remaining = ordered.filter((x) => !heroIdx.has(x.i)).map((x) => x.t);
     const mid = remaining.slice(0, MID_MAX);
     const tail = remaining.slice(MID_MAX);
     return { heroes, mid, tail };
