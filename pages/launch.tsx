@@ -18,7 +18,7 @@ function Loading() {
     <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: '#a78bfa', background: '#05030c', fontFamily: 'system-ui' }}>
       <div style={{ textAlign: 'center' }}>
         <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: 1 }}>MON-PAD · BONDING ORRERY</div>
-        <div style={{ marginTop: 8, color: '#7c6aa8' }}>igniting the star…</div>
+        <div style={{ marginTop: 8, color: '#7c6aa8' }}>waking Monshi…</div>
       </div>
     </div>
   );
@@ -220,7 +220,7 @@ export default function LaunchPage() {
         {/* Legend */}
         <div style={{ position: 'absolute', bottom: 16, left: 18, fontSize: 12, color: '#cbd5e1', background: 'rgba(10,6,20,0.6)', border: '1px solid rgba(139,92,246,0.3)', borderRadius: 10, padding: '8px 12px', lineHeight: 1.7 }}>
           <div style={{ fontWeight: 800, color: '#fff', marginBottom: 2 }}>Reading the orrery</div>
-          <div>🟣 closer to the star = closer to graduation</div>
+          <div>🟣 closer to Monshi = closer to graduation</div>
           <div>🟡 gold = boosted / about to bond</div>
           <div>🟢 green ring = graduated to DEX</div>
         </div>

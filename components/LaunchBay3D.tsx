@@ -13,8 +13,8 @@
 // Client-only (imported via next/dynamic ssr:false).
 
 import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, Stars, Html, Sparkles } from '@react-three/drei';
-import { useEffect, useMemo, useRef } from 'react';
+import { OrbitControls, Stars, Html, Sparkles, useTexture, Billboard } from '@react-three/drei';
+import { Suspense, useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 
 export type Rocket = {
@@ -170,20 +170,39 @@ function HeroRocket({ token, onHover, onOpen }: { token: Rocket; onHover: (t: Ro
   );
 }
 
-// ── Central star + orbit guides ──────────────────────────────────────────────
-function CentralStar() {
-  const ref = useRef<THREE.Mesh>(null);
-  useFrame(({ clock }) => {
-    if (ref.current) { const s = 2.4 + Math.sin(clock.elapsedTime * 1.6) * 0.18; ref.current.scale.setScalar(s); ref.current.rotation.y += 0.004; }
-  });
+// ── Central Monshi idol + orbit guides ───────────────────────────────────────
+// The statue art (Venice-generated, chroma-keyed) sits at the heart of the orrery
+// as a glowing billboarded idol; every token orbits Monshi.
+function CentralIdol() {
+  const tex = useTexture('/monshi-statue.png');
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const ref = useRef<THREE.Group>(null);
+  useFrame(({ clock }) => { if (ref.current) ref.current.position.y = 2.5 + Math.sin(clock.elapsedTime * 0.8) * 0.25; });
+  const img = tex.image as { width: number; height: number } | undefined;
+  const aspect = img && img.width ? img.width / img.height : 0.6;
+  const H = 9, W = H * aspect;
   return (
     <group>
-      <mesh ref={ref}>
-        <icosahedronGeometry args={[1, 1]} />
-        <meshBasicMaterial color={BRAND} />
+      <pointLight position={[0, 3, 5]} intensity={2.6} color={BRAND} distance={100} decay={1.1} />
+      <Sparkles count={40} scale={11} size={6} speed={0.3} color={BRAND} />
+      {/* soft violet backing glow */}
+      <Billboard>
+        <mesh position={[0, 2.5, -0.5]}>
+          <circleGeometry args={[6.5, 48]} />
+          <meshBasicMaterial color={BRAND} transparent opacity={0.12} depthWrite={false} blending={THREE.AdditiveBlending} />
+        </mesh>
+        <group ref={ref}>
+          <mesh>
+            <planeGeometry args={[W, H]} />
+            <meshBasicMaterial map={tex} transparent depthWrite={false} toneMapped={false} />
+          </mesh>
+        </group>
+      </Billboard>
+      {/* glowing pedestal ring on the orbital plane */}
+      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, -2, 0]}>
+        <torusGeometry args={[3.2, 0.14, 12, 64]} />
+        <meshBasicMaterial color={BRAND} toneMapped={false} />
       </mesh>
-      <pointLight position={[0, 0, 0]} intensity={2.4} color={BRAND} distance={90} decay={1.1} />
-      <Sparkles count={30} scale={7} size={6} speed={0.3} color={BRAND} />
     </group>
   );
 }
@@ -387,7 +406,7 @@ function Scene({ rockets, query, filter, onHover, onOpen }: {
       <ambientLight intensity={0.45} />
       <Stars radius={150} depth={60} count={2500} factor={4} fade speed={0.5} />
 
-      <CentralStar />
+      <Suspense fallback={null}><CentralIdol /></Suspense>
       <GhostOrbits />
 
       <PointsField tokens={tail} matches={tailMatch} />
