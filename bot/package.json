@@ -1,0 +1,16 @@
+{
+  "name": "monpad-bot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Mon-Pad Telegram buy-alert + trending bot (t.me/monpadtrending)",
+  "scripts": {
+    "start": "node monpad-bot.mjs"
+  },
+  "dependencies": {
+    "viem": "^2.21.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
