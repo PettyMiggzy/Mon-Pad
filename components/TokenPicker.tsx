@@ -3,6 +3,8 @@ import { X, Search } from 'lucide-react';
 import { api, type TokenSummary } from '@/lib/api';
 import { shortAddr } from '@/lib/format';
 import { WMON, MONSHI_TOKEN } from '@/lib/constants';
+import { resolveTokenMeta } from '@/lib/chainV3';
+import type { Address } from 'viem';
 
 // Tailwind opacity modifiers don't work on CSS-variable colors (var(--p)),
 // so brand-purple opacity variants use arbitrary-value rgba() classes.
@@ -39,6 +41,9 @@ export default function TokenPicker({ open, onClose, onSelect, currentSelected }
   const [search, setSearch] = useState('');
   const [allTokens, setAllTokens] = useState<TokenSummary[]>([]);
   const [loading, setLoading] = useState(false);
+  // On-chain resolution for a pasted address that isn't in the (indexer) list.
+  const [resolved, setResolved] = useState<TokenOption | null>(null);
+  const [resolving, setResolving] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -49,6 +54,31 @@ export default function TokenPicker({ open, onClose, onSelect, currentSelected }
       .catch(() => setAllTokens([]))
       .finally(() => setLoading(false));
   }, [open]);
+
+  const q = search.trim().toLowerCase();
+  const isAddr = /^0x[0-9a-f]{40}$/.test(q);
+
+  // If the query is a valid address not already known, resolve it straight from
+  // chain (works with no indexer) so any token — incl. graduated ones — is pickable.
+  useEffect(() => {
+    if (!isAddr) { setResolved(null); return; }
+    const known =
+      COMMON_TOKENS.some((t) => t.address.toLowerCase() === q) ||
+      allTokens.some((t) => t.address.toLowerCase() === q);
+    if (known) { setResolved(null); return; }
+    let cancelled = false;
+    setResolving(true);
+    resolveTokenMeta(q as Address)
+      .then((m) => {
+        if (cancelled) return;
+        setResolved(m && m.symbol
+          ? { symbol: m.symbol, name: m.name, address: q, decimals: m.decimals, isMonPadToken: m.isMonPadToken, graduated: m.graduated }
+          : null);
+      })
+      .catch(() => { if (!cancelled) setResolved(null); })
+      .finally(() => { if (!cancelled) setResolving(false); });
+    return () => { cancelled = true; };
+  }, [q, isAddr, allTokens]);
 
   if (!open) return null;
 
@@ -66,8 +96,7 @@ export default function TokenPicker({ open, onClose, onSelect, currentSelected }
     }));
 
   const all = [...COMMON_TOKENS, ...apiAsOptions];
-  const q = search.trim().toLowerCase();
-  const filtered = q
+  const listed = q
     ? all.filter(
         (t) =>
           t.symbol.toLowerCase().includes(q) ||
@@ -75,6 +104,10 @@ export default function TokenPicker({ open, onClose, onSelect, currentSelected }
           t.address.toLowerCase().includes(q),
       )
     : all;
+  // Surface the on-chain-resolved token if it isn't already listed.
+  const filtered = resolved && !listed.some((t) => t.address.toLowerCase() === resolved.address.toLowerCase())
+    ? [resolved, ...listed]
+    : listed;
 
   return (
     <div
@@ -112,8 +145,12 @@ export default function TokenPicker({ open, onClose, onSelect, currentSelected }
         <div className="flex-1 overflow-y-auto p-2">
           {loading ? (
             <div className="text-center py-8 text-white/50">Loading tokens...</div>
+          ) : resolving && filtered.length === 0 ? (
+            <div className="text-center py-8 text-white/50">Looking up token on-chain…</div>
           ) : filtered.length === 0 ? (
-            <div className="text-center py-8 text-white/50">No tokens match &quot;{search}&quot;</div>
+            <div className="text-center py-8 text-white/50">
+              {isAddr ? 'No token found at that address' : `No tokens match "${search}"`}
+            </div>
           ) : (
             filtered.map((t) => {
               const isSelected =
