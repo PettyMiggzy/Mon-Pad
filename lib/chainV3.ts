@@ -205,6 +205,20 @@ const LOGS_CONCURRENCY = Number(process.env.NEXT_PUBLIC_GETLOGS_CONCURRENCY || '
  * fired in bounded-concurrency batches (so a 12k-block window is ~12 fast batches
  * instead of 120 sequential calls). Returns raw decoded logs (any order).
  */
+// Fetch one getLogs chunk with a couple of retries so a TRANSIENT 429/413/timeout
+// doesn't silently drop that block range (which would omit trades from the chart/
+// feed and skip holder candidates). Only a persistent failure falls through to [].
+async function getLogsChunk(address: Address, event: any, begin: bigint, end: bigint, retries = 2): Promise<any[]> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await (publicClient.getLogs as any)({ address, event, fromBlock: begin, toBlock: end });
+    } catch (e) {
+      if (attempt >= retries) return [];
+      await new Promise((r) => setTimeout(r, 150 * (attempt + 1)));
+    }
+  }
+}
+
 async function scanLogs(address: Address, event: any, lookbackBlocks: bigint, chunk: bigint): Promise<any[]> {
   let head: bigint;
   try { head = await publicClient.getBlockNumber(); } catch { return []; }
@@ -219,9 +233,7 @@ async function scanLogs(address: Address, event: any, lookbackBlocks: bigint, ch
   const out: any[] = [];
   for (let i = 0; i < ranges.length; i += LOGS_CONCURRENCY) {
     const batch = ranges.slice(i, i + LOGS_CONCURRENCY);
-    const results = await Promise.all(batch.map(([begin, end]) =>
-      (publicClient.getLogs as any)({ address, event, fromBlock: begin, toBlock: end }).catch(() => [] as any[])
-    ));
+    const results = await Promise.all(batch.map(([begin, end]) => getLogsChunk(address, event, begin, end)));
     for (const logs of results) out.push(...logs);
   }
   return out;
@@ -301,19 +313,36 @@ export function getV3Holders(token: Address, exclude: string[] = [], lookbackBlo
 async function _getV3Holders(token: Address, exclude: string[], lookbackBlocks: bigint, chunk: bigint): Promise<V3Holder[]> {
   if (!token || token === (_ZERO as Address)) return [];
   const logs = await scanLogs(token, TRANSFER_EVENT, lookbackBlocks, chunk);
-  const bal = new Map<string, bigint>();
+  const excl = new Set([_ZERO, _DEAD, ...exclude.map((e) => (e || '').toLowerCase())].filter(Boolean));
+  // Collect candidate holders (anyone who sent/received in the window). We only use
+  // the logs to DISCOVER addresses — never to reconstruct balances, since summing a
+  // bounded window of Transfer deltas yields wrong/negative balances for anyone who
+  // acquired before the window (see audit). Real balances come from balanceOf below.
+  const candidates = new Set<string>();
   for (const lg of logs) {
     const a = lg.args || {};
-    const v = (a.value as bigint) ?? 0n;
     const f = ((a.from as string) || '').toLowerCase();
     const t = ((a.to as string) || '').toLowerCase();
-    if (f && f !== _ZERO) bal.set(f, (bal.get(f) ?? 0n) - v);
-    if (t && t !== _ZERO) bal.set(t, (bal.get(t) ?? 0n) + v);
+    if (f && !excl.has(f)) candidates.add(f);
+    if (t && !excl.has(t)) candidates.add(t);
   }
-  const excl = new Set([_ZERO, _DEAD, ...exclude.map((e) => (e || '').toLowerCase())].filter(Boolean));
+  const addrs = [...candidates];
+  if (addrs.length === 0) return [];
+
+  // Read each candidate's REAL current balance on-chain (multicall). This is the
+  // authoritative balance regardless of when the holder acquired their tokens.
+  let results: any[] = [];
+  try {
+    results = await mc({
+      contracts: addrs.map((a) => ({ address: token, abi: tokenAbi, functionName: 'balanceOf', args: [a as Address] })),
+      allowFailure: true,
+    });
+  } catch { return []; }
+
   const SUPPLY = 1_000_000_000n * 10n ** 18n;
-  return [...bal.entries()]
-    .filter(([a, v]) => v > 0n && !excl.has(a))
+  return addrs
+    .map((a, i) => [a, (results[i]?.result as bigint) ?? 0n] as [string, bigint])
+    .filter(([, v]) => v > 0n)
     .sort((x, y) => (y[1] > x[1] ? 1 : y[1] < x[1] ? -1 : 0))
     .slice(0, 50)
     .map(([a, v]) => ({ address: a, balance: v.toString(), pct: Number((v * 10000n) / SUPPLY) / 100 }));

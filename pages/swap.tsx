@@ -206,9 +206,17 @@ export default function SwapPage() {
       { address: curveAddr, abi: curveV3Abi as any, functionName: 'pauseSells' },
       { address: curveAddr, abi: curveV3Abi as any, functionName: 'graduated' },
       { address: factoryAddr, abi: factoryV3Abi as any, functionName: 'blocked', args: [curveTokenAddr] },
+      { address: curveAddr, abi: curveV3Abi as any, functionName: 'tradeTaxBps' },
     ] : []) as any,
     query: { enabled: !!curveAddr && !!curveTokenAddr, refetchInterval: 8_000 },
   });
+  // Per-token creator tax (charged on both sides by the contract) — must be in the
+  // preview or quotes are inflated and the on-chain slippage check reverts.
+  const tradeTaxBps = Number((curveReads.data?.[5]?.result as bigint | undefined) ?? 0n);
+  const feesWithTax: CurveFees | null = useMemo(
+    () => (fees ? { ...fees, tradeTaxBps } : null),
+    [fees, tradeTaxBps],
+  );
 
   const reserves: CurveReserves | null = useMemo(() => {
     const r = curveReads.data?.[0]?.result;
@@ -242,7 +250,7 @@ export default function SwapPage() {
 
   useEffect(() => {
     if (route !== 'curve') { setCurveOut(null); setPreflight(null); return; }
-    if (!reserves || !fees || !preflightState) return;
+    if (!reserves || !feesWithTax || !preflightState) return;
     if (!amountIn || isNaN(Number(amountIn)) || Number(amountIn) <= 0) { setCurveOut(null); return; }
     const handle = setTimeout(() => {
       const pre = isBuy ? preflightBuy(preflightState) : preflightSell(preflightState);
@@ -251,17 +259,17 @@ export default function SwapPage() {
       try {
         if (isBuy) {
           const monIn = parseEther(amountIn);
-          setCurveOut(previewBuy(monIn, reserves, fees));
+          setCurveOut(previewBuy(monIn, reserves, feesWithTax));
           setCurveDecimals(to.decimals);
         } else if (isSell) {
           const tokensIn = parseUnits(amountIn, from.decimals);
-          setCurveOut(previewSell(tokensIn, reserves, fees));
+          setCurveOut(previewSell(tokensIn, reserves, feesWithTax));
           setCurveDecimals(18);
         }
       } catch { setCurveOut(null); }
     }, 300);
     return () => clearTimeout(handle);
-  }, [amountIn, route, reserves, fees, preflightState, isBuy, isSell, from.decimals, to.decimals, refreshTick]);
+  }, [amountIn, route, reserves, feesWithTax, preflightState, isBuy, isSell, from.decimals, to.decimals, refreshTick]);
 
   // ----- Monorail quote (5s debounce, remote) -----
   const [mQuote, setMQuote] = useState<MonorailQuote | null>(null);
