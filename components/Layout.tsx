@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { ConnectButton, useConnectModal } from '@rainbow-me/rainbowkit';
 import { useAccount } from 'wagmi';
-import { Home, Plus, ArrowLeftRight, Coins, User, Shield, BookOpen, FileText, Orbit } from 'lucide-react';
+import { Home, Plus, ArrowLeftRight, Coins, User, Shield, BookOpen, FileText, Orbit, Gem } from 'lucide-react';
 import { isAdmin } from '@/lib/constants';
 import { AddressGuard } from './AddressGuard';
 import type { ReactNode } from 'react';
@@ -12,6 +12,7 @@ const PRIMARY_NAV = [
   { href: '/create', label: 'Create', icon: Plus, desktopOnly: false },
   { href: '/swap', label: 'Swap', icon: ArrowLeftRight, desktopOnly: false },
   { href: '/launch', label: 'Orrery', icon: Orbit, desktopOnly: false },
+  { href: '/club', label: 'Club', icon: Gem, desktopOnly: true },
   { href: '/stake', label: 'Stake', icon: Coins, desktopOnly: false },
   { href: '/how-it-works', label: 'How it works', icon: BookOpen, desktopOnly: true },
   { href: '/docs', label: 'Docs', icon: FileText, desktopOnly: true },
