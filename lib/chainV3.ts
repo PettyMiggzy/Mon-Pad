@@ -53,6 +53,40 @@ export async function curveOf(token: Address): Promise<Address> {
   return read({ address: token, abi: tokenAbi, functionName: 'curve' });
 }
 
+/**
+ * Resolve a token's metadata straight from chain (no indexer): symbol/name/
+ * decimals + whether it's a Mon-Pad token and whether it has graduated. Used by
+ * the swap page to load an arbitrary token by address (e.g. deep-link from a
+ * graduated token page) so trading works with no backend.
+ */
+export async function resolveTokenMeta(token: Address): Promise<
+  { symbol: string; name: string; decimals: number; graduated: boolean; curve: Address; isMonPadToken: boolean } | null
+> {
+  const ZERO = '0x0000000000000000000000000000000000000000' as Address;
+  if (!token || !/^0x[0-9a-fA-F]{40}$/.test(token)) return null;
+  try {
+    const [symbol, name] = await Promise.all([
+      read({ address: token, abi: tokenAbi, functionName: 'symbol' }) as Promise<string>,
+      read({ address: token, abi: tokenAbi, functionName: 'name' }) as Promise<string>,
+    ]);
+    let decimals = 18;
+    try { decimals = Number(await read({ address: token, abi: tokenAbi, functionName: 'decimals' })); } catch { /* default 18 */ }
+    let curve: Address = ZERO;
+    let graduated = false;
+    let isMonPadToken = false;
+    try {
+      curve = await curveOf(token);
+      if (curve && curve !== ZERO) {
+        isMonPadToken = true;
+        graduated = (await read({ address: curve, abi: curveV3Abi, functionName: 'graduated' })) as boolean;
+      }
+    } catch { /* not a Mon-Pad token — still swappable as a plain ERC20 */ }
+    return { symbol, name, decimals, graduated, curve, isMonPadToken };
+  } catch {
+    return null;
+  }
+}
+
 /** Full curve state for one token (by curve address). */
 export async function getCurveState(curve: Address) {
   const [reserves, monRaisedNet, graduated, price, creator, token] = await Promise.all([

@@ -109,7 +109,9 @@ function Candles({ data }: { data: { time: number; open: number; high: number; l
           width: ref.current.clientWidth || undefined,
           layout: { background: { color: 'transparent' }, textColor: '#aaa' },
           grid: { vertLines: { color: 'rgba(255,255,255,0.04)' }, horzLines: { color: 'rgba(255,255,255,0.04)' } },
-          timeScale: { timeVisible: true, secondsVisible: false, borderColor: 'rgba(255,255,255,0.1)' },
+          // Fixed bar spacing so a handful of candles render at a normal width
+          // instead of being stretched across the whole chart ("big as fuk").
+          timeScale: { timeVisible: true, secondsVisible: false, borderColor: 'rgba(255,255,255,0.1)', barSpacing: 10, minBarSpacing: 4, rightOffset: 8 },
           rightPriceScale: { borderColor: 'rgba(255,255,255,0.1)' },
           crosshair: { mode: 0 },
         });
@@ -126,7 +128,10 @@ function Candles({ data }: { data: { time: number; open: number; high: number; l
           .filter((c) => (seen.has(c.time) ? false : (seen.add(c.time), true)))
           .map((c) => ({ time: c.time as any, open: c.open, high: c.high, low: c.low, close: c.close }));
         series.setData(rows);
-        chart.timeScale().fitContent();
+        // Only fit-to-content when there's real history; otherwise keep the fixed
+        // bar spacing (fitContent stretches 1–3 candles to fill the whole width).
+        if (rows.length > 40) chart.timeScale().fitContent();
+        else chart.timeScale().scrollToRealTime();
         const onResize = () => { if (ref.current && chart) chart.applyOptions({ width: ref.current.clientWidth }); };
         onResize();
         window.addEventListener('resize', onResize);

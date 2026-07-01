@@ -167,7 +167,8 @@ export default function TokenPage() {
             <h1 style={{ margin: 0, fontSize: 24 }}>{name}</h1>
             <span style={{ color: '#888' }}>${symbol}</span>
           </div>
-          <div style={{ fontSize: 12, color: '#888', marginTop: 2, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div style={{ fontSize: 12, color: '#888', marginTop: 4, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <CopyChip addr={addr} label="CA" />
             {creator && <span>by <Link href={`/profile/${creator}`} style={{ color: 'var(--brand, #A78BFA)' }}>{shortAddr(creator)}</Link></span>}
             <a href={`${MONAD_EXPLORER}/address/${addr}`} target="_blank" rel="noreferrer" style={{ color: 'var(--brand, #A78BFA)' }}>contract</a>
             {curve && <a href={`${MONAD_EXPLORER}/address/${curve}`} target="_blank" rel="noreferrer" style={{ color: 'var(--brand, #A78BFA)' }}>curve</a>}
@@ -206,6 +207,32 @@ export default function TokenPage() {
         </aside>
       </div>
     </div>
+  );
+}
+
+// Copyable contract-address chip — one click copies the FULL address.
+function CopyChip({ addr, label = 'CA' }: { addr?: string; label?: string }) {
+  const [copied, setCopied] = useState(false);
+  if (!addr) return null;
+  const copy = async (e: React.MouseEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    try { await navigator.clipboard.writeText(addr); setCopied(true); setTimeout(() => setCopied(false), 1200); } catch {}
+  };
+  return (
+    <button
+      onClick={copy}
+      title={`Copy ${label}: ${addr}`}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 9px', borderRadius: 999,
+        background: copied ? 'rgba(74,222,128,0.18)' : 'rgba(255,255,255,0.06)',
+        border: `1px solid ${copied ? 'rgba(74,222,128,0.5)' : 'rgba(255,255,255,0.12)'}`,
+        color: copied ? '#4ADE80' : '#cbd5e1', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'monospace',
+      }}
+    >
+      <span style={{ opacity: 0.7 }}>{label}</span>
+      {`${addr.slice(0, 6)}…${addr.slice(-4)}`}
+      <span style={{ fontFamily: 'system-ui, sans-serif' }}>{copied ? '✓ copied' : '⧉'}</span>
+    </button>
   );
 }
 
@@ -395,7 +422,8 @@ function TradePanel({ token, curve, symbol, reserves, graduated, tradeTax, balan
       <div style={{ marginTop: 16, background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.4)', borderRadius: 8, padding: 16, color: '#ddd', fontSize: 13, lineHeight: 1.6 }}>
         🎓 <b style={{ color: '#fff' }}>Graduated</b> — now trading on a Uniswap V3 pool (liquidity locked).
         <div style={{ marginTop: 8, display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-          <Link href="/swap" style={{ color: 'var(--brand,#A78BFA)' }}>Swap in-app</Link>
+          {/* Deep-link so the swap page pre-selects MON → this token (resolved on-chain). */}
+          <Link href={`/swap?from=0x0000000000000000000000000000000000000000&to=${token}`} style={{ color: 'var(--brand,#A78BFA)' }}>Swap in-app</Link>
           {token && <a href={`${MONAD_EXPLORER}/token/${token}`} target="_blank" rel="noreferrer" style={{ color: 'var(--brand,#A78BFA)' }}>View on explorer</a>}
         </div>
         <div style={{ marginTop: 8, fontSize: 11, color: '#888' }}>

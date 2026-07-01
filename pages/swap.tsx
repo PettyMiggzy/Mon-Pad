@@ -9,7 +9,7 @@ import { ZERO_ADDRESS, MONORAIL_API, WMON, FACTORY_V3 } from '@/lib/constants';
 import { api } from '@/lib/api';
 import { curveV3Abi, factoryV3Abi, tokenAbi } from '@/lib/abis';
 import { getMonorailQuote, toExecutable, quoteSummary, type MonorailQuote } from '@/lib/monorail';
-import { publicClient } from '@/lib/chainV3';
+import { publicClient, resolveTokenMeta } from '@/lib/chainV3';
 import {
   previewBuy, previewSell, applySlippage,
   preflightBuy, preflightSell, needsApprove, MAX_UINT256,
@@ -120,6 +120,11 @@ export default function SwapPage() {
       if (a === ZERO_ADDRESS.toLowerCase()) return DEFAULT_FROM;
       if (a === WMON.toLowerCase()) return DEFAULT_TO;
       if (!/^0x[a-f0-9]{40}$/.test(a)) return null;
+      // On-chain first (works with no indexer) — resolves any token by address.
+      try {
+        const m = await resolveTokenMeta(a as Address);
+        if (m && m.symbol) return { symbol: m.symbol, name: m.name, address: a, decimals: m.decimals, isMonPadToken: m.isMonPadToken, graduated: m.graduated };
+      } catch { /* fall through to indexer */ }
       try {
         const t = await api.getToken(a);
         if (t) return { symbol: t.symbol, name: t.name, address: t.address, decimals: 18, imageUrl: t.imageUrl, isMonPadToken: true, graduated: t.graduated };
@@ -378,9 +383,14 @@ export default function SwapPage() {
 
         let swapFrom = from.address;
 
-        // Native-MON multi-hop routes revert inside the router's native handling.
-        // Wrap MON→WMON first, then route from WMON (ERC20) — the Chogi fix.
-        if (isNativeAddr(from.address) && (q.hops ?? 1) > 1) {
+        // Native-MON routes that touch an orderbook / split across pools revert
+        // inside the router's native-value handling (Monorail reports hops:1 but
+        // splits across kuru-ob/octoswap/uniswap). Rather than guess which are
+        // safe, ALWAYS wrap MON→WMON first when buying a token, then route from
+        // WMON (a plain ERC20 route, e.g. WMON→token is a single clean hop). The
+        // only native swap we leave alone is MON→WMON itself (a pure wrap).
+        const toIsWmon = to.address.toLowerCase() === WMON.toLowerCase();
+        if (isNativeAddr(from.address) && !toIsWmon) {
           setTx({ status: 'pending', message: 'wrapping MON…' });
           const wrapHash = await writeContractAsync({
             address: WMON as Address, abi: WMON_ABI, functionName: 'deposit', value: amtIn,
