@@ -77,6 +77,12 @@ const curveAbi = [
   parseAbiItem('function graduated() view returns (bool)'),
   parseAbiItem('function priceWeiPerToken() view returns (uint256)'),
 ];
+// Graduated tokens trade on their official Uniswap V3 pool (Swap events), not the curve.
+const OFFICIAL_V3_FACTORY = (process.env.UNIV3_FACTORY || '0x204fAca1764B154221e35c0d20aBb3c525710498').toLowerCase();
+const POOL_FEE = Number(process.env.UNIV3_FEE || '10000'); // 1% tier the graduator uses
+const v3FactoryAbi = [ parseAbiItem('function getPool(address tokenA, address tokenB, uint24 fee) view returns (address)') ];
+const poolAbi = [ parseAbiItem('function token0() view returns (address)'), parseAbiItem('function token1() view returns (address)') ];
+const V3_SWAP_EVENT = parseAbiItem('event Swap(address indexed sender, address indexed recipient, int256 amount0, int256 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick)');
 
 // ── State ────────────────────────────────────────────────────────────────
 function loadJson(url, fallback) { try { return JSON.parse(fs.readFileSync(url, 'utf8')); } catch { return fallback; } }
@@ -84,6 +90,7 @@ function saveJson(url, obj) { try { fs.writeFileSync(url, JSON.stringify(obj)); 
 
 const state = loadJson(STATE_FILE, { lastBlock: null });
 const curves = new Map();      // curveAddr(lower) -> { token, curve, symbol, name }
+const gradPools = new Map();   // poolAddr(lower) -> { token, curve, symbol, name, tokenIsToken0 }
 const recentTrades = [];       // { token, usd, mon, time } rolling window for trending
 const trendedAt = new Map();   // token(lower) -> unix seconds last announced trending
 const seenTx = new Set();      // txHash:logIndex dedupe (buys)
@@ -361,12 +368,66 @@ async function scanRange(from, to) {
   }
 }
 
+// Resolve the official Uniswap V3 pool for each GRADUATED token, so we can watch
+// its Swap events (post-graduation buys no longer hit the curve's Trade event).
+async function refreshGradPools() {
+  const tracked = new Set([...gradPools.values()].map((g) => g.token.toLowerCase()));
+  for (const info of curves.values()) {
+    if (tracked.has(info.token.toLowerCase())) continue;
+    let graduated = false;
+    try { graduated = await client.readContract({ address: info.curve, abi: curveAbi, functionName: 'graduated' }); } catch { continue; }
+    if (!graduated) continue;
+    try {
+      const pool = (await client.readContract({ address: OFFICIAL_V3_FACTORY, abi: v3FactoryAbi, functionName: 'getPool', args: [info.token, WMON, POOL_FEE] })).toLowerCase();
+      if (!pool || pool === '0x0000000000000000000000000000000000000000') continue;
+      const t0 = await client.readContract({ address: pool, abi: poolAbi, functionName: 'token0' });
+      gradPools.set(pool, { ...info, tokenIsToken0: t0.toLowerCase() === info.token.toLowerCase() });
+      console.log(`[grad] watching Uni-V3 pool ${pool} for ${info.symbol}`);
+    } catch { /* pool not created yet */ }
+  }
+}
+
+// Scan graduated tokens' Uniswap V3 pools for buys (WMON in → token out).
+async function scanGradPools(from, to) {
+  if (gradPools.size === 0) return;
+  const addrs = [...gradPools.keys()];
+  const usd = await getMonUsd();
+  for (let start = from; start <= to; start += CHUNK + 1n) {
+    const end = start + CHUNK > to ? to : start + CHUNK;
+    let logs;
+    try { logs = await client.getLogs({ address: addrs, event: V3_SWAP_EVENT, fromBlock: start, toBlock: end }); }
+    catch (e) { console.error(`grad getLogs ${start}-${end} failed:`, e.shortMessage || e.message); continue; }
+    for (const lg of logs) {
+      const g = gradPools.get(lg.address.toLowerCase());
+      if (!g) continue;
+      const key = `grad:${lg.transactionHash}:${lg.logIndex}`;
+      if (seenTx.has(key)) continue; seenTx.add(key);
+      const { amount0, amount1 } = lg.args;
+      // Token side leaving the pool (negative) = a BUY; the other (positive) side is WMON in.
+      let wmonIn = 0n, tokensOut = 0n;
+      if (g.tokenIsToken0) { if (amount0 < 0n) { tokensOut = -amount0; wmonIn = amount1; } }
+      else { if (amount1 < 0n) { tokensOut = -amount1; wmonIn = amount0; } }
+      if (wmonIn <= 0n || tokensOut <= 0n) continue; // sell or zero — skip
+      const mon = Number(formatEther(wmonIn));
+      const dollars = mon * usd;
+      if (dollars < MIN_BUY_USD) continue;
+      let buyer = lg.args.recipient;
+      try { const tx = await client.getTransaction({ hash: lg.transactionHash }); if (tx?.from) buyer = tx.from; } catch {}
+      try {
+        const enr = await enrichToken(g).catch(() => null);
+        await announceBuy(g, mon, dollars, Number(formatEther(tokensOut)), buyer, lg.transactionHash, enr);
+      } catch (e) { console.error('grad announce failed:', e.message); }
+    }
+  }
+}
+
 async function tick() {
   try {
     const head = await client.getBlockNumber();
     let from = state.lastBlock != null ? BigInt(state.lastBlock) + 1n : (head > MAX_CATCHUP ? head - MAX_CATCHUP : 0n);
     if (from > head) return;
-    await scanRange(from, head);
+    await scanRange(from, head);       // pre-graduation curve buys (any pad token)
+    await scanGradPools(from, head);   // graduated tokens' Uniswap V3 pool buys
     await scanBoosts(from, head);
     state.lastBlock = head.toString();
     saveJson(STATE_FILE, state);
@@ -378,11 +439,13 @@ async function main() {
   console.log(`monpad-bot → chat ${TELEGRAM_CHAT_ID} | factory ${FACTORY_V3} | min buy $${MIN_BUY_USD}`);
   console.log(BOOST_CONTRACT ? `boost contract ${BOOST_CONTRACT} (MONSHI-paid, tiered)` : 'boost contract: (not set — paid trending disabled)');
   await refreshTokens();
-  console.log(`tracking ${curves.size} tokens`);
+  await refreshGradPools();
+  console.log(`tracking ${curves.size} tokens, ${gradPools.size} graduated pools`);
   await getMonUsd();
   console.log(`MON/USD = $${monUsd}`);
 
   setInterval(refreshTokens, TOKENS_REFRESH_MS);
+  setInterval(() => { refreshGradPools().catch((e) => console.error('gradPools failed:', e.message)); }, TOKENS_REFRESH_MS);
   setInterval(tick, POLL_MS);
   setInterval(() => { checkTrending().catch((e) => console.error('trending failed:', e.message)); }, TREND_CHECK_MS);
   await tick();
