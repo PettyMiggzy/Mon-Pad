@@ -41,19 +41,25 @@ post a message in the group, then open
 `https://api.telegram.org/bot<TOKEN>/getUpdates` and copy `chat.id` (a `-100…`
 number) into `TELEGRAM_CHAT_ID`.
 
-## Paid boosts
-`boosts.json` is the source of truth (git-ignored). Each entry:
-```json
-[{ "token": "0x…", "until": 1737000000, "by": "@handle" }]
-```
-`until` is a unix timestamp; the boost is active until then. To monetize, wire ONE
-of these to append/refresh entries (all out of scope of this MVP, documented so we
-can pick one):
-- **On-chain**: watch a boost wallet for MON payments that carry the token address,
-  then add a boost for N hours proportional to the amount.
-- **Bot command**: an admin-only `/boost <token> <hours>` after payment is confirmed.
-- **Site checkout**: a "Boost" button on the token page that takes payment and
-  writes the boost row (e.g. to Supabase, which the bot reads instead of the file).
+## Paid boosts (on-chain — live)
+Pay-to-trend runs through the **`MonPadBoost`** contract
+(`0xf3f91D4d553A47c609830cb470302BB14b7D466C`, payments forwarded to treasury):
+
+1. A project calls **`boost(tokenAddress)`** with MON attached (from a future
+   "Boost" button on the site, or directly via the explorer). Minimum 1 MON.
+2. The contract emits `Boosted(token, payer, amount, timestamp)`.
+3. The bot watches that event and grants trend time =
+   `amount / BOOST_MON_PER_HOUR` hours (10 MON/hour by default — your knob).
+   Repeat payments **extend** an active boost.
+4. The token posts as **🚀 BOOSTED — NOW TRENDING** and stays in the trending set
+   until the paid time runs out.
+
+Active boosts are cached in `boosts.json` (git-ignored) so restarts keep them; the
+full history is reconstructable from the `Boosted` event log. You can also add a
+manual entry to `boosts.json` (`[{ "token": "0x…", "until": <unix>, "by": "@h" }]`)
+for comps/promos.
+
+Set `BOOST_CONTRACT` and `BOOST_MON_PER_HOUR` in `.env`.
 
 ## State
 `state.json` (git-ignored) holds the last scanned block so restarts resume without
