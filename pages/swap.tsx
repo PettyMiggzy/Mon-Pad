@@ -285,7 +285,7 @@ export default function SwapPage() {
       } catch (e: unknown) {
         if ((e as { name?: string })?.name !== 'AbortError') setMQuote(null);
       } finally { setLoadingQuote(false); }
-    }, 5000);
+    }, 700);
     return () => { clearTimeout(handle); ctrl.abort(); };
   }, [amountIn, route, from.address, to.address, slippageBps, address, refreshTick]);
 

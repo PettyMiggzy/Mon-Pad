@@ -26,8 +26,7 @@ export type TokenOption = {
 const COMMON_TOKENS: TokenOption[] = [
   { symbol: 'MON', name: 'Monad', address: '0x0000000000000000000000000000000000000000', decimals: 18, imageUrl: '/monad.png', isMonPadToken: false, graduated: true },
   { symbol: 'WMON', name: 'Wrapped Monad', address: WMON, decimals: 18, imageUrl: '/monad.png', isMonPadToken: false, graduated: true },
-  // TODO: Replace with proper MONSHI logo when partnership assets land
-  { symbol: 'MONSHI', name: 'Monshi', address: MONSHI_TOKEN, decimals: 18, imageUrl: '/Pad.png', isMonPadToken: false, graduated: true },
+  { symbol: 'MONSHI', name: 'Monshi', address: MONSHI_TOKEN, decimals: 18, imageUrl: 'https://storage.nadapp.net/coin/bdf23c46-ccd6-447d-b3ed-d84a911aae7a', isMonPadToken: false, graduated: true },
 ];
 
 type Props = {
