@@ -107,6 +107,18 @@ export const api = {
     return http<TokenSummary>(`/api/token/${addr}`);
   },
 
+  // Off-chain token image (logo) from Supabase via the same-origin meta route.
+  // Best-effort: returns undefined if none set. Used to give on-chain-resolved
+  // tokens their pfp in the swap picker / inputs.
+  tokenImage: async (addr: string): Promise<string | undefined> => {
+    try {
+      const res = await fetch(`/api/token-meta?address=${addr}`);
+      if (!res.ok) return undefined;
+      const m = await res.json();
+      return (m?.image_url as string) || undefined;
+    } catch { return undefined; }
+  },
+
   getTrades: (addr: string): Promise<Trade[]> =>
     MOCK_MODE ? mocks.mockTrades(addr) : http<Trade[]>(`/api/token/${addr}/trades`),
 

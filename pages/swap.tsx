@@ -123,7 +123,10 @@ export default function SwapPage() {
       // On-chain first (works with no indexer) — resolves any token by address.
       try {
         const m = await resolveTokenMeta(a as Address);
-        if (m && m.symbol) return { symbol: m.symbol, name: m.name, address: a, decimals: m.decimals, isMonPadToken: m.isMonPadToken, graduated: m.graduated };
+        if (m && m.symbol) {
+          const imageUrl = await api.tokenImage(a).catch(() => undefined);
+          return { symbol: m.symbol, name: m.name, address: a, decimals: m.decimals, imageUrl, isMonPadToken: m.isMonPadToken, graduated: m.graduated };
+        }
       } catch { /* fall through to indexer */ }
       try {
         const t = await api.getToken(a);

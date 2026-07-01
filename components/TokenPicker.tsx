@@ -69,11 +69,12 @@ export default function TokenPicker({ open, onClose, onSelect, currentSelected }
     let cancelled = false;
     setResolving(true);
     resolveTokenMeta(q as Address)
-      .then((m) => {
+      .then(async (m) => {
         if (cancelled) return;
-        setResolved(m && m.symbol
-          ? { symbol: m.symbol, name: m.name, address: q, decimals: m.decimals, isMonPadToken: m.isMonPadToken, graduated: m.graduated }
-          : null);
+        if (!m || !m.symbol) { setResolved(null); return; }
+        const imageUrl = await api.tokenImage(q).catch(() => undefined);
+        if (cancelled) return;
+        setResolved({ symbol: m.symbol, name: m.name, address: q, decimals: m.decimals, imageUrl, isMonPadToken: m.isMonPadToken, graduated: m.graduated });
       })
       .catch(() => { if (!cancelled) setResolved(null); })
       .finally(() => { if (!cancelled) setResolving(false); });
