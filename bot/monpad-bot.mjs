@@ -33,8 +33,9 @@ const TREND_THRESHOLD_USD= Number(process.env.TREND_THRESHOLD_USD || '500');  //
 const TREND_CHECK_MS     = Number(process.env.TREND_CHECK_MS || '60000');
 const TREND_COOLDOWN_SEC = Number(process.env.TREND_COOLDOWN_SEC || '10800'); // re-announce a token at most this often
 const MON_USD_FALLBACK   = Number(process.env.MON_USD_FALLBACK || '0');       // used only if DexScreener is down
-const BOOST_CONTRACT     = (process.env.BOOST_CONTRACT || '').toLowerCase();  // MonPadBoost (pay-to-trend)
-const BOOST_MON_PER_HOUR = Number(process.env.BOOST_MON_PER_HOUR || '10');    // pricing: MON paid per hour of boost
+// MonPadBoostMonshi — MONSHI-paid, tiered pay-to-trend (70% burn / 30% treasury).
+// Trend duration comes from the on-chain event; pricing/tiers live in the contract.
+const BOOST_CONTRACT     = (process.env.BOOST_CONTRACT || '0xE50Ab41eAE60309d06a6aaA699f5E5786D78e4DA').toLowerCase();
 const ADMIN_ID           = process.env.ADMIN_ID || '';                        // Telegram id allowed to run admin actions
 const STATE_FILE         = new URL('./state.json', import.meta.url);
 const BOOSTS_FILE        = new URL('./boosts.json', import.meta.url);
@@ -56,7 +57,7 @@ const TRADE_EVENT = parseAbiItem(
   'event Trade(address indexed token, address indexed trader, bool isBuy, uint256 monAmount, uint256 tokenAmount, uint256 virtualMonReserve, uint256 virtualTokenReserve, uint256 realMonReserve, uint256 realTokenReserve, uint256 priceX18, uint256 tradedAt)'
 );
 const BOOSTED_EVENT = parseAbiItem(
-  'event Boosted(address indexed token, address indexed payer, uint256 amount, uint256 timestamp)'
+  'event Boosted(address indexed token, address indexed payer, uint256 tierId, uint256 amount, uint32 durationSec, uint256 burned, uint256 toTreasury, uint256 timestamp)'
 );
 const factoryAbi = [
   parseAbiItem('function allCounts() view returns (uint256, uint256)'),
@@ -159,12 +160,11 @@ function loadBoosts() {
     .map((b) => ({ token: b.token.toLowerCase(), until: Number(b.until), by: b.by || '' }));
 }
 
-// Grant (or extend) a boost from an on-chain payment: amount MON → hours of trend
-// time at BOOST_MON_PER_HOUR. Persists to boosts.json and posts a confirmation.
-async function grantBoost(tokenAddr, amountMon, payer) {
+// Grant (or extend) a boost from an on-chain MONSHI payment. Duration comes from
+// the contract event (tier). Persists to boosts.json and posts a confirmation.
+async function grantBoost(tokenAddr, durationSec, monshiPaid, payer) {
   const now = Math.floor(Date.now() / 1000);
-  const hours = amountMon / BOOST_MON_PER_HOUR;
-  const addSec = Math.max(0, Math.round(hours * 3600));
+  const addSec = Math.max(0, Math.round(durationSec));
   if (addSec === 0) return;
   const tokenLower = tokenAddr.toLowerCase();
   const raw = loadJson(BOOSTS_FILE, []);
@@ -179,13 +179,15 @@ async function grantBoost(tokenAddr, amountMon, payer) {
   const label = info ? `<b>${esc(info.name || info.symbol)}</b> ($${esc(info.symbol)})` : `<code>${esc(tokenAddr)}</code>`;
   const link = info ? `${SITE}/token/${info.token}` : `${EXPLORER}/address/${tokenAddr}`;
   trendedAt.set(tokenLower, now); // this post counts as the trending post; avoid an instant duplicate
-  const mins = Math.round(addSec / 60);
-  const dur = mins >= 60 ? `${(mins / 60).toFixed(mins % 60 ? 1 : 0)}h` : `${mins}m`;
+  const hrs = addSec / 3600;
+  const dur = hrs >= 24 ? `${(hrs / 24).toFixed(hrs % 24 ? 1 : 0)}d` : `${Math.round(hrs)}h`;
+  const burned = Math.round(monshiPaid * 0.7);
   await send([
     `🚀🔥 <b>BOOST PURCHASED — NOW TRENDING</b>`,
     ``,
     label,
-    `⏱ trending for <b>${dur}</b>  (paid ${fmtMon(amountMon)} MON)`,
+    `⏱ trending for <b>${dur}</b>`,
+    `🔥 ${fmtMon(monshiPaid)} MONSHI paid · ${fmtMon(burned)} burned`,
     `👤 <a href="${EXPLORER}/address/${payer}">${short(payer)}</a>`,
     ``,
     `📈 <a href="${link}">Trade on Mon-Pad</a>`,
@@ -202,8 +204,9 @@ async function scanBoosts(from, to) {
     for (const lg of logs) {
       const key = `boost:${lg.transactionHash}:${lg.logIndex}`;
       if (seenTx.has(key)) continue; seenTx.add(key);
-      const amountMon = Number(formatEther(lg.args.amount ?? 0n));
-      try { await grantBoost(lg.args.token, amountMon, lg.args.payer); }
+      const monshiPaid = Number(formatEther(lg.args.amount ?? 0n));
+      const durationSec = Number(lg.args.durationSec ?? 0n);
+      try { await grantBoost(lg.args.token, durationSec, monshiPaid, lg.args.payer); }
       catch (e) { console.error('grantBoost failed:', e.message); }
     }
   }
@@ -296,7 +299,7 @@ async function tick() {
 // ── Boot ─────────────────────────────────────────────────────────────────
 async function main() {
   console.log(`monpad-bot → chat ${TELEGRAM_CHAT_ID} | factory ${FACTORY_V3} | min buy $${MIN_BUY_USD}`);
-  console.log(BOOST_CONTRACT ? `boost contract ${BOOST_CONTRACT} @ ${BOOST_MON_PER_HOUR} MON/hour` : 'boost contract: (not set — paid trending disabled)');
+  console.log(BOOST_CONTRACT ? `boost contract ${BOOST_CONTRACT} (MONSHI-paid, tiered)` : 'boost contract: (not set — paid trending disabled)');
   await refreshTokens();
   console.log(`tracking ${curves.size} tokens`);
   await getMonUsd();
