@@ -74,9 +74,10 @@ export default function Home() {
         // Enrich cards with volume + price sparkline (per-token recent trades; throttled + capped).
         try {
           const curveByAddr = new Map(rows.map((t) => [t.token.toLowerCase(), t.curve]));
-          const top = mapped.slice(0, 8); // cap so we don't hammer the RPC (getLogs is 100-block-capped)
-          for (let i = 0; i < top.length && !cancelled; i += 5) {
-            const batch = top.slice(i, i + 5);
+          const top = mapped.slice(0, 12); // cap so we don't hammer the RPC (getLogs is 100-block-capped)
+          // 3 cards at a time — each card's scan fans out its own concurrent chunk batch.
+          for (let i = 0; i < top.length && !cancelled; i += 3) {
+            const batch = top.slice(i, i + 3);
             const results = await Promise.all(batch.map(async (t) => {
               const curve = curveByAddr.get(t.address.toLowerCase());
               if (!curve) return null;

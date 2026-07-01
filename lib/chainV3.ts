@@ -187,7 +187,7 @@ export type V3Trade = {
   block: bigint;
 };
 
-export type Candle = { time: number; open: number; high: number; low: number; close: number };
+export type Candle = { time: number; open: number; high: number; low: number; close: number; volume: number };
 
 // ── getLogs window sizing ───────────────────────────────────────────────────
 // The RPC caps eth_getLogs to a 100-block range (returns -32614 / HTTP 413 above
@@ -196,7 +196,7 @@ export type Candle = { time: number; open: number; high: number; low: number; cl
 // (NEXT_PUBLIC_GETLOGS_CHUNK / _LOOKBACK) — no code change.
 const LOGS_CHUNK = BigInt(process.env.NEXT_PUBLIC_GETLOGS_CHUNK || '99');            // blocks per getLogs call
 const LOGS_LOOKBACK = BigInt(process.env.NEXT_PUBLIC_GETLOGS_LOOKBACK || '12000');   // token-page chart/trades window
-const LOGS_CARD_LOOKBACK = BigInt(process.env.NEXT_PUBLIC_GETLOGS_CARD_LOOKBACK || '600'); // homepage cards (lighter)
+const LOGS_CARD_LOOKBACK = BigInt(process.env.NEXT_PUBLIC_GETLOGS_CARD_LOOKBACK || '3000'); // homepage card sparklines (parallel scan)
 const LOGS_CONCURRENCY = Number(process.env.NEXT_PUBLIC_GETLOGS_CONCURRENCY || '10'); // parallel getLogs calls per batch
 
 /**
@@ -272,8 +272,8 @@ export function tradesToCandles(trades: V3Trade[], tfSeconds = 300): Candle[] {
   for (const t of valid) {
     const bt = Math.floor(t.time / tfSeconds) * tfSeconds;
     const c = buckets.get(bt);
-    if (!c) buckets.set(bt, { time: bt, open: t.price, high: t.price, low: t.price, close: t.price });
-    else { c.high = Math.max(c.high, t.price); c.low = Math.min(c.low, t.price); c.close = t.price; }
+    if (!c) buckets.set(bt, { time: bt, open: t.price, high: t.price, low: t.price, close: t.price, volume: t.mon || 0 });
+    else { c.high = Math.max(c.high, t.price); c.low = Math.min(c.low, t.price); c.close = t.price; c.volume += t.mon || 0; }
   }
   return Array.from(buckets.values()).sort((a, b) => a.time - b.time);
 }

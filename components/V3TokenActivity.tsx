@@ -94,7 +94,7 @@ export default function V3TokenActivity({ curve, symbol, token, refreshKey }: { 
   );
 }
 
-function Candles({ data }: { data: { time: number; open: number; high: number; low: number; close: number }[] }) {
+function Candles({ data }: { data: { time: number; open: number; high: number; low: number; close: number; volume?: number }[] }) {
   const ref = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!ref.current || data.length === 0) return;
@@ -105,18 +105,19 @@ function Candles({ data }: { data: { time: number; open: number; high: number; l
         const lwc: any = await import('lightweight-charts');
         if (disposed || !ref.current) return;
         chart = lwc.createChart(ref.current, {
-          height: 360,
+          height: 380,
           width: ref.current.clientWidth || undefined,
-          layout: { background: { color: 'transparent' }, textColor: '#aaa' },
+          layout: { background: { color: 'transparent' }, textColor: '#9aa4b2', fontSize: 11 },
           grid: { vertLines: { color: 'rgba(255,255,255,0.04)' }, horzLines: { color: 'rgba(255,255,255,0.04)' } },
           // Fixed bar spacing so a handful of candles render at a normal width
           // instead of being stretched across the whole chart ("big as fuk").
-          timeScale: { timeVisible: true, secondsVisible: false, borderColor: 'rgba(255,255,255,0.1)', barSpacing: 10, minBarSpacing: 4, rightOffset: 8 },
-          rightPriceScale: { borderColor: 'rgba(255,255,255,0.1)' },
-          crosshair: { mode: 0 },
+          timeScale: { timeVisible: true, secondsVisible: false, borderColor: 'rgba(255,255,255,0.08)', barSpacing: 10, minBarSpacing: 4, rightOffset: 8 },
+          // Leave room at the bottom for the volume histogram (DexScreener style).
+          rightPriceScale: { borderColor: 'rgba(255,255,255,0.08)', scaleMargins: { top: 0.08, bottom: 0.26 } },
+          crosshair: { mode: 1 },
         });
         // lightweight-charts v5: addSeries(CandlestickSeries, opts); fall back to v4 API.
-        const opts = { upColor: '#4ADE80', downColor: '#F87171', borderVisible: false, wickUpColor: '#4ADE80', wickDownColor: '#F87171' };
+        const opts = { upColor: '#26a69a', downColor: '#ef5350', borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350' };
         const series = (chart.addSeries && lwc.CandlestickSeries)
           ? chart.addSeries(lwc.CandlestickSeries, opts)
           : chart.addCandlestickSeries(opts);
@@ -126,8 +127,19 @@ function Candles({ data }: { data: { time: number; open: number; high: number; l
           .filter((c) => Number.isFinite(c.time) && Number.isFinite(c.open))
           .sort((a, b) => a.time - b.time)
           .filter((c) => (seen.has(c.time) ? false : (seen.add(c.time), true)))
-          .map((c) => ({ time: c.time as any, open: c.open, high: c.high, low: c.low, close: c.close }));
-        series.setData(rows);
+          .map((c) => ({ time: c.time as any, open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume || 0 }));
+        series.setData(rows.map((c) => ({ time: c.time, open: c.open, high: c.high, low: c.low, close: c.close })));
+
+        // Volume histogram pinned to the bottom 20% (green on up candles, red on down).
+        try {
+          const volOpts = { priceFormat: { type: 'volume' }, priceScaleId: 'vol' };
+          const vol = (chart.addSeries && lwc.HistogramSeries)
+            ? chart.addSeries(lwc.HistogramSeries, volOpts)
+            : chart.addHistogramSeries(volOpts);
+          chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
+          vol.setData(rows.map((c) => ({ time: c.time, value: c.volume, color: c.close >= c.open ? 'rgba(38,166,154,0.5)' : 'rgba(239,83,80,0.5)' })));
+        } catch { /* volume overlay is best-effort */ }
+
         // Only fit-to-content when there's real history; otherwise keep the fixed
         // bar spacing (fitContent stretches 1–3 candles to fill the whole width).
         if (rows.length > 40) chart.timeScale().fitContent();
@@ -146,7 +158,7 @@ function Candles({ data }: { data: { time: number; open: number; high: number; l
       if (chart) { try { window.removeEventListener('resize', (chart as any)._onResize); chart.remove(); } catch {} }
     };
   }, [data]);
-  return <div ref={ref} style={{ width: '100%', height: 360 }} />;
+  return <div ref={ref} style={{ width: '100%', height: 380 }} />;
 }
 
 function TradesList({ trades, symbol }: { trades: V3Trade[]; symbol?: string }) {

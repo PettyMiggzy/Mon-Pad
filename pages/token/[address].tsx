@@ -254,7 +254,7 @@ function fmtNum(n: number, maxFrac = 2): string {
   if (a < 0.0001) {
     const exp = Math.floor(Math.log10(a));
     const zeros = -exp - 1;
-    const digits = (a / Math.pow(10, exp)).toFixed(2).replace('.', ''); // 3 significant figures
+    const digits = (a / Math.pow(10, exp)).toFixed(3).replace('.', ''); // 4 significant figures (DexScreener style)
     return `${n < 0 ? '-' : ''}0.0${toSub(zeros)}${digits}`;
   }
   return n.toLocaleString(undefined, { maximumFractionDigits: Math.max(maxFrac, 4) });
