@@ -70,6 +70,21 @@ create policy "public read token_meta" on token_meta for select using (true);
 create policy "public read comments"   on comments   for select using (true);
 -- bug_reports: intentionally no public read policy (admin-only via service role).
 
+-- 4b) Rewards (points / streaks / referrals) ---------------------------------
+create table if not exists rewards (
+  wallet        text primary key,
+  points        bigint not null default 0,
+  streak        int not null default 0,
+  last_checkin  date,
+  referred_by   text,
+  ref_count     int not null default 0,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+alter table rewards enable row level security;
+create policy "public read rewards" on rewards for select using (true);
+create index if not exists rewards_points_idx on rewards (points desc);
+
 -- 5) Storage bucket for images (token images, banners, pfps, comment images) ---
 insert into storage.buckets (id, name, public)
 values ('images', 'images', true)
