@@ -80,7 +80,11 @@ export async function getMonorailQuote(
   });
 
   const url = `${MONORAIL_API}/v4/quote?${search.toString()}`;
-  const res = await fetch(url, { signal: params.signal });
+  // Cap the quote at 9s so a slow pathfinder never hangs the UI; honor the caller's
+  // abort signal too (debounce/unmount).
+  const timeoutSig = AbortSignal.timeout(9000);
+  const signal = params.signal ? AbortSignal.any([params.signal, timeoutSig]) : timeoutSig;
+  const res = await fetch(url, { signal });
   if (!res.ok) {
     throw new Error(`Monorail quote http ${res.status}`);
   }

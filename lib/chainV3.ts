@@ -17,10 +17,11 @@ const monadChain = {
   contracts: { multicall3: { address: '0xcA11bde05977b3631167028862bE2a173976CA11' as Address } },
 } as const;
 
-// retryCount: 1 so a rejected request (e.g. a provider 413/429) doesn't retry-storm.
+// retryCount 1 so a rejected request (413/429) doesn't retry-storm; 7s timeout so a
+// slow/dead RPC fails fast (was 12s → up to ~24s stalls) instead of hanging the UI.
 export const publicClient = createPublicClient({
   chain: monadChain,
-  transport: http(MONAD_RPC_URL, { retryCount: 1, timeout: 12_000 }),
+  transport: http(MONAD_RPC_URL, { retryCount: 1, timeout: 7_000 }),
 });
 
 // Loose wrappers — the V3 ABIs are imported JSON; bypass viem's heavy ABI generics.

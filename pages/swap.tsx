@@ -115,30 +115,34 @@ export default function SwapPage() {
   useEffect(() => {
     if (!router.isReady || deepLinkApplied.current) return;
     deepLinkApplied.current = true;
-    const resolve = async (addrParam: string): Promise<TokenOption | null> => {
+    // Set the token from the address IMMEDIATELY (placeholder), so the Monorail
+    // quote can fire without waiting on on-chain metadata reads (which hang if the
+    // RPC is slow/down). Enrich symbol/decimals/graduated + logo in the background.
+    const applyParam = (addrParam: string, setter: (t: TokenOption) => void) => {
       const a = addrParam.toLowerCase();
-      if (a === ZERO_ADDRESS.toLowerCase()) return DEFAULT_FROM;
-      if (a === WMON.toLowerCase()) return DEFAULT_TO;
-      if (!/^0x[a-f0-9]{40}$/.test(a)) return null;
-      // On-chain first (works with no indexer) — resolves any token by address.
-      try {
-        const m = await resolveTokenMeta(a as Address);
-        if (m && m.symbol) {
-          const imageUrl = await api.tokenImage(a).catch(() => undefined);
-          return { symbol: m.symbol, name: m.name, address: a, decimals: m.decimals, imageUrl, isMonPadToken: m.isMonPadToken, graduated: m.graduated };
-        }
-      } catch { /* fall through to indexer */ }
-      try {
-        const t = await api.getToken(a);
-        if (t) return { symbol: t.symbol, name: t.name, address: t.address, decimals: 18, imageUrl: t.imageUrl, isMonPadToken: true, graduated: t.graduated };
-      } catch { /* ignore — keep default */ }
-      return null;
+      if (a === ZERO_ADDRESS.toLowerCase()) { setter(DEFAULT_FROM); return; }
+      if (a === WMON.toLowerCase()) { setter(DEFAULT_TO); return; }
+      if (!/^0x[a-f0-9]{40}$/.test(a)) return;
+      // Placeholder: assume aggregator-routable (graduated/external) so the quote runs now.
+      setter({ symbol: `${a.slice(0, 6)}…${a.slice(-4)}`, name: '', address: a, decimals: 18, isMonPadToken: false, graduated: true });
+      (async () => {
+        try {
+          const m = await resolveTokenMeta(a as Address);
+          if (m && m.symbol) {
+            const imageUrl = await api.tokenImage(a).catch(() => undefined);
+            setter({ symbol: m.symbol, name: m.name, address: a, decimals: m.decimals, imageUrl, isMonPadToken: m.isMonPadToken, graduated: m.graduated });
+            return;
+          }
+        } catch { /* keep placeholder */ }
+        try {
+          const t = await api.getToken(a);
+          if (t) setter({ symbol: t.symbol, name: t.name, address: t.address, decimals: 18, imageUrl: t.imageUrl, isMonPadToken: true, graduated: t.graduated });
+        } catch { /* keep placeholder */ }
+      })();
     };
-    (async () => {
-      const { from: qFrom, to: qTo } = router.query;
-      if (typeof qFrom === 'string') { const r = await resolve(qFrom); if (r) setFrom(r); }
-      if (typeof qTo === 'string') { const r = await resolve(qTo); if (r) setTo(r); }
-    })();
+    const { from: qFrom, to: qTo } = router.query;
+    if (typeof qFrom === 'string') applyParam(qFrom, setFrom);
+    if (typeof qTo === 'string') applyParam(qTo, setTo);
   }, [router.isReady, router.query]);
   const [slippageBps, setSlippageBps] = useState(500);
   const [pickerOpen, setPickerOpen] = useState<'from' | 'to' | null>(null);
