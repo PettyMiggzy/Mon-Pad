@@ -37,7 +37,7 @@ const GREEN = '#4ADE80';
 
 // Orbit geometry
 const R_STAR = 3, R_INNER = 6, R_OUTER = 46, R_GRAD = 60, PLANE_JITTER = 2.2;
-const HERO_MAX = 12, MID_MAX = 120, DEGRADE_BELOW = 16;
+const HERO_MAX = 20, MID_MAX = 120, DEGRADE_BELOW = 16;
 const TAU = Math.PI * 2;
 
 const cBrand = new THREE.Color(BRAND);

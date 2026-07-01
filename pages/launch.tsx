@@ -26,22 +26,33 @@ function Loading() {
 
 const LaunchBay3D = dynamic(() => import('@/components/LaunchBay3D'), { ssr: false, loading: () => <Loading /> });
 
-// Procedural demo bodies so the orrery reads as a living galaxy in preview even
-// before there's much on-chain activity. Deterministic (no Math.random at module
-// scope issues) — seeded from index. These have no address, so they're ambient
-// (not clickable). Real tokens are blended in front and ARE clickable.
+// Mock projects (name + ticker + a generated PFP) so the orrery reads as a full,
+// living launchpad in preview / for demos — even before there's much on-chain
+// activity. Deterministic (seeded from index), ambient (not clickable). Real
+// on-chain tokens are always promoted in front of these and ARE clickable.
+const MOCKS = [
+  { n: 'Shiba Chief', s: 'SHIBC' }, { n: 'Pepe Prime', s: 'PEPE' }, { n: 'Raging Bull', s: 'BULL' },
+  { n: 'Botcat', s: 'BOTC' }, { n: 'Gold Ape', s: 'APE' }, { n: 'Arch Mage', s: 'MAGE' },
+  { n: 'Pandeez', s: 'PNDA' }, { n: 'Lionheart', s: 'LION' }, { n: 'Moony', s: 'MOON' },
+  { n: 'Diamond Hands', s: 'DMND' }, { n: 'The Reaper', s: 'RIP' }, { n: 'Puppo', s: 'PUP' },
+  { n: 'Shadow Ninja', s: 'NINJ' }, { n: 'To The Moon', s: 'RCKT' }, { n: 'Banana Gang', s: 'NANA' },
+  { n: 'Laser Cat', s: 'LSR' },
+];
 function demoBodies(n: number): Rocket[] {
   const out: Rocket[] = [];
   for (let i = 0; i < n; i++) {
-    const r = (Math.sin(i * 12.9898) * 43758.5453) % 1;
-    const p = Math.abs(r);
+    const m = MOCKS[i % MOCKS.length];
+    const idx = (i % MOCKS.length) + 1;
+    const r = Math.abs((Math.sin(i * 12.9898) * 43758.5453) % 1);
     const graduated = i % 17 === 0;
     const boosted = i % 29 === 0;
     out.push({
-      name: `Demo ${i}`, symbol: `D${i}`, address: '',
-      progress: graduated ? 1 : Math.min(0.98, 0.05 + p * 0.9),
-      graduated, boosted, ambient: true,
-      mcMon: 500 + Math.abs((Math.cos(i * 7.13) * 9000)),
+      name: i < MOCKS.length ? m.n : `${m.n} ${Math.floor(i / MOCKS.length) + 1}`,
+      symbol: m.s, address: '', ambient: true,
+      img: `/mock/pfp${String(idx).padStart(2, '0')}.png`,
+      progress: graduated ? 1 : Math.min(0.98, 0.05 + r * 0.9),
+      graduated, boosted,
+      mcMon: 500 + Math.abs(Math.cos(i * 7.13) * 90000),
     });
   }
   return out;
@@ -100,10 +111,10 @@ export default function LaunchPage() {
         if (topIdx >= 0) real[topIdx].boosted = true;
         // Ambient demo bodies fill out the galaxy; real projects are always promoted
         // to the front (hero/mid) in the scene, so they read as the actual ecosystem.
-        const pad = demoBodies(Math.max(0, 90 - real.length));
+        const pad = demoBodies(Math.max(0, 160 - real.length));
         setRockets([...real, ...pad]);
       })
-      .catch(() => { if (!cancelled) { setRealCount(0); setRockets(demoBodies(120)); } });
+      .catch(() => { if (!cancelled) { setRealCount(0); setRockets(demoBodies(180)); } });
     return () => { cancelled = true; };
   }, []);
 
