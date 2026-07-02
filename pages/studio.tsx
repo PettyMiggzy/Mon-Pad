@@ -170,7 +170,7 @@ export default function StudioPage() {
                   border: `1px solid ${mode === m ? '#a78bfa' : 'rgba(139,92,246,0.3)'}`,
                   background: mode === m ? 'rgba(139,92,246,0.35)' : 'rgba(10,6,20,0.5)', color: mode === m ? '#fff' : '#c4b5fd',
                 }}>
-                  {m === 'chat' ? '💬 Chat' : m === 'code' ? '🧑‍💻 Code (Claude)' : '🎨 Image'} <span style={{ color: '#9aa4b2', fontWeight: 500 }}>· {modeCost[m]}</span>
+                  {m === 'chat' ? '💬 Chat' : m === 'code' ? '🧑‍💻 Code' : '🎨 Image'} <span style={{ color: '#9aa4b2', fontWeight: 500 }}>· {modeCost[m]}</span>
                 </button>
               ))}
               {(acct.holder || acct.beta) && (

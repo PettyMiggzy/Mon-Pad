@@ -31,6 +31,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       accessMon: ACCESS_MON, minTopupMon: MIN_TOPUP_MON, monUsd: MON_USD, packs: PACKS,
       treasury: TREASURY || null, configured: !!TREASURY,
       holderMinMonshi: HOLDER_MIN_MONSHI,
+      // Diagnostics only — never the key material itself.
+      ai: process.env.VENICE_API_KEY
+        ? (process.env.VENICE_API_KEY.trim().startsWith('VENICE_INFERENCE_KEY_') ? 'ok' : 'set-check-format')
+        : 'missing',
     });
   }
 
