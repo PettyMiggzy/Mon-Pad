@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
-import { HOLDER_MIN_MONSHI, MODES, monshiBalance, veniceImage, verifyStudioSig } from '@/lib/studioServer';
+import { HOLDER_MIN_MONSHI, MODES, OPEN_BETA, monshiBalance, veniceImage, verifyStudioSig } from '@/lib/studioServer';
 
 // Monshi Studio image generation (flux via Venice). Always credit-priced — there is
 // no free image tier. Debit before the call; refund on provider failure.
@@ -27,7 +27,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     supabase.from('studio_accounts').select('*').eq('wallet', wallet).maybeSingle(),
     monshiBalance(wallet),
   ]);
-  if (!((acct?.access ?? false) || monshi >= HOLDER_MIN_MONSHI)) return res.status(402).json({ error: 'unlock Monshi Studio first' });
+  if (!((acct?.access ?? false) || monshi >= HOLDER_MIN_MONSHI || OPEN_BETA)) return res.status(402).json({ error: 'unlock Monshi Studio first' });
   const credits = acct?.credits ?? 0;
   if (credits < cfg.credits) return res.status(402).json({ error: `needs ${cfg.credits} credits — top up`, credits });
 
