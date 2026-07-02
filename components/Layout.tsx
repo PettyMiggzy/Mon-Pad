@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { ConnectButton, useConnectModal } from '@rainbow-me/rainbowkit';
 import { useAccount } from 'wagmi';
-import { Home, Plus, ArrowLeftRight, User, Shield, BookOpen, FileText, Trophy } from 'lucide-react';
+import { Home, Plus, ArrowLeftRight, User, Shield, BookOpen, FileText, Trophy, Bot, Target } from 'lucide-react';
 import { isAdmin } from '@/lib/constants';
 import { AddressGuard } from './AddressGuard';
 import type { ReactNode } from 'react';
@@ -11,7 +11,9 @@ const PRIMARY_NAV = [
   { href: '/', label: 'Home', icon: Home, desktopOnly: false },
   { href: '/create', label: 'Create', icon: Plus, desktopOnly: false },
   { href: '/swap', label: 'Swap', icon: ArrowLeftRight, desktopOnly: false },
+  { href: '/studio', label: 'Studio', icon: Bot, desktopOnly: false },
   { href: '/rewards', label: 'Rewards', icon: Trophy, desktopOnly: false },
+  { href: '/bounties', label: 'Bounties', icon: Target, desktopOnly: true },
   { href: '/how-it-works', label: 'How it works', icon: BookOpen, desktopOnly: true },
   { href: '/docs', label: 'Docs', icon: FileText, desktopOnly: true },
 ] as const;

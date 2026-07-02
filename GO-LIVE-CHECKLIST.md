@@ -68,3 +68,11 @@ production V3 addresses; if not, retire the pm2 process.
 Reference (current TEST deploy): factory `0x45Fb501E1167FbBfEBf42206A3C9945F13C70aaF`,
 graduator `0xE27E3E0D1AAABDDF26Fa00c6046B842A2F58616b`, MONSHI boost
 `0xE50Ab41eAE60309d06a6aaA699f5E5786D78e4DA`.
+
+## Monshi Studio + Bounties setup (required before first use)
+- [ ] Vercel env: `VENICE_API_KEY` = the Venice inference key (server-side ONLY — never NEXT_PUBLIC)
+- [ ] Vercel env: `STUDIO_TREASURY` = wallet address that receives MON payments (access + credit top-ups)
+- [ ] Optional envs: `STUDIO_ACCESS_MON` (default 1000), `STUDIO_MON_USD` (default 0.02 — keep roughly at MON price so credit packs stay ~face value), `STUDIO_HOLDER_MIN` (default 100000 MONSHI), `STUDIO_FREE_DAILY` (default 30)
+- [ ] Supabase: run the `studio_accounts` / `studio_payments` / `studio_usage` / `bounties` tables from supabase/schema.sql
+- [ ] Rotate the Venice key (it was shared in chat) and set the NEW key in Vercel
+- [ ] Check the key's spend limit in the Venice dashboard (402 = raise the key limit)
