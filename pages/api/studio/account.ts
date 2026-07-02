@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
-import { ACCESS_MON, HOLDER_MIN_MONSHI, FREE_DAILY, MIN_TOPUP_MON, MON_USD, PACKS, TREASURY, monshiBalance, verifyPayment } from '@/lib/studioServer';
+import { ACCESS_MON, HOLDER_MIN_MONSHI, FREE_DAILY, MIN_TOPUP_MON, MON_USD, OPEN_BETA, PACKS, TREASURY, monshiBalance, verifyPayment } from '@/lib/studioServer';
 
 // Monshi Studio account: GET = status (access/holder/credits/free-left/packs),
 // POST = redeem a MON payment tx (access unlock or credit top-up). Payments are
@@ -24,9 +24,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     ]);
     const holder = monshi >= HOLDER_MIN_MONSHI;
     const freeUsed = acct?.free_date === today() ? acct.free_used : 0;
+    const freeEligible = holder || OPEN_BETA; // beta: everyone gets the free chat lane
     return res.status(200).json({
-      wallet, credits: acct?.credits ?? 0, access: (acct?.access ?? false) || holder, paidAccess: acct?.access ?? false,
-      holder, monshi, freeLeft: holder ? Math.max(0, FREE_DAILY - freeUsed) : 0, freeDaily: FREE_DAILY,
+      wallet, credits: acct?.credits ?? 0, access: (acct?.access ?? false) || holder || OPEN_BETA, paidAccess: acct?.access ?? false,
+      holder, monshi, beta: OPEN_BETA, freeLeft: freeEligible ? Math.max(0, FREE_DAILY - freeUsed) : 0, freeDaily: FREE_DAILY,
       accessMon: ACCESS_MON, minTopupMon: MIN_TOPUP_MON, monUsd: MON_USD, packs: PACKS,
       treasury: TREASURY || null, configured: !!TREASURY,
       holderMinMonshi: HOLDER_MIN_MONSHI,

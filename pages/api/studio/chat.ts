@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
-import { FREE_DAILY, HOLDER_MIN_MONSHI, MODES, MONSHI_SYSTEM, monshiBalance, veniceChat, verifyStudioSig } from '@/lib/studioServer';
+import { FREE_DAILY, HOLDER_MIN_MONSHI, MODES, MONSHI_SYSTEM, OPEN_BETA, monshiBalance, veniceChat, verifyStudioSig } from '@/lib/studioServer';
 
 // Monshi Studio chat/code. Auth = daily wallet signature. Holders get FREE_DAILY
 // capped chats/day on the cheap model at 0 credits; otherwise (and for code mode)
@@ -34,12 +34,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     monshiBalance(wallet),
   ]);
   const holder = monshi >= HOLDER_MIN_MONSHI;
-  const hasAccess = (acct?.access ?? false) || holder;
+  const hasAccess = (acct?.access ?? false) || holder || OPEN_BETA;
   if (!hasAccess) return res.status(402).json({ error: 'unlock Monshi Studio first' });
 
-  // Pick the lane: holders ride the free model until the daily cap, then credits.
+  // Pick the lane: holders (and everyone during open beta) ride the free model
+  // until the daily cap, then credits.
+  const freeEligible = holder || OPEN_BETA;
   const freeUsed = acct?.free_date === today() ? (acct?.free_used ?? 0) : 0;
-  const useFree = wantMode === 'chat' && holder && freeUsed < FREE_DAILY;
+  const useFree = wantMode === 'chat' && freeEligible && freeUsed < FREE_DAILY;
   const mode = useFree ? 'free' : wantMode;
   const cfg = MODES[mode as keyof typeof MODES];
   const credits = acct?.credits ?? 0;
@@ -66,7 +68,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     await supabase.from('studio_usage').insert({ wallet, mode, model: cfg.model, credits: cfg.credits });
     return res.status(200).json({
       reply, mode, charged: cfg.credits, credits: newCredits,
-      freeLeft: holder ? Math.max(0, FREE_DAILY - (useFree ? freeUsed + 1 : freeUsed)) : 0,
+      freeLeft: freeEligible ? Math.max(0, FREE_DAILY - (useFree ? freeUsed + 1 : freeUsed)) : 0,
     });
   } catch (e: any) {
     // Provider failed — refund the debit.

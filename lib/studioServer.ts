@@ -13,6 +13,11 @@ import { tokenAbi } from './abis';
 const VENICE = 'https://api.venice.ai/api/v1';
 
 // ── Config (env-overridable) ────────────────────────────────────────────────
+// OPEN BETA: while true (default), entry is ungated — no access fee, no holder
+// requirement, and EVERYONE gets the free daily chat allowance so testers can try
+// Monshi. Code/image stay credit-priced (real per-call provider cost). Set
+// STUDIO_OPEN_BETA=false in env to turn the paid gate back on — no code change.
+export const OPEN_BETA = process.env.STUDIO_OPEN_BETA !== 'false';
 export const ACCESS_MON = Number(process.env.STUDIO_ACCESS_MON || '1000');    // ~$20 at MON=$0.02
 export const MON_USD = Number(process.env.STUDIO_MON_USD || '0.02');          // MON price used for credit packs
 export const HOLDER_MIN_MONSHI = Number(process.env.STUDIO_HOLDER_MIN || '100000');

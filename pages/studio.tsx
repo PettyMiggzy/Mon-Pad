@@ -10,7 +10,7 @@ import { useAccount, useSendTransaction, useSignMessage } from 'wagmi';
 import { parseEther } from 'viem';
 
 type Acct = {
-  credits: number; access: boolean; paidAccess: boolean; holder: boolean; monshi: number;
+  credits: number; access: boolean; paidAccess: boolean; holder: boolean; monshi: number; beta?: boolean;
   freeLeft: number; freeDaily: number; accessMon: number; minTopupMon: number; monUsd: number;
   packs: { mon: number; credits: number }[]; treasury: string | null; configured: boolean; holderMinMonshi: number;
 };
@@ -111,7 +111,7 @@ export default function StudioPage() {
 
   const unlocked = !!acct?.access;
   const modeCost: Record<Mode, string> = {
-    chat: acct?.holder && (acct?.freeLeft ?? 0) > 0 ? `free (${acct?.freeLeft} left)` : '2 cr',
+    chat: (acct?.freeLeft ?? 0) > 0 ? `free (${acct?.freeLeft} left)` : '2 cr',
     code: '15 cr', image: '20 cr',
   };
 
@@ -173,7 +173,11 @@ export default function StudioPage() {
                   {m === 'chat' ? '💬 Chat' : m === 'code' ? '🧑‍💻 Code (Claude)' : '🎨 Image'} <span style={{ color: '#9aa4b2', fontWeight: 500 }}>· {modeCost[m]}</span>
                 </button>
               ))}
-              {acct.holder && <span style={{ marginLeft: 'auto', alignSelf: 'center', fontSize: 12, color: '#4ADE80' }}>💎 holder · {acct.freeLeft}/{acct.freeDaily} free chats left</span>}
+              {(acct.holder || acct.beta) && (
+                <span style={{ marginLeft: 'auto', alignSelf: 'center', fontSize: 12, color: acct.holder ? '#4ADE80' : '#a78bfa' }}>
+                  {acct.holder ? '💎 holder' : '🧪 free beta'} · {acct.freeLeft}/{acct.freeDaily} free chats left
+                </span>
+              )}
             </div>
 
             <div style={{ ...card, height: '52vh', minHeight: 320, overflowY: 'auto', padding: 16 }}>
