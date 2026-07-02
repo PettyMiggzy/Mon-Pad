@@ -32,11 +32,15 @@ export const PACKS = [250, 1000, 4000].map((mon) => ({ mon, credits: Math.round(
 // chat  : llama-3.3-70b ($0.7/$2.8) capped 1k out → worst ~$0.005  → 2 cr  (4x)
 // code  : claude-sonnet-5 via Venice ($3/$15) capped 2k out → worst ~$0.045 → 15 cr (3.3x)
 // image : flux-2-pro (~$0.04-0.06/gen) 1024px → 20 cr (>=3x)
+// rank = capability ceiling. A mode may only do work at or below its rank, so a
+// cheaper lane can never do a pricier lane's job: chat(0) can't code, code(1) can't
+// image, image(2) can't video, video(3) tops out. Est USD = worst-case provider cost.
 export const MODES = {
-  free:  { model: 'google-gemma-3-27b-it', credits: 0,  maxTokens: 800 },
-  chat:  { model: 'llama-3.3-70b',         credits: 2,  maxTokens: 1000 },
-  code:  { model: 'claude-sonnet-5',       credits: 15, maxTokens: 2000 },
-  image: { model: 'flux-2-pro',            credits: 20, maxTokens: 0 },
+  free:  { model: 'google-gemma-3-27b-it',          credits: 0,   maxTokens: 800,  rank: 0, estUsd: 0.0004 },
+  chat:  { model: 'llama-3.3-70b',                  credits: 2,   maxTokens: 1000, rank: 0, estUsd: 0.005 },
+  code:  { model: 'claude-sonnet-5',                credits: 15,  maxTokens: 2000, rank: 1, estUsd: 0.045 },
+  image: { model: 'flux-2-pro',                     credits: 20,  maxTokens: 0,    rank: 2, estUsd: 0.06 },
+  video: { model: 'seedance-2-0-fast-text-to-video', credits: 250, maxTokens: 0,   rank: 3, estUsd: 0.8 },
 } as const;
 export type StudioMode = keyof typeof MODES;
 
@@ -144,6 +148,45 @@ export async function veniceChat(model: string, messages: { role: string; conten
   const reply = d?.choices?.[0]?.message?.content;
   if (typeof reply !== 'string') throw new Error('empty AI response');
   return reply;
+}
+
+// ── Video (async: queue → poll) ─────────────────────────────────────────────
+export async function veniceVideoStart(model: string, prompt: string): Promise<string> {
+  const key = veniceKey();
+  if (!key) throw new Error('Studio not configured (VENICE_API_KEY)');
+  const res = await fetch(`${VENICE}/video/queue`, {
+    method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ model, prompt: prompt.slice(0, 1400), duration: '5s', resolution: '720p' }),
+  });
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(d?.error?.message || d?.error || `video error ${res.status}`);
+  const q = d?.queue_id || d?.queueId || d?.id;
+  if (!q) throw new Error('no queue id from video service');
+  return String(q);
+}
+
+const VID_DONE = ['completed', 'done', 'succeeded', 'success', 'ready'];
+export async function veniceVideoPoll(model: string, queueId: string): Promise<{ status: 'pending' } | { video: string }> {
+  const key = veniceKey();
+  if (!key) throw new Error('Studio not configured (VENICE_API_KEY)');
+  const res = await fetch(`${VENICE}/video/retrieve`, {
+    method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ model, queue_id: queueId }),
+  });
+  if (res.status === 202) return { status: 'pending' };
+  const ct = res.headers.get('content-type') || '';
+  if (ct.includes('video') || ct.includes('octet-stream')) {
+    const buf = Buffer.from(await res.arrayBuffer());
+    return { video: `data:video/mp4;base64,${buf.toString('base64')}` };
+  }
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(d?.error?.message || d?.error || `video error ${res.status}`);
+  const st = String(d?.status || d?.state || '').toLowerCase();
+  const url = d?.url || d?.video || d?.output || d?.video_url || d?.data?.[0]?.url || d?.data?.[0]?.b64_json;
+  if (st && !VID_DONE.includes(st) && !url) return { status: 'pending' };
+  if (!url) return { status: 'pending' };
+  if (typeof url === 'string' && (url.startsWith('http') || url.startsWith('data:'))) return { video: url };
+  return { video: `data:video/mp4;base64,${url}` };
 }
 
 export async function veniceImage(model: string, prompt: string): Promise<string> {

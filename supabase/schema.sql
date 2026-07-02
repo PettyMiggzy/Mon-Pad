@@ -106,7 +106,7 @@ create table if not exists studio_payments (
 create table if not exists studio_usage (
   id          uuid primary key default gen_random_uuid(),
   wallet      text not null,
-  mode        text not null,                 -- free | chat | code | image
+  mode        text not null,                 -- free | chat | code | image | video
   model       text not null,
   credits     bigint not null default 0,
   created_at  timestamptz not null default now()
