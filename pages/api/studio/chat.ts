@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
-import { FREE_DAILY, HOLDER_MIN_MONSHI, MODES, MONSHI_SYSTEM, OPEN_BETA, monshiBalance, veniceChat, verifyStudioSig } from '@/lib/studioServer';
+import { CHAT_BOUNDARY, CODE_BOUNDARY, FREE_DAILY, HOLDER_MIN_MONSHI, MODES, MONSHI_SYSTEM, OPEN_BETA, monshiBalance, stripCodeFromChat, veniceChat, verifyStudioSig } from '@/lib/studioServer';
 
 // Monshi Studio chat/code. Auth = daily wallet signature. Holders get FREE_DAILY
 // capped chats/day on the cheap model at 0 credits; otherwise (and for code mode)
@@ -61,10 +61,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (upErr) return res.status(500).json({ error: upErr.message });
 
   try {
-    const sys = mode === 'code'
-      ? `${MONSHI_SYSTEM} You are in CODE mode: produce correct, complete, runnable code with brief explanations.`
-      : MONSHI_SYSTEM;
-    const reply = await veniceChat(cfg.model, [{ role: 'system', content: sys }, ...history], cfg.maxTokens);
+    const sys = `${MONSHI_SYSTEM} ${mode === 'code' ? CODE_BOUNDARY : CHAT_BOUNDARY}`;
+    let reply = await veniceChat(cfg.model, [{ role: 'system', content: sys }, ...history], cfg.maxTokens);
+    if (mode !== 'code') reply = stripCodeFromChat(reply); // hard guard: chat never ships code blocks
     await supabase.from('studio_usage').insert({ wallet, mode, model: cfg.model, credits: cfg.credits });
     return res.status(200).json({
       reply, mode, charged: cfg.credits, credits: newCredits,
