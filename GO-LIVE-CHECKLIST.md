@@ -72,6 +72,7 @@ graduator `0xE27E3E0D1AAABDDF26Fa00c6046B842A2F58616b`, MONSHI boost
 ## Monshi Studio + Bounties setup (required before first use)
 - [ ] Vercel env: `VENICE_API_KEY` = the Venice inference key (server-side ONLY — never NEXT_PUBLIC)
 - [ ] Vercel env: `STUDIO_TREASURY` = wallet address that receives MON payments (access + credit top-ups)
+- [ ] Gate: paid access is the DEFAULT. Set `STUDIO_OPEN_BETA=true` only to reopen free test mode.
 - [ ] Optional envs: `STUDIO_ACCESS_MON` (default 1000), `STUDIO_MON_USD` (default 0.02 — keep roughly at MON price so credit packs stay ~face value), `STUDIO_HOLDER_MIN` (default 100000 MONSHI), `STUDIO_FREE_DAILY` (default 30)
 - [ ] Supabase: run the `studio_accounts` / `studio_payments` / `studio_usage` / `bounties` tables from supabase/schema.sql
 - [ ] Rotate the Venice key (it was shared in chat) and set the NEW key in Vercel
