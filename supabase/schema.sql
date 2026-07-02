@@ -85,6 +85,53 @@ alter table rewards enable row level security;
 create policy "public read rewards" on rewards for select using (true);
 create index if not exists rewards_points_idx on rewards (points desc);
 
+-- 4c) Monshi Studio (AI credits + payments + usage) ----------------------------
+create table if not exists studio_accounts (
+  wallet      text primary key,
+  credits     bigint not null default 0,     -- 1 credit = $0.01 face value
+  access      boolean not null default false,
+  free_used   int not null default 0,        -- holder free-chat messages used today
+  free_date   date,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+create table if not exists studio_payments (
+  tx_hash     text primary key,              -- prevents replaying the same payment
+  wallet      text not null,
+  mon         numeric not null,
+  kind        text not null,                 -- access | credits
+  credits     bigint not null default 0,
+  created_at  timestamptz not null default now()
+);
+create table if not exists studio_usage (
+  id          uuid primary key default gen_random_uuid(),
+  wallet      text not null,
+  mode        text not null,                 -- free | chat | code | image
+  model       text not null,
+  credits     bigint not null default 0,
+  created_at  timestamptz not null default now()
+);
+alter table studio_accounts enable row level security;
+alter table studio_payments enable row level security;
+alter table studio_usage    enable row level security;
+-- no public policies: studio tables are server-only (service role)
+
+-- 4d) Bounties ------------------------------------------------------------------
+create table if not exists bounties (
+  id          uuid primary key default gen_random_uuid(),
+  title       text not null,
+  description text not null,
+  reward      text not null,                 -- e.g. "5M MONSHI"
+  poster      text not null,
+  contact     text,                          -- tg handle etc.
+  status      text not null default 'open',  -- open | awarded | closed
+  claimer     text,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+alter table bounties enable row level security;
+create policy "public read bounties" on bounties for select using (true);
+
 -- 5) Storage bucket for images (token images, banners, pfps, comment images) ---
 insert into storage.buckets (id, name, public)
 values ('images', 'images', true)
