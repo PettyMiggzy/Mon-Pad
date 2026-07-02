@@ -103,7 +103,13 @@ export async function verifyStudioSig(wallet: string, signature: string): Promis
 }
 
 // ── Venice wrappers (server-side; key from env only) ────────────────────────
-function veniceKey(): string | null { return process.env.VENICE_API_KEY || null; }
+// Accept common env-name variants (VENICE_API_KEY preferred) and trim stray
+// whitespace/newlines from dashboard pastes — a mis-named row shouldn't brick chat.
+export function veniceKey(): string | null {
+  const raw = process.env.VENICE_API_KEY || process.env.VENICE_INFERENCE_KEY || process.env.VENICE_KEY || '';
+  const k = raw.trim();
+  return k.length > 10 ? k : null;
+}
 
 export async function veniceChat(model: string, messages: { role: string; content: string }[], maxTokens: number): Promise<string> {
   const key = veniceKey();

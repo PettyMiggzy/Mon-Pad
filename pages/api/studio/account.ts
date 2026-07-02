@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
-import { ACCESS_MON, HOLDER_MIN_MONSHI, FREE_DAILY, MIN_TOPUP_MON, MON_USD, OPEN_BETA, PACKS, TREASURY, monshiBalance, verifyPayment } from '@/lib/studioServer';
+import { ACCESS_MON, HOLDER_MIN_MONSHI, FREE_DAILY, MIN_TOPUP_MON, MON_USD, OPEN_BETA, PACKS, TREASURY, monshiBalance, veniceKey, verifyPayment } from '@/lib/studioServer';
 
 // Monshi Studio account: GET = status (access/holder/credits/free-left/packs),
 // POST = redeem a MON payment tx (access unlock or credit top-up). Payments are
@@ -32,9 +32,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       treasury: TREASURY || null, configured: !!TREASURY,
       holderMinMonshi: HOLDER_MIN_MONSHI,
       // Diagnostics only — never the key material itself.
-      ai: process.env.VENICE_API_KEY
-        ? (process.env.VENICE_API_KEY.trim().startsWith('VENICE_INFERENCE_KEY_') ? 'ok' : 'set-check-format')
-        : 'missing',
+      ai: (() => { const k = veniceKey(); return k ? (k.startsWith('VENICE_INFERENCE_KEY_') ? 'ok' : 'set-check-format') : 'missing'; })(),
     });
   }
 
