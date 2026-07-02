@@ -8,14 +8,15 @@ import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAccount, useSendTransaction, useSignMessage } from 'wagmi';
 import { parseEther } from 'viem';
+import { isAdmin } from '@/lib/constants';
 
 type Acct = {
   credits: number; access: boolean; paidAccess: boolean; holder: boolean; monshi: number; beta?: boolean;
   freeLeft: number; freeDaily: number; accessMon: number; minTopupMon: number; monUsd: number;
   packs: { mon: number; credits: number }[]; treasury: string | null; configured: boolean; holderMinMonshi: number;
 };
-type Msg = { role: 'user' | 'assistant'; content: string; image?: string; meta?: string };
-type Mode = 'chat' | 'code' | 'image';
+type Msg = { role: 'user' | 'assistant'; content: string; image?: string; video?: string; meta?: string };
+type Mode = 'chat' | 'code' | 'image' | 'video';
 
 const card: React.CSSProperties = { background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(139,92,246,0.25)', borderRadius: 14 };
 const fmt = (n: number) => n.toLocaleString('en-US');
@@ -92,6 +93,27 @@ export default function StudioPage() {
         const j = await r.json();
         if (!r.ok) throw new Error(j.error || 'image failed');
         setMsgs((m) => [...m, { role: 'assistant', content: '', image: j.image, meta: `−${j.charged} credits` }]);
+      } else if (mode === 'video') {
+        // Async: queue the render, then poll until the mp4 is ready (~1-2 min).
+        const r = await fetch('/api/studio/video', {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ wallet: address, signature, action: 'start', prompt: text }),
+        });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error || 'video failed');
+        await load(); // credits already debited on queue
+        let video: string | null = null;
+        for (let i = 0; i < 40 && !video; i++) {
+          await new Promise((res) => setTimeout(res, 6000));
+          const pr = await fetch('/api/studio/video', {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ wallet: address, signature, action: 'poll', queueId: j.queueId }),
+          });
+          const pj = await pr.json().catch(() => ({}));
+          if (pr.ok && pj.video) video = pj.video;
+        }
+        if (!video) throw new Error('render still cooking — it may finish shortly, check back or try again');
+        setMsgs((m) => [...m, { role: 'assistant', content: '', video, meta: `−${j.charged} credits` }]);
       } else {
         const history = [...msgs.filter((m) => !m.image), mine].map(({ role, content }) => ({ role, content }));
         const r = await fetch('/api/studio/chat', {
@@ -112,12 +134,12 @@ export default function StudioPage() {
   const unlocked = !!acct?.access;
   const modeCost: Record<Mode, string> = {
     chat: (acct?.freeLeft ?? 0) > 0 ? `free (${acct?.freeLeft} left)` : '2 cr',
-    code: '15 cr', image: '20 cr',
+    code: '15 cr', image: '20 cr', video: '250 cr',
   };
 
   return (
     <>
-      <Head><title>Monshi Studio | Mon-Pad</title><meta name="description" content="Monshi Studio — AI chat, code and image generation on Mon-Pad. Hold MONSHI to chat free; buy credits with MON for premium AI." /></Head>
+      <Head><title>Monshi Studio | Mon-Pad</title><meta name="description" content="Monshi Studio — AI chat, code, image and video generation on Mon-Pad. Hold MONSHI to chat free; buy credits with MON for premium AI." /></Head>
       <div style={{ maxWidth: 860, margin: '0 auto', padding: '20px 16px 40px', color: '#fff', fontFamily: 'system-ui, sans-serif' }}>
 
         {/* Header */}
@@ -126,8 +148,11 @@ export default function StudioPage() {
           <img src="/monshi-chibi.webp" alt="Monshi" width={54} height={54} style={{ borderRadius: 14, border: '1px solid rgba(139,92,246,0.5)', boxShadow: '0 0 18px rgba(139,92,246,0.45)' }} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <h1 style={{ margin: 0, fontSize: 24, fontWeight: 900 }}>Monshi <span style={{ color: '#a78bfa' }}>Studio</span></h1>
-            <div style={{ fontSize: 12, color: '#9aa4b2' }}>AI chat · code · images — powered by Monshi. Holders chat free.</div>
+            <div style={{ fontSize: 12, color: '#9aa4b2' }}>AI chat · code · images · video — powered by Monshi. Holders chat free.</div>
           </div>
+          {isAdmin(address) && (
+            <Link href="/studio/admin" style={{ ...card, padding: '8px 12px', color: '#a78bfa', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>📊 Revenue</Link>
+          )}
           {address && acct && (
             <button onClick={() => setShowTopup(true)} style={{ ...card, padding: '8px 14px', color: '#fff', cursor: 'pointer', fontWeight: 800, fontSize: 14 }}>
               ⚡ {fmt(acct.credits)} cr <span style={{ color: '#a78bfa', fontWeight: 600 }}>· top up</span>
@@ -164,13 +189,13 @@ export default function StudioPage() {
           // ── Studio ─────────────────────────────────────────────────────────
           <>
             <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-              {(['chat', 'code', 'image'] as Mode[]).map((m) => (
+              {(['chat', 'code', 'image', 'video'] as Mode[]).map((m) => (
                 <button key={m} onClick={() => setMode(m)} style={{
                   padding: '8px 16px', borderRadius: 999, fontSize: 13, fontWeight: 700, cursor: 'pointer',
                   border: `1px solid ${mode === m ? '#a78bfa' : 'rgba(139,92,246,0.3)'}`,
                   background: mode === m ? 'rgba(139,92,246,0.35)' : 'rgba(10,6,20,0.5)', color: mode === m ? '#fff' : '#c4b5fd',
                 }}>
-                  {m === 'chat' ? '💬 Chat' : m === 'code' ? '🧑‍💻 Code' : '🎨 Image'} <span style={{ color: '#9aa4b2', fontWeight: 500 }}>· {modeCost[m]}</span>
+                  {m === 'chat' ? '💬 Chat' : m === 'code' ? '🧑‍💻 Code' : m === 'image' ? '🎨 Image' : '🎬 Video'} <span style={{ color: '#9aa4b2', fontWeight: 500 }}>· {modeCost[m]}</span>
                 </button>
               ))}
               {(acct.holder || acct.beta) && (
@@ -197,12 +222,14 @@ export default function StudioPage() {
                     {m.image ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={m.image} alt="generated" style={{ maxWidth: '100%', borderRadius: 8 }} />
+                    ) : m.video ? (
+                      <video src={m.video} controls playsInline loop style={{ maxWidth: '100%', borderRadius: 8 }} />
                     ) : m.content}
                     {m.meta && <div style={{ fontSize: 10, color: '#7c6aa8', marginTop: 6 }}>{m.meta}</div>}
                   </div>
                 </div>
               ))}
-              {busy && <div style={{ color: '#a78bfa', fontSize: 13 }}>Monshi is {mode === 'image' ? 'painting' : 'thinking'}…</div>}
+              {busy && <div style={{ color: '#a78bfa', fontSize: 13 }}>Monshi is {mode === 'image' ? 'painting' : mode === 'video' ? 'rendering your video (~1-2 min, keep this tab open)' : 'thinking'}…</div>}
               <div ref={bottomRef} />
             </div>
 
@@ -210,7 +237,7 @@ export default function StudioPage() {
               <textarea
                 value={input} onChange={(e) => setInput(e.target.value)} rows={mode === 'code' ? 3 : 1}
                 onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
-                placeholder={mode === 'image' ? 'describe the image…' : mode === 'code' ? 'describe the code you need… (shift+enter = newline)' : 'message Monshi…'}
+                placeholder={mode === 'image' ? 'describe the image…' : mode === 'video' ? 'describe the video clip…' : mode === 'code' ? 'describe the code you need… (shift+enter = newline)' : 'message Monshi…'}
                 style={{ flex: 1, resize: 'none', padding: '11px 12px', borderRadius: 10, border: '1px solid rgba(139,92,246,0.4)', background: 'rgba(0,0,0,0.35)', color: '#fff', fontSize: 14, outline: 'none', fontFamily: 'inherit' }}
               />
               <button onClick={send} disabled={busy || !input.trim()} style={{ background: '#8B5CF6', color: '#fff', border: 'none', padding: '0 22px', borderRadius: 10, fontWeight: 800, cursor: 'pointer', opacity: busy || !input.trim() ? 0.5 : 1 }}>Send</button>
@@ -227,7 +254,7 @@ export default function StudioPage() {
                 <b style={{ fontSize: 17 }}>Buy credits</b>
                 <button onClick={() => setShowTopup(false)} style={{ background: 'none', border: 'none', color: '#9aa4b2', fontSize: 18, cursor: 'pointer' }}>✕</button>
               </div>
-              <div style={{ fontSize: 12, color: '#9aa4b2', marginBottom: 14 }}>Pay in MON · 1 credit = $0.01 of AI. Chat 2cr · Code 15cr · Image 20cr.</div>
+              <div style={{ fontSize: 12, color: '#9aa4b2', marginBottom: 14 }}>Pay in MON · 1 credit = $0.01 of AI. Chat 2cr · Code 15cr · Image 20cr · Video 250cr.</div>
               {acct.packs.map((p) => (
                 <button key={p.mon} disabled={payBusy} onClick={() => pay(p.mon, 'credits')} style={{ width: '100%', ...card, color: '#fff', padding: 13, borderRadius: 10, cursor: 'pointer', marginBottom: 8, display: 'flex', justifyContent: 'space-between', fontWeight: 700, opacity: payBusy ? 0.6 : 1 }}>
                   <span>{fmt(p.mon)} MON</span><span style={{ color: '#a78bfa' }}>{fmt(p.credits)} credits</span>
