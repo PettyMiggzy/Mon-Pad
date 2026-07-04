@@ -14,6 +14,7 @@ const isAddr = (s?: string) => !!s && /^0x[0-9a-f]{40}$/.test(lc(s));
 const today = () => new Date().toISOString().slice(0, 10);
 const yesterday = () => new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
 const CHECKIN_MSG = (d: string) => `Mon-Pad Rewards: daily check-in ${d}`;
+const REFER_MSG = (code: string) => `Mon-Pad Rewards: refer ${lc(code)}`;
 const CHECKIN_BASE = 100;
 
 function tierOf(bal: number): { name: string; mult: number } {
@@ -94,6 +95,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (b.action === 'refer') {
       const code = lc(b.code);
       if (!isAddr(code) || code === wallet) return res.status(400).json({ error: 'invalid referral' });
+      // Require the referee to prove wallet ownership — without this, anyone could
+      // POST throwaway wallets to farm referral points (+500 to the referrer each call)
+      // and permanently force-set a victim's referred_by.
+      try {
+        const signer = lc(await recoverMessageAddress({ message: REFER_MSG(code), signature: b.signature }));
+        if (signer !== wallet) return res.status(401).json({ error: 'bad signature' });
+      } catch { return res.status(401).json({ error: 'bad signature' }); }
       const { data: me } = await supabase.from(TABLE).select('*').eq('wallet', wallet).maybeSingle();
       if (me?.referred_by) return res.status(409).json({ error: 'already referred' });
       // credit the referee (+250) and the referrer (+500, ref_count++)

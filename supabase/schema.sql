@@ -116,6 +116,46 @@ alter table studio_payments enable row level security;
 alter table studio_usage    enable row level security;
 -- no public policies: studio tables are server-only (service role)
 
+-- Atomic credit spend/refund (prevents the concurrent double-spend where N parallel
+-- requests all read the same balance and all proceed). The `credits >= p_cost` guard
+-- is evaluated under the row lock the UPDATE takes, so only one of K racing spends can
+-- win. spend returns the post-debit balance, or NULL when the row is missing or has
+-- insufficient credits — the API treats NULL as 402. Refund is a relative +delta (never
+-- a stale absolute snapshot), so it can't clobber a concurrent legit debit.
+-- ⚠️ MIGRATION: run this in the Supabase SQL editor before deploying the atomic-debit build.
+create or replace function studio_spend_credits(p_wallet text, p_cost bigint)
+returns bigint
+language plpgsql
+as $$
+declare
+  new_credits bigint;
+begin
+  update studio_accounts
+     set credits = credits - p_cost,
+         updated_at = now()
+   where wallet = p_wallet
+     and credits >= p_cost
+  returning credits into new_credits;
+  return new_credits; -- NULL when no row matched (missing wallet or insufficient credits)
+end;
+$$;
+
+create or replace function studio_add_credits(p_wallet text, p_amount bigint)
+returns bigint
+language plpgsql
+as $$
+declare
+  new_credits bigint;
+begin
+  update studio_accounts
+     set credits = credits + p_amount,
+         updated_at = now()
+   where wallet = p_wallet
+  returning credits into new_credits;
+  return new_credits;
+end;
+$$;
+
 -- 4d) Bounties ------------------------------------------------------------------
 create table if not exists bounties (
   id          uuid primary key default gen_random_uuid(),

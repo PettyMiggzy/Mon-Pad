@@ -95,7 +95,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       address,
       name: clip(b.name, 64),
       symbol: clip(b.symbol, 16),
-      image_url: clip(b.imageUrl, 512),
+      image_url: safeUrl(b.imageUrl, 512), // http(s) only — reject data:/javascript: like the socials
       description: clip(b.description, 2000),
       twitter: safeUrl(b.twitter, 256),
       telegram: safeUrl(b.telegram, 256),

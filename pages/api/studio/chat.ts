@@ -45,20 +45,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const mode = useFree ? 'free' : wantMode;
   const cfg = MODES[mode as keyof typeof MODES];
   const credits = acct?.credits ?? 0;
-  if (cfg.credits > 0 && credits < cfg.credits) {
-    return res.status(402).json({ error: `needs ${cfg.credits} credits — top up`, credits });
-  }
 
   // Debit BEFORE the provider call (no free rides on errors we can't attribute).
-  const newCredits = credits - cfg.credits;
-  const { error: upErr } = await supabase.from('studio_accounts').upsert({
-    wallet, credits: newCredits,
-    access: acct?.access ?? false,
-    free_used: useFree ? freeUsed + 1 : freeUsed,
-    free_date: useFree ? today() : (acct?.free_date ?? null),
-    updated_at: new Date().toISOString(),
-  }, { onConflict: 'wallet' });
-  if (upErr) return res.status(500).json({ error: upErr.message });
+  // Paid lane: atomic conditional decrement in Postgres — the `credits >= cost` guard
+  // runs under the row lock, so K concurrent requests can't all spend the same balance
+  // (previously a read-modify-write let N parallel calls cost the price of one).
+  // Free lane: 0-credit; bump free_used only, and OMIT credits from the upsert so a
+  // racing paid debit can never be clobbered. The free_used cap race is accepted (the
+  // free model is ~$0.0004/call).
+  let newCredits = credits;
+  if (cfg.credits > 0) {
+    const { data: spent, error: spendErr } = await supabase.rpc('studio_spend_credits', { p_wallet: wallet, p_cost: cfg.credits });
+    if (spendErr) return res.status(500).json({ error: spendErr.message });
+    if (spent === null || spent === undefined) return res.status(402).json({ error: `needs ${cfg.credits} credits — top up`, credits });
+    newCredits = Number(spent);
+  } else if (useFree) {
+    const { error: upErr } = await supabase.from('studio_accounts').upsert({
+      wallet, free_used: freeUsed + 1, free_date: today(), updated_at: new Date().toISOString(),
+    }, { onConflict: 'wallet' });
+    if (upErr) return res.status(500).json({ error: upErr.message });
+  }
 
   try {
     const sys = `${MONSHI_SYSTEM} ${mode === 'code' ? CODE_BOUNDARY : CHAT_BOUNDARY}`;
@@ -70,8 +76,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       freeLeft: freeEligible ? Math.max(0, FREE_DAILY - (useFree ? freeUsed + 1 : freeUsed)) : 0,
     });
   } catch (e: any) {
-    // Provider failed — refund the debit.
-    await supabase.from('studio_accounts').update({ credits, free_used: freeUsed, updated_at: new Date().toISOString() }).eq('wallet', wallet);
+    // Provider failed — refund the debit (relative +delta, never a stale snapshot).
+    if (cfg.credits > 0) await supabase.rpc('studio_add_credits', { p_wallet: wallet, p_amount: cfg.credits });
+    else if (useFree) await supabase.from('studio_accounts').update({ free_used: freeUsed, updated_at: new Date().toISOString() }).eq('wallet', wallet);
     return res.status(502).json({ error: String(e?.message || 'AI unavailable').slice(0, 160) });
   }
 }
