@@ -3,7 +3,12 @@ import Image from 'next/image';
 import { motion } from 'framer-motion';
 import type { TokenSummary } from '../lib/api';
 import { fmtMon } from '../lib/format';
-import { graduationProgress } from '../lib/curve';
+import { V3_GRADUATION_TARGET_MON } from '../lib/constants';
+
+// V3 graduation target in wei. The old graduationProgress() used the stale 425k V2
+// constant, so V3 cards (which graduate far lower) showed a wildly wrong %. Drive
+// progress from the live V3 target — the same value chainV3 uses.
+const GRAD_TARGET_WEI = V3_GRADUATION_TARGET_MON * 10n ** 18n;
 
 type Props = {
   token: TokenSummary;
@@ -59,8 +64,9 @@ function Sparkline({ points }: { points: number[] }) {
 }
 
 export default function TokenCard({ token, index = 0 }: Props) {
-  // Bonding-curve progress 0..1. graduationProgress takes bigint(monRaisedNet).
-  const progressRaw = graduationProgress(BigInt(token.monRaisedNet));
+  // Bonding-curve progress 0..1, against the live V3 graduation target.
+  const raisedWei = (() => { try { return BigInt(token.monRaisedNet); } catch { return 0n; } })();
+  const progressRaw = GRAD_TARGET_WEI > 0n ? Number((raisedWei * 10000n) / GRAD_TARGET_WEI) / 10000 : 0;
   const progress = Math.max(0, Math.min(1, progressRaw));
   const progressPct = progress * 100;
   // Clamp visual bar at 99% pre-graduation so the "NEAR GRAD" pill carries the energy.

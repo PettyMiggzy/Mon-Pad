@@ -41,18 +41,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   ]);
   if (!((acct?.access ?? false) || monshi >= HOLDER_MIN_MONSHI || OPEN_BETA)) return res.status(402).json({ error: 'unlock Monshi Studio first' });
   const credits = acct?.credits ?? 0;
-  if (credits < cfg.credits) return res.status(402).json({ error: `needs ${cfg.credits} credits — top up`, credits });
 
-  const newCredits = credits - cfg.credits;
-  const { error: upErr } = await supabase.from('studio_accounts').update({ credits: newCredits, updated_at: new Date().toISOString() }).eq('wallet', wallet);
-  if (upErr) return res.status(500).json({ error: upErr.message });
+  // Atomic conditional debit (see chat.ts). Critical here: video is 250cr / ~$0.80 a
+  // call, so a concurrent double-spend on the old read-modify-write was the biggest
+  // budget-drain vector — the row-locked `credits >= cost` guard closes it.
+  const { data: spent, error: spendErr } = await supabase.rpc('studio_spend_credits', { p_wallet: wallet, p_cost: cfg.credits });
+  if (spendErr) return res.status(500).json({ error: spendErr.message });
+  if (spent === null || spent === undefined) return res.status(402).json({ error: `needs ${cfg.credits} credits — top up`, credits });
+  const newCredits = Number(spent);
 
   try {
     const queueId = await veniceVideoStart(cfg.model, prompt);
     await supabase.from('studio_usage').insert({ wallet, mode: 'video', model: cfg.model, credits: cfg.credits });
     return res.status(200).json({ queueId, charged: cfg.credits, credits: newCredits });
   } catch (e: any) {
-    await supabase.from('studio_accounts').update({ credits, updated_at: new Date().toISOString() }).eq('wallet', wallet);
+    await supabase.rpc('studio_add_credits', { p_wallet: wallet, p_amount: cfg.credits }); // relative refund
     return res.status(502).json({ error: String(e?.message || 'video unavailable').slice(0, 160) });
   }
 }

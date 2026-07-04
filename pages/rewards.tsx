@@ -29,6 +29,7 @@ export default function RewardsPage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [refTried, setRefTried] = useState(false);
 
   const load = useCallback(async () => {
     if (!address) { setSt(null); return; }
@@ -42,12 +43,20 @@ export default function RewardsPage() {
   useEffect(() => { fetch('/api/rewards?leaderboard=1').then((r) => r.ok ? r.json() : []).then(setBoard).catch(() => {}); }, [st?.points]);
 
   // Apply an incoming referral once (?ref=0x…), after the user has a status row.
+  // The referee signs to prove wallet ownership (server rejects unsigned refers);
+  // refTried gates it to a single attempt so a declined signature can't re-prompt.
   useEffect(() => {
     const ref = (router.query.ref as string) || '';
-    if (!address || !st || st.referredBy || !/^0x[0-9a-fA-F]{40}$/.test(ref) || ref.toLowerCase() === address.toLowerCase()) return;
-    fetch('/api/rewards', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'refer', wallet: address, code: ref }) })
-      .then((r) => { if (r.ok) { setMsg('🎉 Referral applied — +250 points!'); load(); } });
-  }, [address, st, router.query.ref, load]);
+    if (refTried || !address || !st || st.referredBy || !/^0x[0-9a-fA-F]{40}$/.test(ref) || ref.toLowerCase() === address.toLowerCase()) return;
+    setRefTried(true);
+    (async () => {
+      try {
+        const signature = await signMessageAsync({ account: address, message: `Mon-Pad Rewards: refer ${ref.toLowerCase()}` });
+        const r = await fetch('/api/rewards', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'refer', wallet: address, code: ref, signature }) });
+        if (r.ok) { setMsg('🎉 Referral applied — +250 points!'); load(); }
+      } catch { /* user declined the signature */ }
+    })();
+  }, [address, st, router.query.ref, load, refTried, signMessageAsync]);
 
   async function checkIn() {
     if (!address || busy) return;
