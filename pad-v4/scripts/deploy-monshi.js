@@ -5,7 +5,7 @@
  *
  * Every platform payout in the suite (hook buy tax, curve LP fees, the graduation platform cut) lands on the
  * splitter. `distribute()` forwards BUYBACK_BPS to MonshiBuyback and the rest to the treasury; a keeper then
- * calls `buyback(minOut)` to convert that MON into MONSHI, delivered straight to the burn address.
+ * calls `buyback(minOut)` to convert that MON into MONSHI, which is split 40% treasury / 60% burned.
  *
  * NOTE: pointing the registry at the splitter is a SEPARATE, deliberate step — FeeWalletRegistry enforces a
  * 2-day timelock on the platform fee wallet, so run it when you actually intend to switch the revenue path.
@@ -30,6 +30,10 @@ const NAD_DEX_ROUTER = process.env.NAD_DEX_ROUTER || "0x0B79d71AE99528D1dB24A414
 
 // How much of PLATFORM revenue is diverted to MONSHI buybacks. Contract-capped at 50%.
 const BUYBACK_BPS = Number(process.env.BUYBACK_BPS || 2000); // 20%
+// Of the MONSHI actually bought: this share goes to the treasury wallet, the REMAINDER is burned.
+// Contract-capped at MAX_TREASURY_BPS (50%) so the majority always burns and "fees buy and burn MONSHI"
+// stays true no matter who holds the owner key.
+const MONSHI_TREASURY_BPS = Number(process.env.MONSHI_TREASURY_BPS || 4000); // 40% treasury / 60% burn
 // Bound on a single buyback. Measured against the live pool: 1,000 MON moves MONSHI ~2.0% (1% of which is the
 // pool's own fee), 2,500 MON ~2.6%. 1,000 keeps each buy comfortably inside normal slippage.
 const MAX_SPEND_PER_CALL = ethers.parseEther(process.env.MAX_SPEND_PER_CALL || "1000");
@@ -49,9 +53,11 @@ async function main() {
   if (!treasury) throw new Error("TREASURY must be set (where the non-buyback share of platform revenue goes)");
 
   console.log(`Deploying MONSHI buy-pressure leg as ${deployer.address}`);
-  console.log(`  monshi ${MONSHI}\n  router ${NAD_DEX_ROUTER}\n  split  ${BUYBACK_BPS / 100}% buyback / ${(10000 - BUYBACK_BPS) / 100}% treasury\n`);
+  console.log(`  monshi ${MONSHI}\n  router ${NAD_DEX_ROUTER}`);
+  console.log(`  revenue split ${BUYBACK_BPS / 100}% -> MONSHI buyback / ${(10000 - BUYBACK_BPS) / 100}% -> treasury (MON)`);
+  console.log(`  bought MONSHI ${MONSHI_TREASURY_BPS / 100}% -> treasury / ${(10000 - MONSHI_TREASURY_BPS) / 100}% -> burned\n`);
 
-  const buyback = await deploy("MonshiBuyback", [MONSHI, NAD_DEX_ROUTER, owner, MAX_SPEND_PER_CALL, COOLDOWN]);
+  const buyback = await deploy("MonshiBuyback", [MONSHI, NAD_DEX_ROUTER, owner, treasury, MONSHI_TREASURY_BPS, MAX_SPEND_PER_CALL, COOLDOWN]);
   const splitter = await deploy("PlatformFeeSplitter", [await buyback.getAddress(), treasury, owner, BUYBACK_BPS]);
 
   const out = {
@@ -59,6 +65,7 @@ async function main() {
     monshi: MONSHI,
     nadDexRouter: NAD_DEX_ROUTER,
     buybackBps: BUYBACK_BPS,
+    monshiTreasuryBps: MONSHI_TREASURY_BPS,
     maxSpendPerCall: MAX_SPEND_PER_CALL.toString(),
     cooldown: COOLDOWN,
     owner,

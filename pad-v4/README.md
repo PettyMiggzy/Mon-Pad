@@ -104,9 +104,14 @@ calls with `-32614`. A dedicated provider lifts it — worth raising for backfil
 `contracts/monshi/` turns platform revenue into permanent MONSHI burns, without touching the swap path.
 
 ```
-platform revenue → PlatformFeeSplitter → 20% → MonshiBuyback → nad.fun DEX → MONSHI → 0x…dEaD
-                                       → 80% → treasury
+platform revenue → PlatformFeeSplitter → 20% → MonshiBuyback → nad.fun DEX → MONSHI ─┬→ 40% treasury
+                                       → 80% → treasury (MON)                        └→ 60% burned
 ```
+
+The treasury share of the bought MONSHI is **capped at 50% on-chain** (`MAX_TREASURY_BPS`) and the owner
+cannot raise it past that. "Platform fees buy and burn MONSHI" is a promise to the MONSHI community, and an
+uncapped treasury share would quietly turn the burn into a revenue stream — the cap makes the claim something
+a holder can verify from the contract instead of trust. Rounding dust burns rather than accruing to treasury.
 
 MONSHI has **already graduated** off the nad.fun bonding curve and trades in a Uniswap-V3-style WMON/MONSHI pool
 (1% fee, tickSpacing 200, factory `0x6B5F…B7F3`), so the DEX router `0x0B79…b137` is the venue — not the bonding
@@ -122,7 +127,8 @@ slippage tolerance — a permissionless version lets any caller pass a loose bou
 deriving the bound from live `slot0` is the exact mistake `FLOOR-REDESIGN.md` refuted four times. Since this is
 the platform spending its own revenue on its own token, no user funds are at risk and a keeper computing
 `minOut` off-chain is both safer and simpler. `maxSpendPerCall` + `cooldown` bound a compromised keeper, and
-there is **no withdrawal path** — MON can only ever leave as a MONSHI burn.
+there is **no MON withdrawal path** — MON can only ever leave as a MONSHI buy, and the bought MONSHI leaves
+only via the capped treasury/burn split (both `buyback` and `sweepStrandedMonshi` settle on identical terms).
 
 ## Build & test
 

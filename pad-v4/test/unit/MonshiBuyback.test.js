@@ -11,24 +11,57 @@ describe("MonshiBuyback — platform revenue into burned MONSHI", () => {
     const monshi = await (await ethers.getContractFactory("MockMonshi")).deploy();
     const router = await (await ethers.getContractFactory("MockNadDexRouter")).deploy(await monshi.getAddress(), RATE);
     const bb = await (await ethers.getContractFactory("MonshiBuyback")).deploy(
-      await monshi.getAddress(), await router.getAddress(), owner.address, E(1000), 60
+      await monshi.getAddress(), await router.getAddress(), owner.address, treasury.address, 4000, E(1000), 60
     );
     await bb.setKeeper(keeper.address);
     return { owner, keeper, stranger, treasury, monshi, router, bb };
   }
 
-  it("buys MONSHI straight into the burn address — never holds it", async () => {
-    const { keeper, monshi, bb } = await setup();
+  it("splits the buy 40% treasury / 60% burn, holding nothing afterwards", async () => {
+    const { keeper, treasury, monshi, bb } = await setup();
     await keeper.sendTransaction({ to: await bb.getAddress(), value: E(100) });
     expect(await bb.pending()).to.equal(E(100));
 
     await bb.connect(keeper).buyback(E(180_000));
 
-    expect(await monshi.balanceOf(DEAD)).to.equal(E(187_000)); // 100 MON * 1870
-    expect(await monshi.balanceOf(await bb.getAddress())).to.equal(0n); // never touches this contract
+    const bought = E(187_000); // 100 MON * 1870
+    expect(await monshi.balanceOf(treasury.address)).to.equal((bought * 4000n) / 10000n); // 40%
+    expect(await monshi.balanceOf(DEAD)).to.equal(bought - (bought * 4000n) / 10000n);    // 60%
+    expect(await monshi.balanceOf(await bb.getAddress())).to.equal(0n); // holds nothing after the split
     expect(await bb.totalMonSpent()).to.equal(E(100));
-    expect(await bb.totalMonshiBurned()).to.equal(E(187_000));
+    expect(await bb.totalMonshiBurned()).to.equal(bought - (bought * 4000n) / 10000n);
+    expect(await bb.totalMonshiToTreasury()).to.equal((bought * 4000n) / 10000n);
     expect(await bb.pending()).to.equal(0n);
+  });
+
+  it("caps the treasury share at 50% — the burn promise cannot be governed away", async () => {
+    const { owner, treasury, bb } = await setup();
+    await expect(bb.connect(owner).setTreasury(treasury.address, 5001)).to.be.revertedWithCustomError(bb, "BadBps");
+    await bb.connect(owner).setTreasury(treasury.address, 5000); // the cap itself is allowed
+    expect(await bb.treasuryBps()).to.equal(5000);
+    expect(await bb.MAX_TREASURY_BPS()).to.equal(5000);
+  });
+
+  it("burns the rounding dust rather than giving it to the treasury", async () => {
+    const { owner, keeper, treasury, monshi, router, bb } = await setup();
+    await bb.connect(owner).setTreasury(treasury.address, 3333); // non-round split
+    await router.setRate(1n); // 1 wei of MONSHI per 1e18 MON -> tiny, dust-prone amount
+    await keeper.sendTransaction({ to: await bb.getAddress(), value: E(7) });
+    await bb.connect(keeper).buyback(1n);
+    const t = await monshi.balanceOf(treasury.address);
+    const b = await monshi.balanceOf(DEAD);
+    expect(t + b).to.equal(7n);          // nothing lost
+    expect(t).to.equal((7n * 3333n) / 10000n); // floor
+    expect(b).to.equal(7n - t);          // remainder, i.e. dust burns
+  });
+
+  it("sweeps stray MONSHI on the same fixed split, permissionlessly", async () => {
+    const { stranger, treasury, monshi, bb } = await setup();
+    await monshi.mint(await bb.getAddress(), E(1000)); // arrives outside a buyback
+    await bb.connect(stranger).sweepStrandedMonshi(); // anyone may call; destination is not theirs to choose
+    expect(await monshi.balanceOf(treasury.address)).to.equal(E(400));
+    expect(await monshi.balanceOf(DEAD)).to.equal(E(600));
+    expect(await monshi.balanceOf(await bb.getAddress())).to.equal(0n);
   });
 
   it("caps a single buy at maxSpendPerCall so one call can't drain the balance", async () => {
@@ -63,12 +96,15 @@ describe("MonshiBuyback — platform revenue into burned MONSHI", () => {
     await expect(bb.connect(keeper).buyback(E(180_000))).to.be.revertedWithCustomError(router, "InsufficientOutput");
   });
 
-  it("has no withdrawal path — MON can only ever leave as a MONSHI burn", async () => {
+  it("has no MON withdrawal path — MON can only ever leave as a MONSHI buy", async () => {
     const { bb } = await setup();
     const fns = bb.interface.fragments.filter((f) => f.type === "function").map((f) => f.name);
-    for (const bad of ["withdraw", "sweep", "rescue", "emergencyWithdraw", "transferETH", "recover"]) {
+    for (const bad of ["withdraw", "rescue", "emergencyWithdraw", "transferETH", "recover", "sweepMon"]) {
       expect(fns).to.not.include(bad);
     }
+    // the only MONSHI exits are buyback + sweepStrandedMonshi, and BOTH use the same capped split
+    expect(fns).to.include("buyback");
+    expect(fns).to.include("sweepStrandedMonshi");
   });
 });
 
@@ -78,7 +114,7 @@ describe("PlatformFeeSplitter — routing platform revenue", () => {
     const monshi = await (await ethers.getContractFactory("MockMonshi")).deploy();
     const router = await (await ethers.getContractFactory("MockNadDexRouter")).deploy(await monshi.getAddress(), RATE);
     const bb = await (await ethers.getContractFactory("MonshiBuyback")).deploy(
-      await monshi.getAddress(), await router.getAddress(), owner.address, E(100000), 0
+      await monshi.getAddress(), await router.getAddress(), owner.address, treasury.address, 4000, E(100000), 0
     );
     const sp = await (await ethers.getContractFactory("PlatformFeeSplitter")).deploy(
       await bb.getAddress(), treasury.address, owner.address, bps
@@ -127,11 +163,13 @@ describe("PlatformFeeSplitter — routing platform revenue", () => {
     expect(await sp.buybackBps()).to.equal(5000);
   });
 
-  it("end to end: platform revenue arrives, splits, and burns MONSHI", async () => {
-    const { funder, monshi, bb, sp } = await setup(2000);
+  it("end to end: platform revenue arrives, splits, buys MONSHI and burns the majority", async () => {
+    const { funder, treasury, monshi, bb, sp } = await setup(2000);
     await funder.sendTransaction({ to: await sp.getAddress(), value: E(1000) });
     await sp.distribute();
     await bb.buyback(E(370_000));
-    expect(await monshi.balanceOf(DEAD)).to.equal(E(374_000)); // 200 MON * 1870
+    const bought = E(374_000); // 200 MON * 1870
+    expect(await monshi.balanceOf(DEAD)).to.equal(bought - (bought * 4000n) / 10000n); // 60% burned
+    expect(await monshi.balanceOf(treasury.address)).to.equal((bought * 4000n) / 10000n); // 40% treasury
   });
 });
