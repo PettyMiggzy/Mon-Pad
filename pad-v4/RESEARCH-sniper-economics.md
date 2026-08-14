@@ -85,3 +85,49 @@ product decision, not a technical one.
 
 What is now settled is that **no sell tax gets you there or protects against it.** Both of the designs
 proposed before this research — decaying sell tax, and its 30%/47% calibration — should be dropped.
+
+---
+
+# 6. Geometry sweep — the actual dial
+
+`test/sim/geometry.sweep.sim.test.js`. Every row raises the **same ~373,000 MON**; only the curve's *shape*
+changes. One sniper opens with 5,000 MON, 60,000 MON of retail follows, then the sniper dumps.
+
+```
+ width    curve    open FDV    grad FDV   snipe→  +retail→   sniper  supply
+          max x                                x         x      ROI       %
+ 11500   FAILED — reserve check (narrow curves need more reserve than 27% supply)
+ 23000    10.0x      $3,396     $33,872    1.06x     1.87x     +69%    2.9%
+ 34500    31.5x      $1,921     $60,496    1.12x     3.18x    +162%    5.1%
+ 46000    99.5x      $1,075    $106,969    1.25x     6.42x    +336%    8.6%
+ 57500   314.1x        $608    $191,046    1.49x    14.77x    +592%   13.9%
+```
+
+## What it shows
+
+**Width is the chart dial, and it is the only one.** Widening the curve at a fixed raise lowers the opening
+FDV, raises the graduation FDV, and multiplies how far a given amount of buying moves the price. The same
+65,000 MON of flow produces **1.87x** at width 23000 and **14.77x** at width 57500.
+
+Width 46000–57500 reproduces BRACKETS-shaped charts — $608–$1,075 opening FDV, 6–15x on modest flow,
+graduating at $107k–$191k against BRACKETS' $231k peak — while still keeping a graduation ceiling and a
+permanent locked LP, which BRACKETS never had.
+
+## The finding
+
+**Chart violence and sniper extraction are the same number.** They move together, exactly, across every row:
+
+| | 23000 | 57500 |
+|---|---|---|
+| retail-flow multiple | 1.87x | **14.77x** |
+| sniper ROI | +69% | **+592%** |
+| sniper supply capture | 2.9% | **13.9%** |
+
+There is no geometry that produces a big chart and a small sniper profit, because they are one phenomenon
+measured two ways: a steep curve means early tokens are cheap relative to later ones, which *is* the chart and
+*is* the sniper's edge. Every mechanism proposed earlier — decaying sell tax, hold gates, staking gates —
+attacks the symptom. The dial is `curveWidth`.
+
+Narrow curves are also not freely available: width 11500 fails the factory's reserve check outright, because
+`reserveSupply ≥ curveSupply · √(grad/start) · 1.05` demands ~431M tokens against the 270M a 73/27 split
+provides. Low-multiple curves need a bigger reserve.
