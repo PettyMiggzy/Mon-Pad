@@ -131,3 +131,56 @@ attacks the symptom. The dial is `curveWidth`.
 Narrow curves are also not freely available: width 11500 fails the factory's reserve check outright, because
 `reserveSupply ≥ curveSupply · √(grad/start) · 1.05` demands ~431M tokens against the 270M a 73/27 split
 provides. Low-multiple curves need a bigger reserve.
+
+---
+
+# 7. What launches on Robinhood Chain actually do
+
+BRACKETS was n=1. Sampling 120 Robinhood pools via GeckoTerminal and taking every memecoin launch with
+meaningful volume gives the distribution. Peak/open is a pure ratio, so it is valid regardless of token
+supply (unlike the FDV figures, which assume 1B and are wrong for several of these).
+
+| token | peak multiple | time to peak | drawdown from peak | h1 share of lifetime vol |
+|---|---:|---:|---:|---:|
+| HOOPLA | **4,666x** | 11h | −100% | — |
+| COCO | **1,659x** | 884h | −69% | — |
+| LEMON.FUN | **896x** | 489h | −10% | — |
+| $ROBBIE | **92x** | 10h | −64% | 39% |
+| djt / WETH | **61x** | <1h | −98% | 8% |
+| CASHCAT (1%) | **55x** | 183h | −43% | — |
+| WW | **50x** | 2h | −98% | 36% |
+| CASHCAT (0.3%) | **45x** | 242h | −44% | — |
+| djt / DJT | 20x | <1h | −95% | 60% |
+| DJT / USDG | 9x | <1h | −91% | 31% |
+| BRACKETS | 22x | 3 min | −75% | 45% |
+| STONKBROKER | 3.8x | 301h | −24% | — |
+
+Excludes stock and stablecoin pairs (NVDA, SPCX, USDG/WETH) and CASHCAT's duplicate fee-tier pools.
+
+## The distribution
+
+- **Median peak multiple ≈ 45–90x.** The top of the sample is 4,666x.
+- **Median drawdown from peak ≈ −44%**, with a fat tail at −95% to −100%. Most of these die.
+- **Time to peak is bimodal**: minutes-to-hours (BRACKETS 3 min, djt <1h, WW 2h, $ROBBIE 10h) or weeks
+  (COCO 884h, LEMON.FUN 489h, CASHCAT 183–242h). Very little in between.
+- Where first-hour volume is measurable it is **31–60% of lifetime volume**.
+
+## What this means for geometry
+
+MonPad's curve caps at **9.97x** and then graduates. The launches that actually work on the most active chain
+available run **45x to 4,666x**.
+
+That is not a tuning gap, it is one to two orders of magnitude. From the width sweep in §6:
+
+| target | width | max multiple |
+|---|---:|---:|
+| current | 23000 | 10x |
+| median Robinhood launch | **~46000** | **99x** |
+| upper quartile | ~57500 | 314x |
+
+A `curveWidth` near **46000** is what puts a pad in the range where the observed winners live. Nothing about
+fees, taxes, gates or bot incentives moves this number — it is set entirely by the tick span of the curve.
+
+The other half of the distribution is equally clear and should not be papered over: the median launch gives
+back 44% from its peak and a large minority go to −95% or worse. The multiples and the carnage are the same
+distribution. A design that produces one produces the other.
