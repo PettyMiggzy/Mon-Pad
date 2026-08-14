@@ -34,8 +34,9 @@ const TARGET_RAISE = 373_000;
 const SNIPE = 5_000;   // one sniper's opening buy, MON
 const RETAIL = 60_000; // retail that follows, MON
 
-// widths to sweep, and the launch->graduation multiple each implies
-const WIDTHS = [11500, 23000, 34500, 46000, 57500];
+// widths to sweep. MUST be multiples of tickSpacing (100) — gradTick = startTick - width has to stay
+// aligned or the factory reverts BadGeometry(). 86250 failed the first sweep for exactly this reason.
+const WIDTHS = [23000, 46000, 57500, 86000, 115000, 172500];
 
 const L = Math.log(1.0001);
 function geometryFor(width) {

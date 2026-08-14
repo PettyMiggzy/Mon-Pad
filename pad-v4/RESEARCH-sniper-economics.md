@@ -184,3 +184,59 @@ fees, taxes, gates or bot incentives moves this number — it is set entirely by
 The other half of the distribution is equally clear and should not be papered over: the median launch gives
 back 44% from its peak and a large minority go to −95% or worse. The multiples and the carnage are the same
 distribution. A design that produces one produces the other.
+
+---
+
+# 8. Pushing width to the limit
+
+Extending the sweep. Same ~373,000 MON raise in every row; one 5,000 MON sniper opens, 60,000 MON follows,
+sniper dumps.
+
+```
+ width    curve    open FDV    grad FDV   snipe→   +retail→    sniper  supply
+          max x                                x          x       ROI       %
+ 23000    10.0x      $3,396     $33,872    1.06x      1.87x      +69%    2.9%
+ 46000    99.5x      $1,075    $106,969    1.25x      6.42x     +336%    8.6%
+ 57500   314.1x        $608    $191,046    1.49x     14.77x     +592%   13.9%
+ 86000  5,429x        $146    $790,323    3.82x    180.09x    +1081%   36.2%
+115000 98,659x         $34  $3,368,993   26.17x  2,970.25x    +1156%   58.9%
+172500 30,988,836x      $2 $60,007,523 5,445.09x 897,272x     +1161%   72.0%
+```
+
+## Sniper ROI saturates. Supply concentration does not.
+
+```
+ROI      +69%  →  +336%  →  +592%  →  +1081%  →  +1156%  →  +1161%     asymptotes ~+1160%
+supply    2.9% →    8.6% →   13.9% →   36.2%  →   58.9%  →   72.0%     keeps climbing
+```
+
+ROI flattens because past a certain steepness the sniper is buying their own slippage — a wider curve hands
+them more supply but at a progressively worse average price, and the two effects cancel. Profit per unit of
+capital has a ceiling.
+
+**Supply capture has no such ceiling.** At width 115000 a single 5,000 MON buy (~$105) ends up holding **58.9%
+of the token**; at 172500 it is **72%**. That is the real binding constraint on width, and it is not the one
+the earlier fee-side analysis was looking for — nothing about profit extraction flags it, because the sniper's
+*return* barely improves while their *ownership* triples.
+
+## Practical bounds
+
+| goal | width | what one 5,000 MON opening buy takes |
+|---|---:|---:|
+| match the median Robinhood launch (45–90x) | **46000** | 8.6% |
+| upper quartile (300x) | 57500 | 13.9% |
+| one buy owns a blocking stake | ~100000 | ~50% |
+| one buy owns the token | 172500 | 72% |
+
+Width **46000** is where the two constraints meet: it reaches the ~99x range the observed winners occupy,
+while a single opening buy still only takes 8.6% of supply.
+
+Caveat: supply capture is a function of *snipe size relative to the curve*, not width alone. These figures are
+for a fixed 5,000 MON opening buy against a 373,000 MON raise. Halve the snipe or double the raise and the
+percentages fall accordingly.
+
+## One methodology note
+
+Width 86250 reverted `BadGeometry()` in the first sweep. That was an error in choosing the value, not a
+contract limit: `gradTick = startTick − width`, so **width must be a multiple of tickSpacing (100)** or the
+graduation tick lands unaligned. 86250 is not; 86000 is, and launches fine.
