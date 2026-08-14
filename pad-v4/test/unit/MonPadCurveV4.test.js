@@ -1,7 +1,7 @@
 const { ethers } = require("hardhat");
 const { expect } = require("chai");
 
-// RobinCurveV4 — the single-sided free bonding curve, driven against the REAL Uniswap v4 PoolManager deployed
+// MonPadCurveV4 — the single-sided free bonding curve, driven against the REAL Uniswap v4 PoolManager deployed
 // locally (no fork). This proves the trickiest V4 bits WITHOUT a fork RPC:
 //   • seed pulls ZERO ETH (pure currency1/token position at the top tick),
 //   • buyers (zeroForOne, ETH-in) walk the tick DOWN to the ceiling ⇒ ready() flips,
@@ -11,7 +11,7 @@ const { expect } = require("chai");
 const ZERO = ethers.ZeroAddress;
 const MIN_SQRT_LIMIT = 4295128739n + 1n;
 
-describe("RobinCurveV4 — single-sided free curve on live-local PoolManager", () => {
+describe("MonPadCurveV4 — single-sided free curve on live-local PoolManager", () => {
   let owner, factory, trader, platform;
   let pm, stateView, th, reg, tok, sw, curve, key, curveAddr;
   const START = 6000, GRAD = 3000, SPACING = 60, FEE = 3000;
@@ -20,7 +20,7 @@ describe("RobinCurveV4 — single-sided free curve on live-local PoolManager", (
   beforeEach(async () => {
     [owner, factory, trader, platform] = await ethers.getSigners();
     pm = await (await ethers.getContractFactory("PoolManager")).deploy(owner.address);
-    stateView = await (await ethers.getContractFactory("RobinStateView")).deploy(await pm.getAddress());
+    stateView = await (await ethers.getContractFactory("MonPadStateView")).deploy(await pm.getAddress());
     th = await (await ethers.getContractFactory("TickHelper")).deploy();
     reg = await (await ethers.getContractFactory("FeeWalletRegistry")).deploy(platform.address, owner.address);
     tok = await (await ethers.getContractFactory("TestERC20")).connect(owner).deploy(10n ** 30n);
@@ -31,7 +31,7 @@ describe("RobinCurveV4 — single-sided free curve on live-local PoolManager", (
     await pm.initialize(key, await th.sqrt(START)); // init exactly at the curve top
 
     // positionManager/permit2/lockVault are only used at graduation → dummy non-zero here
-    curve = await (await ethers.getContractFactory("RobinCurveV4")).deploy(
+    curve = await (await ethers.getContractFactory("MonPadCurveV4")).deploy(
       await pm.getAddress(), owner.address, owner.address, await stateView.getAddress(),
       owner.address, factory.address, await reg.getAddress(),
       ZERO, tokAddr, FEE, SPACING, ZERO, START, GRAD, 2000, 1000, 1000, 500, owner.address

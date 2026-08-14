@@ -11,7 +11,7 @@ import {Ownable2Step, Ownable} from "@openzeppelin/contracts/access/Ownable2Step
 ///
 /// [M-14] SECURITY — this address is the protocol's ROOT ADMIN KEY, not merely a payout destination. Beyond
 /// receiving fees, `platformFeeWallet` is the AUTHORIZATION check for every one-shot per-pad wiring setter:
-/// `RobinCurveV4.setStaking/setFloor/setAmbush`, `RobinFeeHook.setFloorRecipient`, and
+/// `MonPadCurveV4.setStaking/setFloor/setAmbush`, `MonPadFeeHook.setFloorRecipient`, and
 /// `LockVault.setStakingRecipient`. Whoever holds it permanently, irreversibly determines where each of a pad's
 /// value sinks routes (largest first: the staking stream, then the floor carves, the ambush share, and the locked
 /// LP's token-leg fees). The 2-day timelock governs CHANGING this wallet, NOT what the wallet may do — the wiring

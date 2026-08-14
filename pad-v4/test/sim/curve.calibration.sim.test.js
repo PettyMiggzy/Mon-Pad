@@ -2,29 +2,40 @@ const { ethers } = require("hardhat");
 const { expect } = require("chai");
 const { mineHookSalt, hookInitCode } = require("../../scripts/mine");
 
-// SIM — CALIBRATION at the REAL production geometry (not the toy START=6000 the other sims use).
-// Ports the proven V3 curve to V4 and PROVES the headline economics on the actual V4 curve impl:
-//   START_TICK_MAG 201600, CURVE_WIDTH 23000 (≈10x), ts=100, 1B supply @ 73% curve / 27% reserve
-//   → start MC ~$3.4k, graduate MC ~$34k, ~4.2 ETH raised, 10x chart.
-// The multiple (grad/start) and the ETH raise are geometry/supply-fixed (ethUsd-independent); the USD market
-// caps are shown at ethUsd=$1900 (the FX that maps this geometry to the ~$3.4k/$34k targets).
+// SIM — CALIBRATION at the real MonPad production geometry, proven against the actual V4 curve impl.
+//
+//   START_TICK 90900, CURVE_WIDTH 23000 (≈10x), ts=100, 1B supply @ 73% curve / 27% reserve
+//   → ~260,000 MON raised, start FDV ~$2.4k, graduate FDV ~$23.6k, 10x chart.
+//
+// The 260,000 MON graduation target is deliberately the SAME as the live MonPad V3 pad, so the V4 pad is the
+// same product with a better curve rather than a differently-priced one.
+//
+// Geometry is derived from the closed form for a single-sided currency1 range that is bought from its upper
+// bound down to its lower bound:
+//
+//   raise = curveSupply / (√P_start · √P_grad) = curveSupply / 1.0001^((startTick + gradTick) / 2)
+//
+// (see scripts/calibrate.js — the same formula reproduces the audited Robinhood geometry's ~4.1 ETH raise from
+// START 201600 / WIDTH 23000, which is what validates it.)
+//
+// The multiple (grad/start) and the MON raise are geometry/supply-fixed and independent of the MON price; the
+// USD market caps below are shown at monUsd=$0.021.
 
 const ZERO = ethers.ZeroAddress;
-const MIN_SQRT_LIMIT = 4295128739n + 1n;
 const abi = ethers.AbiCoder.defaultAbiCoder();
 const E = (x) => ethers.parseEther(String(x));
 const ONE = 10n ** 18n;
 
-const START = 201600, WIDTH = 23000, GRAD = START - WIDTH, TS = 100, FEE = 10000, MINGRAD = 22800;
+const START = 90900, WIDTH = 23000, GRAD = START - WIDTH, TS = 100, FEE = 10000, MINGRAD = 22800;
 const SUPPLY = 1_000_000_000n * ONE;
 const CURVE = 730_000_000n * ONE;   // 73% sold on the curve
-const RESERVE = 270_000_000n * ONE; // 27% held back (pairs the permanent LP + feeds staking)
-const ETH_USD = 1900;
+const RESERVE = 270_000_000n * ONE; // 27% held back (pairs the permanent LP; the residue is burned at graduation)
+const MON_USD = 0.021;
 
-// token is currency1: price P (=1.0001^tick) is token-per-ETH, so ETH-per-token = 1/P and
-// market cap (whole ETH) = totalSupplyWholeTokens / P.
-const mcEth = (tick) => 1e9 / Math.pow(1.0001, tick);
-const mcUsd = (tick) => mcEth(tick) * ETH_USD;
+// token is currency1: price P (=1.0001^tick) is token-per-MON, so MON-per-token = 1/P and
+// market cap (whole MON) = totalSupplyWholeTokens / P.
+const mcMon = (tick) => 1e9 / Math.pow(1.0001, tick);
+const mcUsd = (tick) => mcMon(tick) * MON_USD;
 
 function poolIdOf(k) {
   return ethers.keccak256(
@@ -32,43 +43,47 @@ function poolIdOf(k) {
   );
 }
 
-describe("SIM — production-geometry calibration (start ~$3.4k, graduate ~$34k, ~4.2 ETH, 10x)", () => {
-  it("launches at V3 geometry and reproduces the headline market caps + raise on the V4 curve", async () => {
+describe("SIM — MonPad production geometry (260k MON raise, ~$2.4k start, ~$23.6k graduate, 10x)", () => {
+  it("launches at the MonPad geometry and reproduces the headline raise + market caps on the V4 curve", async () => {
     const [deployer, platform, creator, whale] = await ethers.getSigners();
+    // the raise alone is ~260k MON, well past hardhat's default 10k account balance
+    await ethers.provider.send("hardhat_setBalance", [whale.address, "0x" + (10n ** 24n).toString(16)]);
 
     const pm = await (await ethers.getContractFactory("PoolManager")).deploy(deployer.address);
-    const stateView = await (await ethers.getContractFactory("RobinStateView")).deploy(await pm.getAddress());
+    const stateView = await (await ethers.getContractFactory("MonPadStateView")).deploy(await pm.getAddress());
     const dep = await (await ethers.getContractFactory("DeterministicDeployer")).deploy();
     const reg = await (await ethers.getContractFactory("FeeWalletRegistry")).deploy(platform.address, deployer.address);
     const permit2 = await (await ethers.getContractFactory("MockPermit2")).deploy();
     const posm = await (await ethers.getContractFactory("MockPositionManagerV4")).deploy(await pm.getAddress(), await permit2.getAddress());
     const lockVault = await (await ethers.getContractFactory("LockVault")).deploy(await posm.getAddress(), await reg.getAddress());
     const curveDep = await (await ethers.getContractFactory("CurveV4Deployer")).deploy(await dep.getAddress());
-    const feeCfg = await (await ethers.getContractFactory("RobinV4FeeConfig")).deploy(deployer.address, {
-      buyTaxBps: 100, sellTaxBps: 100, sellFloorShareBps: 2000, buyLpFloorShareBps: 2000, buyBufferShareBps: 2000, referralShareBps: 0,
-      platformGradBps: 1000, creatorGradBps: 1000, ambushGradBps: 500,
+    // BASIC PAD: no floor vault, no ambush vault, no staking — so every share that would route to one is ZERO.
+    // Leaving them non-zero with no vault wired would accrue MON into books that only flushFloor()/flushAmbush()
+    // can release, and both revert while the target is unset.
+    const feeCfg = await (await ethers.getContractFactory("MonPadV4FeeConfig")).deploy(deployer.address, {
+      buyTaxBps: 100, sellTaxBps: 100, sellFloorShareBps: 0, buyLpFloorShareBps: 0, buyBufferShareBps: 2000, referralShareBps: 0,
+      platformGradBps: 1000, creatorGradBps: 1000, ambushGradBps: 0,
       lpFee: FEE, startTickMag: START, curveWidth: WIDTH, minGradWidth: MINGRAD,
     });
-    const factory = await (await ethers.getContractFactory("CurvePadFactoryV4")).deploy(
+    const factory = await (await ethers.getContractFactory("MonPadFactoryV4")).deploy(
       await pm.getAddress(), await posm.getAddress(), await permit2.getAddress(), await stateView.getAddress(),
       await dep.getAddress(), await curveDep.getAddress(), await feeCfg.getAddress(), await reg.getAddress(), await lockVault.getAddress()
     );
     await lockVault.setFactory(await factory.getAddress());
 
-    // launch: no-mint 1B @ 750M curve / 250M reserve, tickSpacing 100
     const cfg = { name: "Calibrate", symbol: "CAL", decimals: 18, supply: SUPPLY, curveSupply: CURVE, reserveSupply: RESERVE, tickSpacing: TS, creator: creator.address };
     const tokenSalt = ethers.id("cal-tok"), curveSalt = ethers.id("cal-curve");
     const TokenF = await ethers.getContractFactory("PadToken");
     const tokenInit = ethers.concat([TokenF.bytecode, abi.encode(["string", "string", "uint8", "uint256", "address"], [cfg.name, cfg.symbol, cfg.decimals, cfg.supply, await factory.getAddress()])]);
     const predictedToken = ethers.getCreate2Address(await dep.getAddress(), tokenSalt, ethers.keccak256(tokenInit));
-    const HookF = await ethers.getContractFactory("RobinFeeHook");
+    const HookF = await ethers.getContractFactory("MonPadFeeHook");
     const { salt: hookSalt } = mineHookSalt(await dep.getAddress(), hookInitCode(HookF.bytecode, await pm.getAddress(), await factory.getAddress(), await reg.getAddress(), predictedToken));
 
     const [token, hook, curveAddr] = await factory.launch.staticCall(cfg, tokenSalt, hookSalt, curveSalt);
     await (await factory.launch(cfg, tokenSalt, hookSalt, curveSalt)).wait();
     const key = { currency0: ZERO, currency1: token, fee: FEE, tickSpacing: TS, hooks: hook };
     const poolId = poolIdOf(key);
-    const curve = await ethers.getContractAt("RobinCurveV4", curveAddr);
+    const curve = await ethers.getContractAt("MonPadCurveV4", curveAddr);
     const th = await (await ethers.getContractFactory("TickHelper")).deploy();
     const sw = await (await ethers.getContractFactory("PoolSwapTest")).deploy(await pm.getAddress());
     const tokC = await ethers.getContractAt("PadToken", token);
@@ -79,36 +94,35 @@ describe("SIM — production-geometry calibration (start ~$3.4k, graduate ~$34k,
     const startMc = mcUsd(startTick);
 
     // ── buy the curve OUT, capping EXACTLY at the graduation price (gradSqrt) so spot lands on the ceiling ──
-    // Size the exact-input a modest margin ABOVE the ~4.1 ETH principal (not a huge 1000 ETH): the buy tax is a
-    // fee-on-INPUT computed on the REQUESTED amount, so a wildly oversized request would over-tax the whale on ETH
-    // that never swaps. E(6) fills the curve (principal ≈ 4.1 < 6 − fee) while keeping the fee realistic.
+    // Sized a modest margin above the ~260k MON principal: the buy tax is a fee-on-INPUT computed on the
+    // REQUESTED amount, so a wildly oversized request would over-tax the whale on MON that never swaps.
     const gradSqrt = await th.sqrt(GRAD);
     const wBefore = await ethers.provider.getBalance(whale.address);
     const rc = await (await sw.connect(whale).swap(
-      key, { zeroForOne: true, amountSpecified: -E(6), sqrtPriceLimitX96: gradSqrt },
-      { takeClaims: false, settleUsingBurn: false }, "0x", { value: E(6) }
+      key, { zeroForOne: true, amountSpecified: -E(280_000), sqrtPriceLimitX96: gradSqrt },
+      { takeClaims: false, settleUsingBurn: false }, "0x", { value: E(280_000) }
     )).wait();
     const spent = wBefore - await ethers.provider.getBalance(whale.address) - rc.gasUsed * rc.gasPrice;
     // the RAISE = the pool PRINCIPAL (what graduation distributes) = whale spend − the buy tax (which is money the
     // platform collects, not raise). The buy tax is minted as an ERC-6909 claim; read it back and subtract.
-    const buyTax = await pm.balanceOf(hook, 0n); // ERC-6909 native-ETH claim (the whole buy tax)
+    const buyTax = await pm.balanceOf(hook, 0n); // ERC-6909 native-MON claim (the whole buy tax)
     const raise = spent - buyTax;
     const gradT = Number((await stateView.getSlot0(poolId))[1]);
     const tokBought = Number(await tokC.balanceOf(whale.address)) / 1e18;
     expect(await curve.ready()).to.equal(true);           // reached the ceiling
     expect(gradT).to.be.closeTo(GRAD, TS);                // spot at the ceiling (gradTick)
-    // buy tax is now ETH (fee-on-input), so NO token is skimmed — the buyer gets the whole 730M curve.
-    expect(tokBought).to.be.within(690e6, 735e6);         // ~the whole 730M curve
+    // buy tax is MON (fee-on-input), so NO token is skimmed — the buyer gets the whole 730M curve.
+    expect(tokBought).to.be.within(690e6, 735e6);
     const gradMc = mcUsd(GRAD);
-    const multiple = mcEth(GRAD) / mcEth(startTick);
-    const raiseEth = Number(raise) / 1e18;
+    const multiple = mcMon(GRAD) / mcMon(startTick);
+    const raiseMon = Number(raise) / 1e18;
 
-    console.log(`      start MC ~$${Math.round(startMc).toLocaleString()} | grad MC ~$${Math.round(gradMc).toLocaleString()} | raise ${raiseEth.toFixed(2)} ETH | ${multiple.toFixed(1)}x`);
+    console.log(`      start FDV ~$${Math.round(startMc).toLocaleString()} | grad FDV ~$${Math.round(gradMc).toLocaleString()} | raise ${Math.round(raiseMon).toLocaleString()} MON ($${Math.round(raiseMon * MON_USD).toLocaleString()}) | ${multiple.toFixed(1)}x`);
 
     // ── assertions: the headline economics hold on the real V4 curve ──
-    expect(startMc).to.be.within(2600, 4400);   // target ~$3.4k
-    expect(gradMc).to.be.within(27000, 43000);  // target ~$34k
-    expect(multiple).to.be.within(9, 11);       // ~10x chart (geometry-fixed, ethUsd-independent)
-    expect(raiseEth).to.be.within(3.2, 6.5);    // target ~4.2 ETH pool principal
+    expect(raiseMon).to.be.within(240_000, 280_000);  // target ~260,000 MON — the V3 pad's graduation line
+    expect(multiple).to.be.within(9, 11);             // ~10x chart (geometry-fixed, MON-price-independent)
+    expect(startMc).to.be.within(1_900, 3_000);       // target ~$2.4k at $0.021/MON
+    expect(gradMc).to.be.within(19_000, 30_000);      // target ~$23.6k at $0.021/MON
   });
 });

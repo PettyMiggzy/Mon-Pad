@@ -3,30 +3,30 @@ pragma solidity 0.8.26;
 
 import {Ownable2Step, Ownable} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 
-/// @title RobinV4FeeConfig — governed DEFAULT launch parameters for the V4 curve pad suite.
-/// @notice The `CurvePadFactoryV4` reads these at each launch and STAMPS them IMMUTABLY onto the new pad's
+/// @title MonPadV4FeeConfig — governed DEFAULT launch parameters for the V4 curve pad suite.
+/// @notice The `MonPadFactoryV4` reads these at each launch and STAMPS them IMMUTABLY onto the new pad's
 /// hook config. So changing a value here only affects FUTURE launches — every already-launched pad keeps the
 /// exact fee it was born with (the trust guarantee: a coin's tax can never be raised after the fact). This is
 /// the single authority that lets us retune pad economics/curve geometry WITHOUT ever redeploying the factory.
 ///
 /// Hard caps below bound the HOOK taxes any future launch can carry, so even a compromised/fat-fingered owner
 /// cannot push a new pad's buy/sell tax past the ceiling. TWO caveats the operator must hold (see M-10, M-12):
-///   • [M-10] `lpFee` is a SECOND take on top of the buy/sell taxes (on a Robin pad it routes mostly to
-///     protocol-owned positions), now bounded by the Robin `MAX_LP_FEE` = 1% policy cap. `setDefaults` remains a
+///   • [M-10] `lpFee` is a SECOND take on top of the buy/sell taxes (on a MonPad pad it routes mostly to
+///     protocol-owned positions), now bounded by the MonPad `MAX_LP_FEE` = 1% policy cap. `setDefaults` remains a
 ///     real un-timelocked economic knob within that cap — hold this owner key with the same care as the fee wallet.
 ///   • [M-12] "forward-only, can never touch an existing coin" holds for a LAUNCHED pad (its fee is stamped
 ///     immutably at launch). An OPEN PRESALE no longer silently reprices on a retune: PresaleVault snapshots the
 ///     geometry at initialize and finalize() REVERTS `GeometryChanged` if the live defaults have moved — the raise
 ///     fails safely (100% refunds) instead of launching at a geometry its contributors never agreed to.
 /// Govern this owner as a live capability (multisig, ideally a timelock), not a set-and-forget default source.
-contract RobinV4FeeConfig is Ownable2Step {
+contract MonPadV4FeeConfig is Ownable2Step {
     uint16 public constant BPS = 10000;
     uint16 public constant MAX_TAX_BPS = 200; // ≤2% per side on any future launch
     uint16 public constant MAX_FLOOR_SHARE_BPS = 5000; // ≤50% of the sell tax may go to the floor
     uint16 public constant MAX_BUFFER_SHARE_BPS = 5000; // ≤50% of the buy tax may be diverted to the curve buffer
     uint16 public constant MAX_REFERRAL_SHARE_BPS = 5000; // ≤50% of the PLATFORM buy cut may be paid to a referrer
     uint16 public constant MAX_GRAD_SHARE_BPS = 2500; // ≤25% of the raise to any single non-LP grad bucket
-    // [M-10] Robin policy cap on the static LP fee: 1% (10_000 pips). Below Uniswap's structural 100% (1_000_000),
+    // [M-10] MonPad policy cap on the static LP fee: 1% (10_000 pips). Below Uniswap's structural 100% (1_000_000),
     // so it also subsumes the "static fee above the Uniswap max bricks initialize" concern. Production lpFee is
     // exactly 10_000, so it passes at the boundary (`>` not `>=`); a launch can never carry an lpFee above 1%.
     uint24 public constant MAX_LP_FEE = 10_000;
@@ -92,7 +92,7 @@ contract RobinV4FeeConfig is Ownable2Step {
 
     function _validate(Defaults memory d) internal pure {
         if (d.buyTaxBps > MAX_TAX_BPS || d.sellTaxBps > MAX_TAX_BPS) revert BadParam();
-        // [AUDIT] the hook rejects a zero/zero tax (RobinFeeHook.registerPool → BadTax), so a 0/0 default would
+        // [AUDIT] the hook rejects a zero/zero tax (MonPadFeeHook.registerPool → BadTax), so a 0/0 default would
         // brick EVERY future launch; require at least one side to carry a tax.
         if (d.buyTaxBps == 0 && d.sellTaxBps == 0) revert BadParam();
         if (d.sellFloorShareBps > MAX_FLOOR_SHARE_BPS) revert BadParam();
@@ -107,7 +107,7 @@ contract RobinV4FeeConfig is Ownable2Step {
             revert BadParam();
         }
         if (uint256(d.platformGradBps) + d.creatorGradBps + d.ambushGradBps >= BPS) revert BadParam();
-        // [AUDIT/M-10] static fee only AND ≤ the Robin MAX_LP_FEE (1%). An over-max static fee would both exceed
+        // [AUDIT/M-10] static fee only AND ≤ the MonPad MAX_LP_FEE (1%). An over-max static fee would both exceed
         // policy and (above Uniswap's 100%) revert poolManager.initialize; the 1% cap forecloses both.
         if (d.lpFee & DYNAMIC_FEE_FLAG != 0 || d.lpFee > MAX_LP_FEE) revert BadParam();
         if (d.startTickMag <= 0 || d.curveWidth <= 0) revert BadParam();

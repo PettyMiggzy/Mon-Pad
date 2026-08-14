@@ -6,7 +6,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol";
 import {Actions} from "@uniswap/v4-periphery/src/libraries/Actions.sol";
 
-import {IFeeWalletRegistry} from "../interfaces/IRobinInterfaces.sol";
+import {IFeeWalletRegistry} from "../interfaces/IMonPadInterfaces.sol";
 import {IPositionManagerMinimal as IPositionManager} from "../interfaces/IPositionManagerMinimal.sol";
 
 /// @title LockVault
@@ -150,7 +150,7 @@ contract LockVault is IERC721Receiver, ReentrancyGuard {
         // routed the locked LP's holder (sell-side) fee stream to the treasury on the first claim — an honest keeper
         // sweep was enough to trigger it. collectFees still accrues into stakingOwed while unwired, so nothing is
         // lost: once setStakingRecipient wires the real recipient, the whole parked accrual pays it in full. Mirrors
-        // RobinFeeHook.claimFloor's NoFloorRecipient guard.
+        // MonPadFeeHook.claimFloor's NoFloorRecipient guard.
         address to = lk.stakingRecipient;
         if (to == address(0)) revert NoStakingRecipient();
         amount = stakingOwed[tokenId][currencyIndex];

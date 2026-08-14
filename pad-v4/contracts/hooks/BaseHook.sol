@@ -9,7 +9,7 @@ import {BeforeSwapDelta} from "@uniswap/v4-core/src/types/BeforeSwapDelta.sol";
 import {ModifyLiquidityParams, SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 
 /// @title BaseHook
-/// @notice Minimal, dependency-light base for the Robin V4 hooks. Three jobs:
+/// @notice Minimal, dependency-light base for the MonPad V4 hooks. Three jobs:
 ///   1. Pin the hook's permission flags into a public constant AND self-assert
 ///      them in the constructor, so a hook deployed to a wrong-flag address
 ///      reverts at deploy time instead of silently mis-behaving. The factory
@@ -18,7 +18,7 @@ import {ModifyLiquidityParams, SwapParams} from "@uniswap/v4-core/src/types/Pool
 ///   3. Provide a transient-storage reentrancy guard (cheaper than SSTORE and
 ///      re-entry-during-send safe) used on the state-bearing entry points.
 ///
-/// All IHooks callbacks are stubbed to revert here; RobinFeeHook overrides only
+/// All IHooks callbacks are stubbed to revert here; MonPadFeeHook overrides only
 /// the flagged ones (beforeSwap / afterSwap). An unflagged callback is never
 /// invoked by the PoolManager, so the revert is a belt-and-suspenders guard.
 abstract contract BaseHook is IHooks {
@@ -68,7 +68,7 @@ abstract contract BaseHook is IHooks {
         }
     }
 
-    // --- IHooks: default-revert stubs. RobinFeeHook overrides beforeSwap / afterSwap. ---
+    // --- IHooks: default-revert stubs. MonPadFeeHook overrides beforeSwap / afterSwap. ---
 
     function beforeInitialize(address, PoolKey calldata, uint160) external virtual returns (bytes4) {
         revert HookNotImplemented();

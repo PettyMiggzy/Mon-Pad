@@ -16,23 +16,23 @@ import {IStateView} from "@uniswap/v4-periphery/src/interfaces/IStateView.sol";
 import {DeterministicDeployer} from "./DeterministicDeployer.sol";
 import {CurveV4Deployer} from "./CurveV4Deployer.sol";
 import {LockVault} from "./LockVault.sol";
-import {RobinV4FeeConfig} from "./RobinV4FeeConfig.sol";
+import {MonPadV4FeeConfig} from "./MonPadV4FeeConfig.sol";
 import {PadToken} from "../pads/PadToken.sol";
-import {RobinFeeHook} from "../hooks/RobinFeeHook.sol";
-import {RobinCurveV4} from "../pads/RobinCurveV4.sol";
-import {IRobinFeeHookAdmin} from "../interfaces/IRobinInterfaces.sol";
+import {MonPadFeeHook} from "../hooks/MonPadFeeHook.sol";
+import {MonPadCurveV4} from "../pads/MonPadCurveV4.sol";
+import {IMonPadFeeHookAdmin} from "../interfaces/IMonPadInterfaces.sol";
 
-/// @title CurvePadFactoryV4 — free single-sided bonding-curve launch on Uniswap V4
+/// @title MonPadFactoryV4 — free single-sided bonding-curve launch on Uniswap V4
 /// @notice One tx, NO ETH seed: deploy the token, mine+deploy the fee hook, initialize the pool at the curve
-/// top, stamp the IMMUTABLE per-pad fee config (pulled from the governed RobinV4FeeConfig), deploy the per-pad
-/// RobinCurveV4 controller, and seed the token-only curve. The permanent locked LP + staking are wired at
-/// graduation (see RobinCurveV4.graduate → this.onGraduated → LockVault.registerLaunch).
+/// top, stamp the IMMUTABLE per-pad fee config (pulled from the governed MonPadV4FeeConfig), deploy the per-pad
+/// MonPadCurveV4 controller, and seed the token-only curve. The permanent locked LP + staking are wired at
+/// graduation (see MonPadCurveV4.graduate → this.onGraduated → LockVault.registerLaunch).
 ///
 /// GOVERNANCE: every economic parameter (taxes, floor share, staking ETH slice, LP fee, curve geometry) is read
 /// from `feeConfig.defaults()` and stamped immutably here — NEVER taken from the caller. So a launcher can never
 /// set their own tax, and an already-launched pad's fee can never change (retuning the FeeConfig only affects
 /// FUTURE launches, no factory redeploy). This is the "right the first time" rule made structural.
-contract CurvePadFactoryV4 {
+contract MonPadFactoryV4 {
     using SafeERC20 for IERC20;
 
     IPoolManager public immutable poolManager;
@@ -40,8 +40,8 @@ contract CurvePadFactoryV4 {
     address public immutable permit2;
     address public immutable stateView;
     DeterministicDeployer public immutable deployer;
-    CurveV4Deployer public immutable curveDeployer; // offloads RobinCurveV4 creationCode (24KB limit)
-    RobinV4FeeConfig public immutable feeConfig;
+    CurveV4Deployer public immutable curveDeployer; // offloads MonPadCurveV4 creationCode (24KB limit)
+    MonPadV4FeeConfig public immutable feeConfig;
     address public immutable feeRegistry;
     LockVault public immutable lockVault;
 
@@ -106,7 +106,7 @@ contract CurvePadFactoryV4 {
         stateView = stateView_;
         deployer = DeterministicDeployer(deployer_);
         curveDeployer = CurveV4Deployer(curveDeployer_);
-        feeConfig = RobinV4FeeConfig(feeConfig_);
+        feeConfig = MonPadV4FeeConfig(feeConfig_);
         feeRegistry = feeRegistry_;
         lockVault = LockVault(payable(lockVault_));
         // [I-1(19)] The vault holds its OWN positionManager immutable and uses it for collectFees and for the
@@ -137,7 +137,7 @@ contract CurvePadFactoryV4 {
         ) revert BadConfig();
 
         // 1) governed defaults, snapshotted + stamped immutably
-        RobinV4FeeConfig.Defaults memory d = feeConfig.defaults(); // all shares/geometry validated in the FeeConfig
+        MonPadV4FeeConfig.Defaults memory d = feeConfig.defaults(); // all shares/geometry validated in the FeeConfig
         int24 ts = cfg.tickSpacing;
         if (ts <= 0 || d.startTickMag % ts != 0 || d.curveWidth % ts != 0) revert BadGeometry();
         int24 startTick = int24(d.startTickMag); // token = currency1 ⇒ launch at the high (top) tick
@@ -196,10 +196,10 @@ contract CurvePadFactoryV4 {
         // 3) deploy the flag-mined hook (token in init-code ⇒ unique address per pad)
         hook = deployer.deploy(
             hookSalt,
-            abi.encodePacked(type(RobinFeeHook).creationCode, abi.encode(poolManager, address(this), feeRegistry, token))
+            abi.encodePacked(type(MonPadFeeHook).creationCode, abi.encode(poolManager, address(this), feeRegistry, token))
         );
         if (uint160(hook) & 0x3FFF != HOOK_FLAGS) revert HookFlagsMismatch();
-        if (RobinFeeHook(payable(hook)).REQUIRED_FLAGS() != HOOK_FLAGS) revert HookFlagsMismatch();
+        if (MonPadFeeHook(payable(hook)).REQUIRED_FLAGS() != HOOK_FLAGS) revert HookFlagsMismatch();
 
         PoolKey memory key = PoolKey({
             currency0: currency0,
@@ -223,9 +223,9 @@ contract CurvePadFactoryV4 {
             (uint160 sp,,,) = IStateView(stateView).getSlot0(poolId);
             if (sp != sqrtStart) revert PoolAlreadyInit();
         }
-        RobinFeeHook(payable(hook)).registerPool(
+        MonPadFeeHook(payable(hook)).registerPool(
             poolId,
-            IRobinFeeHookAdmin.PoolFeeConfig({
+            IMonPadFeeHookAdmin.PoolFeeConfig({
                 currency0: currency0,
                 currency1: currency1,
                 creator: cfg.creator,
@@ -269,9 +269,9 @@ contract CurvePadFactoryV4 {
         );
         isCurve[curve] = true;
         // wire the curve as the buy-tax buffer sink ([L-5] the buffer is held as idle ETH, then swept to the PLATFORM at graduation); known only now
-        RobinFeeHook(payable(hook)).setBufferRecipient(poolId, curve);
+        MonPadFeeHook(payable(hook)).setBufferRecipient(poolId, curve);
         IERC20(token).safeTransfer(curve, cfg.curveSupply); // the SOLD portion → seeded into the curve
-        RobinCurveV4(payable(curve)).seed();
+        MonPadCurveV4(payable(curve)).seed();
         IERC20(token).safeTransfer(curve, cfg.reserveSupply); // the HELD reserve → pairs the permanent LP + staking
 
         // 6) NO remainder: supply == curveSupply + reserveSupply is enforced above, so the factory holds 0 token

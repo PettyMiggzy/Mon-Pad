@@ -12,9 +12,9 @@ import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import {IUnlockCallback} from "@uniswap/v4-core/src/interfaces/callback/IUnlockCallback.sol";
 
 import {BaseHook} from "./BaseHook.sol";
-import {IFeeWalletRegistry, IStockGuardAdapter, IRobinFeeHookAdmin} from "../interfaces/IRobinInterfaces.sol";
+import {IFeeWalletRegistry, IStockGuardAdapter, IMonPadFeeHookAdmin} from "../interfaces/IMonPadInterfaces.sol";
 
-/// @title RobinFeeHook — directional trade-tax engine (the heart of Robin V4)
+/// @title MonPadFeeHook — directional trade-tax engine (the heart of MonPad V4)
 /// @notice Both trade taxes are denominated in the MONEY SIDE (currency0: ETH on a curve/ETH pad, or the
 /// stock ERC20 on a stock pad) — NEVER the pad coin — and routed by DIRECTION:
 ///
@@ -25,7 +25,7 @@ import {IFeeWalletRegistry, IStockGuardAdapter, IRobinFeeHookAdmin} from "../int
 ///   • SELL (token → money, `oneForZero`): `sellTaxBps` of the money-side OUTPUT in afterSwap → creator,
 ///          minus a `sellFloorShareBps` carve that funds the pad's permanent price FLOOR.
 ///
-/// Holders are rewarded separately, by staking (RobinLockStaking / DualStaking). All payouts are
+/// Holders are rewarded separately, by staking (MonPadLockStaking / DualStaking). All payouts are
 /// accrue-and-pull: nothing is pushed to an external wallet inside a swap, so a reverting recipient can
 /// never block trading.
 ///
@@ -42,7 +42,7 @@ import {IFeeWalletRegistry, IStockGuardAdapter, IRobinFeeHookAdmin} from "../int
 ///        defers that one claim rather than bricking trading or waiving the fee [H-1].
 ///   [G1] REQUIRED_FLAGS == 0x00CC, self-asserted in the ctor and cross-checked by the factory.
 ///   [G2] No beforeInitialize; config is bound by `registerPool` in the same launch tx.
-contract RobinFeeHook is BaseHook, IRobinFeeHookAdmin {
+contract MonPadFeeHook is BaseHook, IMonPadFeeHookAdmin {
     using BalanceDeltaLibrary for BalanceDelta;
     using CurrencyLibrary for Currency;
 
@@ -420,7 +420,7 @@ contract RobinFeeHook is BaseHook, IRobinFeeHookAdmin {
         // [M-4] The recipient must be a CONTRACT — the only correct target is a floor vault. An EOA (or a
         // wrong-pool address) is a one-shot, irreversible misroute that permanently strands the sell-tax floor
         // carve (the hook has no rescue path). This matches the code-check the other four sinks already carry
-        // (RobinCurveV4.setStaking/setFloor/setAmbush) and the ROBIN-V4-CURVE-ECON.md "targets must be contracts"
+        // (MonPadCurveV4.setStaking/setFloor/setAmbush) and the ROBIN-V4-CURVE-ECON.md "targets must be contracts"
         // claim. Kept distinct from a value-transfer probe (see [M-24] below): requiring code, not requiring the
         // recipient to accept ETH, so a stock-pad ERC-20 recipient stays valid.
         if (recipient == address(0) || recipient.code.length == 0) revert ZeroAddress();
@@ -466,7 +466,7 @@ contract RobinFeeHook is BaseHook, IRobinFeeHookAdmin {
     /// @notice The pool's CURRENT creator — the address the sell-tax book pays after any repoint.
     /// [M-9] Exposed so a pad's curve controller can follow this one slot instead of keeping its own
     /// launch-time immutable, which had no repoint and no alternate exit. One 2-step repoint now governs both
-    /// books. Deliberately NOT added to IRobinFeeHookAdmin: that interface is the factory's registration
+    /// books. Deliberately NOT added to IMonPadFeeHookAdmin: that interface is the factory's registration
     /// surface, and widening it would force an override here and a stub on every mock that implements it.
     function creatorOf(PoolId id) external view returns (address) {
         return config[id].creator;

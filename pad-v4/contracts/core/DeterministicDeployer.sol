@@ -6,7 +6,10 @@ pragma solidity 0.8.26;
 /// pinned as a constant everywhere hook-address mining happens, because the mined salt
 /// depends on `keccak256(0xff ++ deployer ++ salt ++ initCodeHash)` — a different deployer
 /// address changes every mined hook address. Do NOT assume the canonical 0x4e59… CREATE2
-/// deployer exists on this Orbit chain; we deploy and pin our own.
+/// deployer exists on this chain; we deploy and pin our own.
+/// @dev [MONAD] Monad DOES have the canonical CREATE2 deployer at 0x4e59b44847b379578588920cA78FbF26c0B4956C
+/// (verified on-chain). This contract is still used because the factory calls it during launch and needs a
+/// known-ABI Solidity interface, but the address-mining constraint that motivated it on Robinhood Chain is gone.
 contract DeterministicDeployer {
     error DeployFailed();
     error AlreadyDeployed();

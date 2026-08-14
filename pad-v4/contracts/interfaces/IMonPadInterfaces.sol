@@ -24,9 +24,9 @@ interface IStockGuardAdapter {
 ///   • BUY  (spend quote → get token): `buyTaxBps` of the quote INPUT → platform (+ curve buffer)
 ///   • SELL (spend token → get quote): `sellTaxBps` of the quote output → creator + floor,
 ///          where `sellFloorShareBps` of that sell tax is carved to the floor (out of the creator's cut).
-interface IRobinFeeHookAdmin {
+interface IMonPadFeeHookAdmin {
     struct PoolFeeConfig {
-        Currency currency0; // quote (native ETH / USDG / stock)
+        Currency currency0; // quote (native MON)
         Currency currency1; // the launched token
         address creator; // receives the sell tax (less the floor carve)
         address floorRecipient; // receives the floor carve; address(0) => it parks in floorOwed

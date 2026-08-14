@@ -3,7 +3,7 @@ pragma solidity 0.8.26;
 
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 
-/// @notice The slice of the Uniswap V4 PositionManager (0x174c…2EFA) we actually call.
+/// @notice The slice of the Uniswap V4 PositionManager (0x5b7e…4016 on Monad) we actually call.
 /// Defined locally so we don't transitively pull Permit2/solmate through the full periphery
 /// IPositionManager (which breaks Hardhat's node-style import resolution). The real deployed
 /// contract implements a superset of this; the selectors here match it exactly.

@@ -1,7 +1,7 @@
 const { ethers } = require("hardhat");
 const { expect } = require("chai");
 
-// RobinV4FeeConfig — governed DEFAULT launch params for the V4 curve suite. Changing them only affects
+// MonPadV4FeeConfig — governed DEFAULT launch params for the V4 curve suite. Changing them only affects
 // future launches; live pads are immutable. Caps bound what any future launch can carry.
 
 const GOOD = {
@@ -11,12 +11,12 @@ const GOOD = {
 };
 const DYNAMIC_FEE_FLAG = 0x800000;
 
-describe("RobinV4FeeConfig", () => {
+describe("MonPadV4FeeConfig", () => {
   let owner, other, cfg, Factory;
 
   beforeEach(async () => {
     [owner, other] = await ethers.getSigners();
-    Factory = await ethers.getContractFactory("RobinV4FeeConfig");
+    Factory = await ethers.getContractFactory("MonPadV4FeeConfig");
     cfg = await Factory.deploy(owner.address, GOOD);
   });
 

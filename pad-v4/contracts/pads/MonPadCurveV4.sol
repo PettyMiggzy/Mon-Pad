@@ -17,7 +17,7 @@ import {LiquidityAmounts} from "@uniswap/v4-periphery/src/libraries/LiquidityAmo
 import {Actions} from "@uniswap/v4-periphery/src/libraries/Actions.sol";
 import {IStateView} from "@uniswap/v4-periphery/src/interfaces/IStateView.sol";
 
-import {IFeeWalletRegistry} from "../interfaces/IRobinInterfaces.sol";
+import {IFeeWalletRegistry} from "../interfaces/IMonPadInterfaces.sol";
 import {IPositionManagerMinimal} from "../interfaces/IPositionManagerMinimal.sol";
 import {IPermit2Minimal} from "../interfaces/IPermit2Minimal.sol";
 
@@ -29,7 +29,7 @@ interface IStakingFund {
     function fundTokenPushed(uint8 side, address asset) external returns (uint256);
 }
 
-/// @dev [M-25] The two staking sinks name their TOKEN-side stake asset differently — RobinLockStaking calls it
+/// @dev [M-25] The two staking sinks name their TOKEN-side stake asset differently — MonPadLockStaking calls it
 /// `token()`, DualStaking calls it `tokenAsset()`. `setStaking` probes both so a sink built for another pad can
 /// never be wired: `fundTokenPushed` measures the sink's OWN balance, so a foreign sink accepts the graduation
 /// reservoir, credits nothing, and returns 0 without reverting.
@@ -42,18 +42,18 @@ interface IFloorVault {
     function addFloor() external returns (uint128);
 }
 
-interface IRobinFeeHookBuffer {
+interface IMonPadFeeHookBuffer {
     function claimBuffer(PoolId id) external returns (uint256);
 }
 
 /// @dev [M-9] The pad hook's current creator slot. The hook's creator is repointable via a 2-step flow; this
 /// contract's was a launch-time immutable with no repoint and no alternate exit, so one pad had two creator
 /// addresses that could permanently diverge. `currentCreator()` follows this one.
-interface IRobinFeeHookCreator {
+interface IMonPadFeeHookCreator {
     function creatorOf(PoolId id) external view returns (address);
 }
 
-/// @title RobinCurveV4 — a free, single-sided bonding curve on Uniswap V4, per pad
+/// @title MonPadCurveV4 — a free, single-sided bonding curve on Uniswap V4, per pad
 /// @notice The token seeds its OWN liquidity as one token-only (currency1) range `[gradTick, startTick]` with
 /// the pool initialized at `startTick` (the range's upper bound ⇒ 100% token, so NO ETH is ever required).
 /// Buyers (`zeroForOne`, ETH-in) walk the tick DOWN, converting token→ETH; ETH accumulates as the raise. When
@@ -72,8 +72,8 @@ interface IRobinFeeHookCreator {
 /// v2 curve-phase LP-fee routing: ETH (buy) fees → 80% platform / 20% floor; token (sell) fees → staking. Platform
 /// and creator payouts are accrue-and-pull (`claimPlatform`/`claimCreator`), never sent inline, so a bad recipient
 /// can never brick collectFees/graduate. All economic params are stamped IMMUTABLY by the factory from the governed
-/// RobinV4FeeConfig — this contract cannot self-set fees.
-contract RobinCurveV4 is IUnlockCallback, ReentrancyGuard {
+/// MonPadV4FeeConfig — this contract cannot self-set fees.
+contract MonPadCurveV4 is IUnlockCallback, ReentrancyGuard {
     using CurrencyLibrary for Currency;
     using BalanceDeltaLibrary for BalanceDelta;
     using SafeERC20 for IERC20;
@@ -89,12 +89,22 @@ contract RobinCurveV4 is IUnlockCallback, ReentrancyGuard {
     uint256 internal constant NUDGE_MAX_FRACTION = 100; // the ceiling nudge may spend ≤ 1/100 of the reserve
     uint256 internal constant BPS = 10000;
     // Auto-graduation keeper bounty: whoever triggers graduate() is paid a flat slice of the raise, carved OFF THE
-    // TOP before the waterfall, so graduation is triggered automatically with the gas paid FROM THE CURVE ETH — no
+    // TOP before the waterfall, so graduation is triggered automatically with the gas paid FROM THE CURVE MON — no
     // keeper needs a subsidy and no one has to babysit the launch. A flat bps (not tx.gasprice-based) can't be gamed
-    // by a caller inflating gasprice; the absolute cap bounds it on large raises. On a cheap Orbit L2 this comfortably
-    // covers the graduation tx and leaves a small tip.
+    // by a caller inflating gasprice; the absolute cap bounds it on large raises.
+    //
+    // [MONAD] The cap is denominated in the QUOTE ASSET, so it does not survive a chain change. The Robin original
+    // capped at 0.02 ETH (≈$60 at the time) against a raise of ~4 ETH. Ported verbatim, 0.02 MON ≈ $0.0004 — while
+    // Monad charges gas on the transaction's GAS LIMIT rather than gas used, so a keeper submitting graduate() with
+    // a 5M limit at the observed ~100 gwei base fee pays ~0.5 MON. The bounty would have been ~25x SMALLER than the
+    // cost of claiming it, so no rational keeper would ever call graduate() and every pad would stall at the ceiling
+    // until the platform manually graduated it. Re-denominated in MON with margin for that gas-limit charging model:
+    // 100 MON (≈$2.10 at $0.021/MON) against a ~0.5 MON worst-case cost, and still only ~0.04% of a 260k MON raise.
     uint256 internal constant GRAD_BOUNTY_BPS = 20; // 0.2% of the raise to the graduation trigger
-    uint256 internal constant GRAD_BOUNTY_MAX_WEI = 0.02 ether; // absolute ceiling (raise ≳ 10 ETH)
+    uint256 internal constant GRAD_BOUNTY_MAX_WEI = 100 ether; // absolute ceiling, in MON (raise ≳ 50,000 MON)
+    // [MONAD] Sink for the leftover reserve when no staking pool is wired — see _fundStaking. Not address(0):
+    // OpenZeppelin's ERC20 reverts on a transfer to the zero address, which would brick graduation.
+    address internal constant BURN_ADDRESS = 0x000000000000000000000000000000000000dEaD;
 
     IPoolManager public immutable poolManager;
     IPositionManagerMinimal public immutable positionManager;
@@ -127,8 +137,8 @@ contract RobinCurveV4 is IUnlockCallback, ReentrancyGuard {
     bool public graduated;
     uint128 public curveL; // liquidity minted at seed (removed whole at graduation)
     address public staking; // the pad's DualStaking pool — set once, platform-gated
-    address public floor; // the pad's RobinFloorVault — set once, platform-gated
-    address public ambush; // the pad's RobinAmbushVault (two-sided support) — set once, platform-gated
+    address public floor; // the pad's MonPadFloorVault — set once, platform-gated
+    address public ambush; // the pad's MonPadAmbushVault (two-sided support) — set once, platform-gated
 
     // accrue-and-pull books (never sent inline → cannot brick collect/graduate). v2 routing:
     //   • buy (ETH) LP fee → 80% platformEthOwed (claimPlatform) + 20% floorEthOwed (→ floor at grad)
@@ -161,6 +171,7 @@ contract RobinCurveV4 is IUnlockCallback, ReentrancyGuard {
         uint256 ambushReward
     );
     event StakingFunded(uint256 amount);
+    event ReserveBurned(uint256 amount);
     event FloorFunded(uint256 amount);
     event AmbushFunded(uint256 amount);
     event GradBountyPaid(address indexed keeper, uint256 amount, bool booked);
@@ -282,7 +293,7 @@ contract RobinCurveV4 is IUnlockCallback, ReentrancyGuard {
         // [H-3] length-checked staticcall, NOT try/catch: try/catch does not absorb a decode failure, so a
         // short-returning hook would make this revert uncatchably — and it sits on the claim path.
         (bool ok, bytes memory data) =
-            address(hooks).staticcall(abi.encodeCall(IRobinFeeHookCreator.creatorOf, (_poolId())));
+            address(hooks).staticcall(abi.encodeCall(IMonPadFeeHookCreator.creatorOf, (_poolId())));
         if (!ok || data.length < 32) return creator;
         address c;
         // masked mload rather than abi.decode: the ABI decoder still reverts on an address word with dirty
@@ -372,7 +383,7 @@ contract RobinCurveV4 is IUnlockCallback, ReentrancyGuard {
         // pool — would revert the typed call UNCAUGHT by try/catch), then try/caught + outside the PoolManager lock
         // ⇒ a reverting/unwired hook can never brick graduation.
         if (address(hooks).code.length > 0) {
-            try IRobinFeeHookBuffer(address(hooks)).claimBuffer(_poolId()) {} catch {}
+            try IMonPadFeeHookBuffer(address(hooks)).claimBuffer(_poolId()) {} catch {}
         }
 
         // [AUDIT-HIGH] Snapshot any pre-existing UNBOOKED ETH (e.g. a hostile donation to receive()) BEFORE the
@@ -764,9 +775,25 @@ contract RobinCurveV4 is IUnlockCallback, ReentrancyGuard {
         IERC20(token).forceApprove(address(permit2), 0);
     }
 
+    /// @dev [MONAD] The basic pad ships with NO staking sink, and the leftover reserve is not a rounding dust —
+    /// it is structural. The factory's [HIGH-2] check sizes `reserveSupply` on the assumption that the WHOLE raise
+    /// seeds the permanent LP, but the waterfall routes only the LP share (~80% after the platform and creator
+    /// cuts), so the LP mint cannot consume the reserve it was sized against. At the shipped 730M/270M split that
+    /// strands ~85M tokens — ~8.5% of supply — on this contract at graduation.
+    ///
+    /// Shrinking the reserve does not fix it: the [HIGH-2] check is a hard floor on `reserveSupply`, and going
+    /// under it means editing audited safety logic whose whole job is to stop the LP mint bricking. So the leftover
+    /// is BURNED instead — sent to a provably unspendable address, permanently out of supply, claimable by nobody
+    /// including the platform. Wiring a staking pool via setStaking() before graduation restores the audited
+    /// behaviour exactly (leftover → holder rewards) and skips the burn.
     function _fundStaking(uint256 amount) internal {
+        if (amount == 0) return;
         address s = staking;
-        if (s == address(0) || amount == 0) return; // parks on this contract; flushStaking() completes later
+        if (s == address(0)) {
+            IERC20(token).safeTransfer(BURN_ADDRESS, amount);
+            emit ReserveBurned(amount);
+            return;
+        }
         IERC20(token).safeTransfer(s, amount);
         // if the token isn't listed / this curve isn't a rewarder yet, this reverts — caught so the LP lock stays
         // final; the tokens are already in the pool and a later flushStaking() credits them (balanceOf-accounted).
