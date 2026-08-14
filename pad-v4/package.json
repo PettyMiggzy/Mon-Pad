@@ -2,14 +2,15 @@
   "name": "monpad-v4",
   "version": "0.1.0",
   "private": true,
-  "description": "MonPad V4 — free-to-launch single-sided bonding curve on Uniswap V4, native MON (Monad, chain 143). Basic pad: curve + factory + unbypassable fee hook + permanently locked graduation LP.",
+  "description": "MonPad V4 \u2014 free-to-launch single-sided bonding curve on Uniswap V4, native MON (Monad, chain 143). Basic pad: curve + factory + unbypassable fee hook + permanently locked graduation LP.",
   "scripts": {
     "build": "hardhat compile",
     "test": "hardhat test test/unit/MonPadV4FeeConfig.test.js test/unit/MonPadCurveV4.test.js test/unit/MonshiBuyback.test.js",
     "test:all": "hardhat test",
     "test:sim": "hardhat test test/sim/curve.calibration.sim.test.js test/sim/curve.graduation.sim.test.js",
     "test:fork": "hardhat test test/fork/CurveGraduation.fork.test.js",
-    "postinstall": "node scripts/link-v4-libs.js"
+    "postinstall": "node scripts/link-v4-libs.js",
+    "keeper": "node scripts/auto-graduate.cjs"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",

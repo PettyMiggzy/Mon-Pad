@@ -110,7 +110,23 @@ Measured on-chain against a real V4 PoolManager in `test/sim/curve.calibration.s
 - **Compiler unchanged** — solc 0.8.26, viaIR, optimizer runs 1, evmVersion cancun. Monad supports every
   Ethereum opcode including EIP-1153 transient storage, which the live V4 PoolManager already depends on.
 
-### 6. MONSHI buy pressure — new, additive, touches nothing audited
+### 6. Auto-graduation kept; no "let it ride"
+
+The Labs V3 pad (`Robinlabz/Labs` → `launchpad/CurvePool.sol`) lets the dev pick where to graduate between
+`minGradTick` and the ceiling via `setGradTarget`, with a 7-day `GRAD_TIMEOUT` so an abandoned pad can still be
+graduated at the minimum. That was deliberately dropped: this pad graduates at the fixed ceiling only, and
+`graduate()` is permissionless from the moment `ready()` flips.
+
+`minGradWidth` survives in `MonPadV4FeeConfig` (validated `0 < minGradWidth < curveWidth`) but is never read by
+`MonPadCurveV4`. It is inert on purpose. Left in place rather than removed because deleting a field from the
+stamped config struct changes its ABI and the per-pad immutable layout for no functional gain.
+
+`scripts/auto-graduate.cjs` is ported with two Monad changes: type-2 txs instead of forced legacy type-0, and
+`CHUNK` defaulted to 100 because Monad's public RPC caps `eth_getLogs` at a 100-block range (`-32614`) — the
+original's 5000 would have failed every pass. Its header comment claiming the keeper gets "no reimbursement"
+was also stale: the curve pays the bounty to `msg.sender`.
+
+### 7. MONSHI buy pressure — new, additive, touches nothing audited
 
 `contracts/monshi/MonshiBuyback.sol` + `PlatformFeeSplitter.sol`. Neither is in the money path of the curve,
 hook or factory: the splitter is simply installed as `FeeWalletRegistry.platformFeeWallet`, so it sees only

@@ -71,6 +71,34 @@ under it means editing audited safety logic.
 To route it to holders instead, deploy a staking pool and call `curve.setStaking(pool)` **before** `graduate()`.
 That restores the audited behaviour exactly. It is one-shot and the ordering matters.
 
+## Graduation is automatic
+
+There is no "let it ride" — no dev-settable graduation target, no minimum/ceiling range to choose between, no
+abandon timeout. `ready()` flips the moment spot reaches `gradTick` (the curve is fully sold), and `graduate()`
+is permissionless from there. `MonPadV4FeeConfig` still carries a `minGradWidth` field, validated at launch but
+never read by the curve — it is inert by design, not an unimplemented feature.
+
+**The curve pays for its own graduation.** `graduate()` carves `min(0.2% of the raise, 100 MON)` off the top and
+pays it to whoever called, so the trigger gas comes out of the curve's MON and the caller keeps a tip. Nobody
+subsidises anything and nobody has to babysit a launch.
+
+That bounty is load-bearing on Monad specifically, because **gas is charged on the transaction's gas limit, not
+gas used** — a 5M-limit `graduate()` at the observed ~100 gwei costs ~0.5 MON regardless of what it burns. At
+100 MON the margin is ~200x. At the Robin original's 0.02 ETH cap it would have been ~0.02 MON, i.e. 25x *less*
+than the cost of claiming it, and no pad would ever have graduated.
+
+`scripts/auto-graduate.cjs` is the watcher that closes the loop — graduation can't run inside the crossing buy
+(it needs its own `PoolManager.unlock`, and the buy already holds the singleton's lock), so a keeper polls
+`ready()` and fires. It earns the bounty, so it funds itself.
+
+```bash
+MONAD_RPC=<rpc> KEEPER_PRIVATE_KEY=<key> node scripts/auto-graduate.cjs      # run forever
+MONAD_RPC=<rpc> KEEPER_PRIVATE_KEY=<key> node scripts/auto-graduate.cjs --once
+```
+
+Note `CHUNK` defaults to **100**: Monad's public RPC caps `eth_getLogs` at a 100-block range and rejects wider
+calls with `-32614`. A dedicated provider lifts it — worth raising for backfills.
+
 ## MONSHI buy pressure
 
 `contracts/monshi/` turns platform revenue into permanent MONSHI burns, without touching the swap path.
