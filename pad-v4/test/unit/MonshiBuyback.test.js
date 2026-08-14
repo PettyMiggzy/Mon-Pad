@@ -11,33 +11,75 @@ describe("MonshiBuyback — platform revenue into burned MONSHI", () => {
     const monshi = await (await ethers.getContractFactory("MockMonshi")).deploy();
     const router = await (await ethers.getContractFactory("MockNadDexRouter")).deploy(await monshi.getAddress(), RATE);
     const bb = await (await ethers.getContractFactory("MonshiBuyback")).deploy(
-      await monshi.getAddress(), await router.getAddress(), owner.address, treasury.address, 4000, E(1000), 60
+      await monshi.getAddress(), await router.getAddress(), owner.address, treasury.address, 4000, 3000, E(1000), 60
     );
     await bb.setKeeper(keeper.address);
-    return { owner, keeper, stranger, treasury, monshi, router, bb };
+    const staking = await (await ethers.getContractFactory("MonPadLockStaking"))
+      .deploy(await monshi.getAddress(), 30 * 86400, 30 * 86400);
+    return { owner, keeper, stranger, treasury, monshi, router, bb, staking };
   }
 
-  it("splits the buy 40% treasury / 60% burn, holding nothing afterwards", async () => {
-    const { keeper, treasury, monshi, bb } = await setup();
+  it("splits the buy 40% treasury / 30% stakers / 30% burn, holding nothing afterwards", async () => {
+    const { owner, keeper, treasury, monshi, bb, staking } = await setup();
+    await bb.connect(owner).setStaking(await staking.getAddress(), 3000);
     await keeper.sendTransaction({ to: await bb.getAddress(), value: E(100) });
-    expect(await bb.pending()).to.equal(E(100));
 
     await bb.connect(keeper).buyback(E(180_000));
 
     const bought = E(187_000); // 100 MON * 1870
-    expect(await monshi.balanceOf(treasury.address)).to.equal((bought * 4000n) / 10000n); // 40%
-    expect(await monshi.balanceOf(DEAD)).to.equal(bought - (bought * 4000n) / 10000n);    // 60%
+    expect(await monshi.balanceOf(treasury.address)).to.equal((bought * 4000n) / 10000n);        // 40%
+    expect(await monshi.balanceOf(await staking.getAddress())).to.equal((bought * 3000n) / 10000n); // 30%
+    expect(await monshi.balanceOf(DEAD)).to.equal((bought * 3000n) / 10000n);                    // 30%
     expect(await monshi.balanceOf(await bb.getAddress())).to.equal(0n); // holds nothing after the split
-    expect(await bb.totalMonSpent()).to.equal(E(100));
-    expect(await bb.totalMonshiBurned()).to.equal(bought - (bought * 4000n) / 10000n);
-    expect(await bb.totalMonshiToTreasury()).to.equal((bought * 4000n) / 10000n);
+    expect(await bb.totalMonshiToStakers()).to.equal((bought * 3000n) / 10000n);
     expect(await bb.pending()).to.equal(0n);
   });
 
-  it("caps the treasury share at 50% — the burn promise cannot be governed away", async () => {
+  it("credits the staking share as a reward tranche, not a stray balance", async () => {
+    const { owner, keeper, monshi, bb, staking } = await setup();
+    await bb.connect(owner).setStaking(await staking.getAddress(), 3000);
+    await keeper.sendTransaction({ to: await bb.getAddress(), value: E(100) });
+    await bb.connect(keeper).buyback(E(180_000));
+    // fundTokenPushed ran: the pool booked it as rewards rather than leaving it unaccounted
+    const expected = (E(187_000) * 3000n) / 10000n;
+    expect(await staking.rewardsBalance()).to.equal(expected);
+    expect(await monshi.balanceOf(await staking.getAddress())).to.equal(expected);
+  });
+
+  it("burns the staking share when no pool is wired — never strands it", async () => {
+    const { keeper, treasury, monshi, bb } = await setup(); // staking left unset
+    await keeper.sendTransaction({ to: await bb.getAddress(), value: E(100) });
+    await bb.connect(keeper).buyback(E(180_000));
+    const bought = E(187_000);
+    expect(await monshi.balanceOf(treasury.address)).to.equal((bought * 4000n) / 10000n);
+    expect(await monshi.balanceOf(DEAD)).to.equal(bought - (bought * 4000n) / 10000n); // 60% — staking share burns
+    expect(await monshi.balanceOf(await bb.getAddress())).to.equal(0n);
+  });
+
+  it("refuses a staking pool whose stake asset is not MONSHI", async () => {
+    const { owner, bb } = await setup();
+    const other = await (await ethers.getContractFactory("MockMonshi")).deploy(); // a different token
+    const wrong = await (await ethers.getContractFactory("MonPadLockStaking"))
+      .deploy(await other.getAddress(), 30 * 86400, 30 * 86400);
+    await expect(bb.connect(owner).setStaking(await wrong.getAddress(), 3000))
+      .to.be.revertedWithCustomError(bb, "StakeAssetMismatch");
+  });
+
+  it("caps treasury + stakers at 70% so at least 30% of every buy always burns", async () => {
+    const { owner, treasury, bb, staking } = await setup();
+    await expect(bb.connect(owner).setStaking(await staking.getAddress(), 3001))
+      .to.be.revertedWithCustomError(bb, "BadBps"); // 4000 + 3001 > 7000
+    await bb.connect(owner).setStaking(await staking.getAddress(), 3000); // exactly at the cap is fine
+    await expect(bb.connect(owner).setTreasury(treasury.address, 4001))
+      .to.be.revertedWithCustomError(bb, "BadBps"); // the other direction is capped too
+    expect(await bb.MAX_DIVERTED_BPS()).to.equal(7000);
+  });
+
+  it("caps the treasury share at 50% on its own", async () => {
     const { owner, treasury, bb } = await setup();
     await expect(bb.connect(owner).setTreasury(treasury.address, 5001)).to.be.revertedWithCustomError(bb, "BadBps");
-    await bb.connect(owner).setTreasury(treasury.address, 5000); // the cap itself is allowed
+    await bb.connect(owner).setStaking(ethers.ZeroAddress, 0); // clear staking so 50% fits under the joint cap
+    await bb.connect(owner).setTreasury(treasury.address, 5000);
     expect(await bb.treasuryBps()).to.equal(5000);
     expect(await bb.MAX_TREASURY_BPS()).to.equal(5000);
   });
@@ -114,7 +156,7 @@ describe("PlatformFeeSplitter — routing platform revenue", () => {
     const monshi = await (await ethers.getContractFactory("MockMonshi")).deploy();
     const router = await (await ethers.getContractFactory("MockNadDexRouter")).deploy(await monshi.getAddress(), RATE);
     const bb = await (await ethers.getContractFactory("MonshiBuyback")).deploy(
-      await monshi.getAddress(), await router.getAddress(), owner.address, treasury.address, 4000, E(100000), 0
+      await monshi.getAddress(), await router.getAddress(), owner.address, treasury.address, 4000, 3000, E(100000), 0
     );
     const sp = await (await ethers.getContractFactory("PlatformFeeSplitter")).deploy(
       await bb.getAddress(), treasury.address, owner.address, bps
@@ -169,7 +211,8 @@ describe("PlatformFeeSplitter — routing platform revenue", () => {
     await sp.distribute();
     await bb.buyback(E(370_000));
     const bought = E(374_000); // 200 MON * 1870
-    expect(await monshi.balanceOf(DEAD)).to.equal(bought - (bought * 4000n) / 10000n); // 60% burned
-    expect(await monshi.balanceOf(treasury.address)).to.equal((bought * 4000n) / 10000n); // 40% treasury
+    // staking unset in this fixture, so its share burns: 40% treasury / 60% burn
+    expect(await monshi.balanceOf(DEAD)).to.equal(bought - (bought * 4000n) / 10000n);
+    expect(await monshi.balanceOf(treasury.address)).to.equal((bought * 4000n) / 10000n);
   });
 });

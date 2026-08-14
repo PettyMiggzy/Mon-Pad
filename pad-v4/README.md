@@ -109,14 +109,21 @@ calls with `-32614`. A dedicated provider lifts it — worth raising for backfil
 `contracts/monshi/` turns platform revenue into permanent MONSHI burns, without touching the swap path.
 
 ```
-platform revenue → PlatformFeeSplitter → 20% → MonshiBuyback → nad.fun DEX → MONSHI ─┬→ 40% treasury
-                                       → 80% → treasury (MON)                        └→ 60% burned
+                                                                                     ┌→ 40% treasury
+platform revenue → PlatformFeeSplitter → 20% → MonshiBuyback → nad.fun DEX → MONSHI ─┼→ 30% MONSHI stakers
+                                       → 80% → treasury (MON)                        └→ 30% burned
 ```
 
-The treasury share of the bought MONSHI is **capped at 50% on-chain** (`MAX_TREASURY_BPS`) and the owner
-cannot raise it past that. "Platform fees buy and burn MONSHI" is a promise to the MONSHI community, and an
-uncapped treasury share would quietly turn the burn into a revenue stream — the cap makes the claim something
-a holder can verify from the contract instead of trust. Rounding dust burns rather than accruing to treasury.
+**Stake MONSHI, earn MONSHI.** The staking leg is what turns a buyback into a *hold* incentive. A burn is
+one-off flow — it spends the money once and the pressure is gone. Rewarding stakers gives holders a standing
+reason to buy and keep MONSHI staked, which removes float instead of just cycling it, and the pool's 10%
+early-exit penalty recycles to whoever stays. At an $11k market cap, removing float matters more than adding
+flow. The pool is the same audited `MonPadLockStaking` every pad gets, pointed at MONSHI.
+
+Treasury + stakers are **jointly capped at 70% on-chain** (`MAX_DIVERTED_BPS`), so **at least 30% of every buy
+burns** and the owner cannot govern that away. "Platform fees buy and burn MONSHI" is a promise to the MONSHI
+community, and a burn that can be set to zero is not one. Rounding dust burns rather than accruing to a
+beneficiary, and if the staking pool is ever unset its share burns rather than stranding.
 
 MONSHI has **already graduated** off the nad.fun bonding curve and trades in a Uniswap-V3-style WMON/MONSHI pool
 (1% fee, tickSpacing 200, factory `0x6B5F…B7F3`), so the DEX router `0x0B79…b137` is the venue — not the bonding

@@ -13,6 +13,17 @@ import {Ownable2Step, Ownable} from "@openzeppelin/contracts/access/Ownable2Step
 ///
 /// The router reverts `InvalidAmountOut()` (0x4e969c58) when amountOutMin is zero, and `InsufficientOutput()`
 /// (0xbb2875c3) when the swap cannot meet it — so slippage is enforced by the venue as well as by us.
+/// @notice The staking pool's funding hook — `MonPadLockStaking.fundTokenPushed`. Permissionless and
+/// idempotent: transfer the tokens in, then call it and the delta is credited as a reward tranche.
+interface IMonshiStakingFund {
+    function fundTokenPushed(uint8 side, address asset) external returns (uint256);
+}
+
+/// @notice Stake-asset probe, so the staking share can only ever be pointed at a MONSHI pool.
+interface IMonshiStakeAssetProbe {
+    function token() external view returns (address);
+}
+
 interface INadDexRouter {
     struct BuyParams {
         uint256 amountOutMin;
@@ -26,16 +37,25 @@ interface INadDexRouter {
 
 /// @title MonshiBuyback — turns MonPad platform revenue into permanent MONSHI buy pressure
 /// @notice Accepts native MON from anywhere (the platform fee splitter, a manual top-up, a donation) and spends
-/// it buying MONSHI on nad.fun's DEX. The bought MONSHI is split in the SAME transaction: `treasuryBps` to the
-/// treasury wallet, the remainder burned to 0x…dEaD.
+/// it buying MONSHI on nad.fun's DEX. The bought MONSHI is split THREE WAYS in the same transaction:
 ///
-/// The treasury share is capped at MAX_TREASURY_BPS (50%) and cannot be raised past it by anyone, including the
-/// owner. That cap is the whole point: "platform fees buy and burn MONSHI" is a promise to the MONSHI community,
-/// and an uncapped treasury share would quietly turn the burn into a platform revenue stream. With the cap, the
-/// majority of every buy provably burns, and a holder can verify it from the contract rather than trust it.
+///   • `treasuryBps`  → the treasury wallet          (default 40%)
+///   • `stakingBps`   → MONSHI stakers, as rewards   (default 30%)
+///   • the remainder  → burned to 0x…dEaD            (default 30%)
 ///
-/// MONSHI is held only for the length of one call. The two exit paths — `buyback` and `sweepStrandedMonshi` —
-/// both settle on the same fixed split, so there is no route by which MONSHI leaves on other terms.
+/// The staking leg is what turns a buyback into a HOLD incentive. A burn is one-off flow — it spends the money
+/// once and the pressure is gone. Rewarding stakers gives holders a standing reason to buy MONSHI and keep it
+/// staked, which removes float rather than just cycling it, and the pool's own early-exit penalty recycles back
+/// to whoever stays. At a small market cap, removing float matters more than adding flow.
+///
+/// Treasury + staking together are capped at MAX_DIVERTED_BPS (70%), so AT LEAST 30% OF EVERY BUY BURNS and the
+/// owner cannot govern that away. "Platform fees buy and burn MONSHI" is a promise to the MONSHI community; a
+/// burn that could be set to zero would not be one. Stakers are not the platform — that leg goes to holders —
+/// but it is capped jointly all the same, because the burn is the part that has to stay credible.
+///
+/// MONSHI is held only for the length of one call. Both exit paths — `buyback` and `sweepStrandedMonshi` —
+/// settle through the same `_split`, so there is no route by which MONSHI leaves on other terms. If the staking
+/// pool is unset, its share burns rather than stranding.
 ///
 /// @dev DESIGN NOTE — why the buy is keeper-gated rather than permissionless.
 ///
@@ -57,18 +77,24 @@ contract MonshiBuyback is Ownable2Step, ReentrancyGuard {
 
     address public constant BURN_ADDRESS = 0x000000000000000000000000000000000000dEaD;
     uint16 public constant BPS = 10000;
-    /// @notice At most half the bought MONSHI may be routed to the treasury — the majority always burns.
-    /// @dev This cap is the point of the contract. "Platform fees buy and burn MONSHI" is a promise made to
-    /// the MONSHI community, and a treasury share that could be raised to 100% would quietly turn the burn into
-    /// a platform revenue stream. Capping it on-chain makes the claim checkable by anyone rather than trusted.
+    /// @notice At most half the bought MONSHI may be routed to the treasury.
     uint16 public constant MAX_TREASURY_BPS = 5000;
+    /// @notice Treasury + stakers together may never exceed 70%, so AT LEAST 30% OF EVERY BUY BURNS.
+    /// @dev This cap is the point of the contract. "Platform fees buy and burn MONSHI" is a promise made to the
+    /// MONSHI community, and shares that could be raised to 100% would quietly turn the burn into a revenue
+    /// stream. Capping on-chain makes the claim checkable by anyone rather than trusted. Note stakers are NOT
+    /// the same as treasury — the staking share goes to holders, not the platform — but it is still capped
+    /// jointly, because a burn that can be governed to zero is not a burn.
+    uint16 public constant MAX_DIVERTED_BPS = 7000;
 
     IERC20 public immutable monshi;
     INadDexRouter public immutable router;
 
     address public keeper;
     address public treasury;
+    address public staking; // MonPadLockStaking over MONSHI — stake MONSHI, earn MONSHI
     uint16 public treasuryBps;
+    uint16 public stakingBps;
     uint256 public maxSpendPerCall;
     uint256 public cooldown;
     uint256 public lastBuyAt;
@@ -76,12 +102,14 @@ contract MonshiBuyback is Ownable2Step, ReentrancyGuard {
     uint256 public totalMonSpent;
     uint256 public totalMonshiBurned;
     uint256 public totalMonshiToTreasury;
+    uint256 public totalMonshiToStakers;
     uint256 public buyCount;
 
     event Funded(address indexed from, uint256 amount);
-    event BoughtAndSplit(address indexed keeper, uint256 monIn, uint256 monshiOut, uint256 burned, uint256 toTreasury);
+    event BoughtAndSplit(address indexed keeper, uint256 monIn, uint256 monshiOut, uint256 burned, uint256 toTreasury, uint256 toStakers);
     event KeeperSet(address indexed keeper);
     event TreasurySet(address indexed treasury, uint16 bps);
+    event StakingSet(address indexed staking, uint16 bps);
     event LimitsSet(uint256 maxSpendPerCall, uint256 cooldown);
 
     error NotKeeper();
@@ -91,6 +119,7 @@ contract MonshiBuyback is Ownable2Step, ReentrancyGuard {
     error BadLimit();
     error BadBps();
     error NoOutput();
+    error StakeAssetMismatch();
 
     modifier onlyKeeper() {
         if (msg.sender != keeper && msg.sender != owner()) revert NotKeeper();
@@ -103,6 +132,7 @@ contract MonshiBuyback is Ownable2Step, ReentrancyGuard {
         address owner_,
         address treasury_,
         uint16 treasuryBps_,
+        uint16 stakingBps_,
         uint256 maxSpendPerCall_,
         uint256 cooldown_
     ) Ownable(owner_) {
@@ -111,10 +141,12 @@ contract MonshiBuyback is Ownable2Step, ReentrancyGuard {
         }
         if (maxSpendPerCall_ == 0) revert BadLimit();
         if (treasuryBps_ > MAX_TREASURY_BPS) revert BadBps();
+        if (uint256(treasuryBps_) + stakingBps_ > MAX_DIVERTED_BPS) revert BadBps();
         monshi = IERC20(monshi_);
         router = INadDexRouter(router_);
         treasury = treasury_;
         treasuryBps = treasuryBps_;
+        stakingBps = stakingBps_;
         maxSpendPerCall = maxSpendPerCall_;
         cooldown = cooldown_;
     }
@@ -158,15 +190,33 @@ contract MonshiBuyback is Ownable2Step, ReentrancyGuard {
         );
         uint256 got = monshi.balanceOf(address(this)) - before;
         if (got == 0) revert NoOutput();
+        (burned, toTreasury) = _split(got, spend);
+    }
 
-        toTreasury = (got * treasuryBps) / BPS;
-        burned = got - toTreasury; // remainder, so dust burns
+    /// @dev Three-way settle: treasury / MONSHI stakers / burn. The burn leg is the REMAINDER, so rounding dust
+    /// burns rather than accruing to a beneficiary, and if the staking pool is unset its share burns too — the
+    /// contract can never hold MONSHI it has no route for.
+    function _split(uint256 amount, uint256 monIn) internal returns (uint256 burned, uint256 toTreasury) {
+        toTreasury = (amount * treasuryBps) / BPS;
+        uint256 toStakers = (amount * stakingBps) / BPS;
+        address sink = staking;
+        if (sink == address(0)) toStakers = 0; // unset ⇒ that share burns instead of stranding
+
+        burned = amount - toTreasury - toStakers; // remainder ⇒ dust burns
         if (toTreasury > 0) monshi.safeTransfer(treasury, toTreasury);
+        if (toStakers > 0) {
+            monshi.safeTransfer(sink, toStakers);
+            // Credit the pushed tokens as a reward tranche. Wrapped: fundTokenPushed is permissionless and
+            // idempotent, so if it reverts the MONSHI is already in the pool and the NEXT push (or anyone's
+            // call) credits it. A misbehaving sink must not brick the buyback.
+            try IMonshiStakingFund(sink).fundTokenPushed(0, address(monshi)) {} catch {}
+        }
         if (burned > 0) monshi.safeTransfer(BURN_ADDRESS, burned);
 
         totalMonshiBurned += burned;
         totalMonshiToTreasury += toTreasury;
-        emit BoughtAndSplit(msg.sender, spend, got, burned, toTreasury);
+        totalMonshiToStakers += toStakers;
+        emit BoughtAndSplit(msg.sender, monIn, amount, burned, toTreasury, toStakers);
     }
 
     /// @notice Split any MONSHI that reached this contract outside a buyback (a stray transfer, or a leftover
@@ -177,19 +227,29 @@ contract MonshiBuyback is Ownable2Step, ReentrancyGuard {
     function sweepStrandedMonshi() external nonReentrant returns (uint256 burned, uint256 toTreasury) {
         uint256 bal = monshi.balanceOf(address(this));
         if (bal == 0) revert NoOutput();
-        toTreasury = (bal * treasuryBps) / BPS;
-        burned = bal - toTreasury;
-        if (toTreasury > 0) monshi.safeTransfer(treasury, toTreasury);
-        if (burned > 0) monshi.safeTransfer(BURN_ADDRESS, burned);
-        totalMonshiBurned += burned;
-        totalMonshiToTreasury += toTreasury;
-        emit BoughtAndSplit(msg.sender, 0, bal, burned, toTreasury);
+        (burned, toTreasury) = _split(bal, 0);
+    }
+
+    /// @notice Point the staking share at a MONSHI staking pool. Repointable (unlike the pad curves' one-shot
+    /// wiring) because this is the platform's own revenue routing, not a per-pad guarantee to a token's holders.
+    /// @dev The pool's stake asset MUST be MONSHI — the same `token()` probe the pad curves use, so the staking
+    /// share can never be pushed into a pool that would silently accept it and credit nothing.
+    function setStaking(address s, uint16 bps) external onlyOwner {
+        if (s != address(0)) {
+            if (s.code.length == 0) revert ZeroAddress();
+            if (IMonshiStakeAssetProbe(s).token() != address(monshi)) revert StakeAssetMismatch();
+        }
+        if (uint256(treasuryBps) + bps > MAX_DIVERTED_BPS) revert BadBps();
+        staking = s;
+        stakingBps = bps;
+        emit StakingSet(s, bps);
     }
 
     /// @notice Where the treasury share goes, and how big it is. Capped at MAX_TREASURY_BPS.
     function setTreasury(address t, uint16 bps) external onlyOwner {
         if (t == address(0)) revert ZeroAddress();
         if (bps > MAX_TREASURY_BPS) revert BadBps();
+        if (uint256(bps) + stakingBps > MAX_DIVERTED_BPS) revert BadBps();
         treasury = t;
         treasuryBps = bps;
         emit TreasurySet(t, bps);
