@@ -146,11 +146,26 @@ Also worth recording: `docs/REFERENCES/nad-fun-v2-api.md` lists a `V2_NAD_FUN_RO
 `0x75588668999cA0557b78046b8a5E86b47b9234ec`. **That address has no code on Monad mainnet.** Use the V3
 `DEX_ROUTER` `0x0B79…b137`.
 
+## Verified against live Monad
+
+`test/fork/CurveGraduation.fork.test.js` runs the whole flow against Monad's real V4 stack — PoolManager
+`0x188d58…ea8e`, PositionManager `0x5b7e…4016`, Permit2, and the canonical StateView `0x7739…9d64`:
+
+launch (hook salt mined, flags `0x00CC` self-asserted, no dev mint) → buy the curve out past the ceiling with
+native MON → hostile MON donation → `graduate()`. Asserts the ceiling nudge lands spot exactly on `gradTick`,
+the permanent LP mints through the **real** PositionManager and lands in `LockVault`, the leftover reserve is
+burned, `floorEthOwed`/`ambushEthOwed` are both zero, and the platform + creator books pay out.
+
+```
+FORK_RPC=https://rpc.monad.xyz FORK_CHAINID=143 npm run test:fork
+→ 1 passing (21s)
+```
+
+This was the one leg the local suite could not cover: the local tests spin up their own PoolManager, which
+proves the hook and curve logic but not the real PositionManager + Permit2 mint path.
+
 ## Not yet done
 
-- **Fork test against the live Monad PoolManager.** Everything here runs against a locally-deployed V4
-  PoolManager (identical source), which is what the Robin suite's A3 gate established as sufficient for the
-  skim idiom. A fork run against `0x188d58…` still needs an RPC before mainnet.
 - **Re-derive the MEV assumptions.** Monad has ~400ms blocks and no global mempool (transactions are forwarded
   to the next few leaders). The Robin suite's sandwich analysis assumes Ethereum-style mempool dynamics. Nothing
   in the *basic* pad is known to depend on it — the add-only vaults where it mattered are the parts not ported —

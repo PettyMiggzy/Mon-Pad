@@ -134,7 +134,14 @@ npm run test:sim     # production-geometry calibration + graduation (burn, conse
 npm run test:all     # everything, including the MONSHI buyback + splitter
 ```
 
-Fork tests against the live Monad PoolManager need an RPC: `FORK_RPC=<monad rpc> npm run test:fork`.
+Fork test against Monad's **live** V4 stack (PoolManager `0x188d58…`, real PositionManager + Permit2):
+
+```bash
+FORK_RPC=https://rpc.monad.xyz FORK_CHAINID=143 npm run test:fork   # 1 passing (21s)
+```
+
+It runs launch → sellout → graduate end to end and asserts the permanent LP mints through the real
+PositionManager into `LockVault`, the leftover reserve burns, and no MON strands in an unwired book.
 
 ## Deploy
 
