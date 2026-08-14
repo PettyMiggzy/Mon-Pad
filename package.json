@@ -7,6 +7,9 @@
     "build": "next build",
     "start": "next start"
   },
+  "engines": {
+    "node": "24.x"
+  },
   "dependencies": {
     "@radix-ui/react-slot": "^1.2.4",
     "@rainbow-me/rainbowkit": "2.1.7",
@@ -33,7 +36,7 @@
     "wagmi": "2.12.20"
   },
   "devDependencies": {
-    "@types/node": "^20.16.13",
+    "@types/node": "^24.10.1",
     "@types/react": "18.3.12",
     "autoprefixer": "^10.5.0",
     "eslint": "8.57.1",
