@@ -539,8 +539,14 @@ contract MonPadCurveV4 is IUnlockCallback, ReentrancyGuard {
     /// setter is a ONE-SHOT with no rescue path, so the sink's stake asset is checked here — the push-then-poke
     /// funding path cannot detect a foreign sink on its own (it transfers first, and `fundTokenPushed` measures
     /// the sink's own balance, so a foreign sink pockets the tokens and returns 0 without reverting).
+    /// @dev [MONAD] The FACTORY may also wire this, and does so during `launch()` so every pad has a staking
+    /// pool from block one. That closes the audited suite's [M-11] footgun: `setStaking` had to be called by
+    /// hand BEFORE `graduate()`, and graduation is permissionless and keeper-driven, so a pad could graduate
+    /// with staking unwired and permanently mis-register its locked-LP fee recipient. Widening the caller set
+    /// is safe — the call is still one-shot, still requires a contract, and still requires the pool's stake
+    /// asset to equal this pad's token, so neither caller can point it at a foreign or malicious sink.
     function setStaking(address s) external {
-        if (msg.sender != feeRegistry.platformFeeWallet()) revert NotPlatform();
+        if (msg.sender != factory && msg.sender != feeRegistry.platformFeeWallet()) revert NotPlatform();
         if (staking != address(0)) revert AlreadySet();
         if (s == address(0) || s.code.length == 0) revert ZeroAddress(); // [LOW-3] must be a contract (the pool)
         if (_probeStakeAsset(s) != token) revert StakingAssetMismatch();
@@ -775,7 +781,12 @@ contract MonPadCurveV4 is IUnlockCallback, ReentrancyGuard {
         IERC20(token).forceApprove(address(permit2), 0);
     }
 
-    /// @dev [MONAD] The basic pad ships with NO staking sink, and the leftover reserve is not a rounding dust —
+    /// @dev [MONAD] The factory wires a `MonPadLockStaking` pool into every pad at launch, so in practice the
+    /// leftover reserve becomes HOLDER REWARDS: stake the coin, earn the coin, dripped out of this reservoir.
+    /// The burn below is the unreachable fallback for a curve deployed outside the factory (or one whose wiring
+    /// was somehow skipped) — it exists so the reserve can never strand, not as the normal path.
+    ///
+    /// The leftover is not rounding dust —
     /// it is structural. The factory's [HIGH-2] check sizes `reserveSupply` on the assumption that the WHOLE raise
     /// seeds the permanent LP, but the waterfall routes only the LP share (~80% after the platform and creator
     /// cuts), so the LP mint cannot consume the reserve it was sized against. At the shipped 730M/270M split that

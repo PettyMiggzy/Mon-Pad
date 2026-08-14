@@ -4,7 +4,7 @@ A free-to-launch bonding curve where **the curve *is* a Uniswap V4 position**, w
 fee hook and a permanently locked graduation LP. Native MON, Monad mainnet (chain 143).
 
 Ported from the audited Robin V4 curve suite. This is the **basic pad**: curve + factory + fee hook + locked LP
-+ governed fee config. No floor vault, no ambush vault, no staking, no presale, no stock adapters.
++ per-pad staking + governed fee config. No floor vault, no ambush vault, no presale, no stock adapters.
 
 ## Why this curve instead of the V3 pad's
 
@@ -56,20 +56,25 @@ Each bucket is capped at 25% by `MonPadV4FeeConfig`.
 Re-derive with `node scripts/calibrate.js` if the target moves; `--verify` checks the formula against the
 audited ETH geometry first.
 
-## The leftover reserve is burned
+## The unsold reserve becomes holder rewards
 
 The factory's reserve check sizes `reserveSupply` on the assumption that the **whole** raise seeds the permanent
 LP, but the waterfall routes only the LP share (65% after the platform and creator cuts). So the LP mint
-structurally cannot consume the reserve it was sized against — **~120M tokens, 12% of supply**, are left on the
-curve at graduation.
+structurally cannot consume the reserve it was sized against — **~120M tokens, 12% of supply**, are left over at
+graduation.
 
-In the full Robin suite that residue is the holder-staking reward. The basic pad has no staking pool, so it is
-**burned to `0x…dEaD`** — permanently out of supply, claimable by nobody including the platform. Shrinking the
-reserve instead is not an option: the check is a hard floor whose job is to stop the LP mint bricking, and going
-under it means editing audited safety logic.
+That residue streams into the pad's own `MonPadLockStaking` pool: **stake the coin, earn the coin.** Rewards
+drip out of a finite reservoir at a bounded Synthetix `rewardRate`, so no whale can drain it in a block, and the
+reservoir is self-filling — it is fed by the graduation leftover, by the locked LP's sell-side fees, and by a
+10% early-exit penalty recycled back to whoever is still staked. Impatience pays the diamond hands.
 
-To route it to holders instead, deploy a staking pool and call `curve.setStaking(pool)` **before** `graduate()`.
-That restores the audited behaviour exactly. It is one-shot and the ordering matters.
+**The factory deploys and wires that pool during `launch()`**, so every pad has staking from block one. That is
+deliberate: `setStaking` is one-shot and had to happen *before* `graduate()`, but graduation is permissionless
+and keeper-driven, so a hand-wired pad could graduate first and permanently register its locked-LP fee recipient
+as `address(0)` — [M-11] in the audited suite. Wiring at launch removes the ordering entirely.
+
+A burn to `0x…dEaD` remains as an unreachable fallback for a curve deployed outside the factory, so the reserve
+can never strand. In normal operation it is never hit.
 
 ## Graduation is automatic
 

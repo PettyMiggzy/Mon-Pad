@@ -15,6 +15,7 @@ import {IStateView} from "@uniswap/v4-periphery/src/interfaces/IStateView.sol";
 
 import {DeterministicDeployer} from "./DeterministicDeployer.sol";
 import {CurveV4Deployer} from "./CurveV4Deployer.sol";
+import {StakingDeployer} from "./StakingDeployer.sol";
 import {LockVault} from "./LockVault.sol";
 import {MonPadV4FeeConfig} from "./MonPadV4FeeConfig.sol";
 import {PadToken} from "../pads/PadToken.sol";
@@ -41,6 +42,14 @@ contract MonPadFactoryV4 {
     address public immutable stateView;
     DeterministicDeployer public immutable deployer;
     CurveV4Deployer public immutable curveDeployer; // offloads MonPadCurveV4 creationCode (24KB limit)
+    StakingDeployer public immutable stakingDeployer; // offloads MonPadLockStaking creationCode
+
+    /// @notice Per-pad staking terms, stamped at launch. 30-day lock, 30-day reward drip — the audited defaults.
+    /// @dev Deliberately constants rather than governed config: they are consumed once at construction and the
+    /// pool is immutable afterwards, so a governed value would only ever affect future launches anyway, and the
+    /// FeeConfig struct is stamped per-pad and would have to grow to carry them.
+    uint256 public constant STAKING_LOCK = 30 days;
+    uint256 public constant STAKING_REWARDS_DURATION = 30 days;
     MonPadV4FeeConfig public immutable feeConfig;
     address public immutable feeRegistry;
     LockVault public immutable lockVault;
@@ -79,6 +88,7 @@ contract MonPadFactoryV4 {
     event CurvePadLaunched(
         uint256 indexed index, address indexed token, address indexed creator, address hook, address curve, PoolId poolId
     );
+    event PadStakingDeployed(uint256 indexed index, address indexed token, address staking);
 
     error HookFlagsMismatch();
     error LockVaultMismatch();
@@ -96,6 +106,7 @@ contract MonPadFactoryV4 {
         address stateView_,
         address deployer_,
         address curveDeployer_,
+        address stakingDeployer_,
         address feeConfig_,
         address feeRegistry_,
         address lockVault_
@@ -106,6 +117,7 @@ contract MonPadFactoryV4 {
         stateView = stateView_;
         deployer = DeterministicDeployer(deployer_);
         curveDeployer = CurveV4Deployer(curveDeployer_);
+        stakingDeployer = StakingDeployer(stakingDeployer_);
         feeConfig = MonPadV4FeeConfig(feeConfig_);
         feeRegistry = feeRegistry_;
         lockVault = LockVault(payable(lockVault_));
@@ -121,7 +133,7 @@ contract MonPadFactoryV4 {
     /// above native(0), always true). `hookSalt` is mined off-chain so the hook carries flags 0x00CC.
     function launch(LaunchConfig calldata cfg, bytes32 tokenSalt, bytes32 hookSalt, bytes32 curveSalt)
         external
-        returns (address token, address hook, address curve, PoolId poolId)
+        returns (address token, address hook, address curve, PoolId poolId, address staking)
     {
         // [M-2] LockVault has ONE registrar slot and three factories can be pointed at it. If this factory is not
         // the registered one, every launch here still succeeds and only graduate() step 5 fails — permanently,
@@ -277,9 +289,21 @@ contract MonPadFactoryV4 {
         // 6) NO remainder: supply == curveSupply + reserveSupply is enforced above, so the factory holds 0 token
         //    now — nothing is minted to the creator (no premine). Any stray dust is left untouched (never sent).
 
+        // 6) deploy this pad's staking pool and wire it NOW, in the launch tx. The unsold reserve left over at
+        //    graduation streams here as holder rewards (stake the coin, earn the coin), and the locked LP's
+        //    sell-side fees route here too. Wiring at launch rather than by hand later is what makes that safe:
+        //    graduate() is permissionless, so a pad wired late could graduate first and register its locked-LP
+        //    fee recipient as address(0) permanently ([M-11] in the audited suite).
+        staking = stakingDeployer.deploy(
+            keccak256(abi.encodePacked(curveSalt, "staking")),
+            abi.encode(token, STAKING_LOCK, STAKING_REWARDS_DURATION)
+        );
+        MonPadCurveV4(payable(curve)).setStaking(staking);
+
         uint256 index = launchCount++;
         launches[index] = Launch({token: token, hook: hook, curve: curve, poolId: poolId});
         emit CurvePadLaunched(index, token, cfg.creator, hook, curve, poolId);
+        emit PadStakingDeployed(index, token, staking);
     }
 
     /// @notice Called by a graduating curve controller to register its permanent locked LP. LockVault accepts

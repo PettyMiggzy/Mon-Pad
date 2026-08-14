@@ -9,10 +9,10 @@ const { mineHookSalt, hookInitCode } = require("../../scripts/mine");
 //
 //   1. CONSERVATION HOLDS WITH THE SINKS ABSENT. Every share that would route to a floor/ambush vault is set to
 //      zero, so no MON accrues into a book that only flushFloor()/flushAmbush() could release. Nothing strands.
-//   2. THE LEFTOVER RESERVE IS BURNED. The factory's [HIGH-2] check sizes reserveSupply as if the WHOLE raise
-//      seeds the LP, but the waterfall routes only the LP share, so the LP mint cannot consume the reserve. With
-//      no staking sink wired that residue would sit on the curve forever; it is sent to 0x…dEaD instead.
-//      At the 20%/15% graduation split the LP takes less MON, so it pairs less token and MORE is burned: ~12%.
+//   2. THE LEFTOVER RESERVE BECOMES HOLDER REWARDS. The factory's [HIGH-2] check sizes reserveSupply as if the
+//      WHOLE raise seeds the LP, but the waterfall routes only the LP share, so the LP mint cannot consume the
+//      reserve. That residue — ~12% of supply at the 20%/15% split — streams into the pad's own staking pool,
+//      which the factory deployed and wired during launch. Stake the coin, earn the coin.
 //   3. THE KEEPER BOUNTY IS SOLVENT ON MONAD. Re-denominated to a 100 MON cap — the ported 0.02 ETH cap would
 //      have been ~0.02 MON (≈$0.0004) against a gas cost of ~0.5 MON, since Monad charges on the tx GAS LIMIT.
 
@@ -33,8 +33,8 @@ function poolIdOf(k) {
   );
 }
 
-describe("SIM — basic-pad graduation (burn the leftover reserve, no floor/ambush/staking)", () => {
-  it("graduates at production geometry: locks the LP, burns the residue, strands nothing, pays the keeper", async () => {
+describe("SIM — basic-pad graduation (leftover reserve → the pad's staking pool)", () => {
+  it("graduates at production geometry: locks the LP, streams the residue to staking, strands nothing, pays the keeper", async () => {
     const [deployer, platform, creator, whale, keeper] = await ethers.getSigners();
     await ethers.provider.send("hardhat_setBalance", [whale.address, "0x" + (10n ** 24n).toString(16)]);
 
@@ -46,6 +46,7 @@ describe("SIM — basic-pad graduation (burn the leftover reserve, no floor/ambu
     const posm = await (await ethers.getContractFactory("MockPositionManagerV4")).deploy(await pm.getAddress(), await permit2.getAddress());
     const lockVault = await (await ethers.getContractFactory("LockVault")).deploy(await posm.getAddress(), await reg.getAddress());
     const curveDep = await (await ethers.getContractFactory("CurveV4Deployer")).deploy(await dep.getAddress());
+    const stakeDep = await (await ethers.getContractFactory("StakingDeployer")).deploy(await dep.getAddress());
     const feeCfg = await (await ethers.getContractFactory("MonPadV4FeeConfig")).deploy(deployer.address, {
       buyTaxBps: 100, sellTaxBps: 100, sellFloorShareBps: 0, buyLpFloorShareBps: 0, buyBufferShareBps: 2000, referralShareBps: 0,
       platformGradBps: 2000, creatorGradBps: 1500, ambushGradBps: 0,
@@ -53,7 +54,7 @@ describe("SIM — basic-pad graduation (burn the leftover reserve, no floor/ambu
     });
     const factory = await (await ethers.getContractFactory("MonPadFactoryV4")).deploy(
       await pm.getAddress(), await posm.getAddress(), await permit2.getAddress(), await stateView.getAddress(),
-      await dep.getAddress(), await curveDep.getAddress(), await feeCfg.getAddress(), await reg.getAddress(), await lockVault.getAddress()
+      await dep.getAddress(), await curveDep.getAddress(), await stakeDep.getAddress(), await feeCfg.getAddress(), await reg.getAddress(), await lockVault.getAddress()
     );
     await lockVault.setFactory(await factory.getAddress());
 
@@ -65,7 +66,7 @@ describe("SIM — basic-pad graduation (burn the leftover reserve, no floor/ambu
     const HookF = await ethers.getContractFactory("MonPadFeeHook");
     const { salt: hookSalt } = mineHookSalt(await dep.getAddress(), hookInitCode(HookF.bytecode, await pm.getAddress(), await factory.getAddress(), await reg.getAddress(), predictedToken));
 
-    const [token, hook, curveAddr] = await factory.launch.staticCall(cfg, tokenSalt, hookSalt, curveSalt);
+    const [token, hook, curveAddr, , stakingAddr] = await factory.launch.staticCall(cfg, tokenSalt, hookSalt, curveSalt);
     await (await factory.launch(cfg, tokenSalt, hookSalt, curveSalt)).wait();
     const key = { currency0: ZERO, currency1: token, fee: FEE, tickSpacing: TS, hooks: hook };
     const poolId = poolIdOf(key);
@@ -101,12 +102,13 @@ describe("SIM — basic-pad graduation (burn the leftover reserve, no floor/ambu
     expect(await ethers.provider.getBalance(curveAddr)).to.equal(0n); // all MON distributed
     expect(await tok.balanceOf(curveAddr)).to.equal(0n);              // all token → LP + burn
 
-    // ── 2. the leftover reserve was burned, not stranded ──
-    const burned = (await tok.balanceOf(DEAD)) - deadBefore;
-    expect(burned).to.be.gt(0n);
-    expect(burned).to.be.lt(reserveOnCurve);           // the LP consumed the rest of the reserve
-    const burnedPct = Number(burned * 10000n / SUPPLY) / 100;
-    expect(burnedPct).to.be.within(9, 16);             // ~12.0% of supply at this geometry + waterfall
+    // ── 2. the leftover reserve reached the pad's staking pool, not the burn address and not the curve ──
+    const staked = await tok.balanceOf(stakingAddr);
+    expect(staked).to.be.gt(0n);
+    expect(staked).to.be.lt(reserveOnCurve);           // the LP consumed the rest of the reserve
+    expect(await tok.balanceOf(DEAD)).to.equal(deadBefore); // burn fallback unreached
+    const stakedPct = Number(staked * 10000n / SUPPLY) / 100;
+    expect(stakedPct).to.be.within(9, 16);             // ~12.0% of supply at this geometry + waterfall
 
     // ── 3. the permanent LP is locked and holds real liquidity ──
     expect(await posm.ownerOf(idBefore)).to.equal(await lockVault.getAddress());
@@ -120,6 +122,6 @@ describe("SIM — basic-pad graduation (burn the leftover reserve, no floor/ambu
     expect(keeperNet).to.equal(E(100));                // the 100 MON cap (0.2% of ~260k would be ~525)
     expect(keeperNet).to.be.gt(gr.gasUsed * gr.gasPrice * 10n); // comfortably covers its own gas
 
-    console.log(`      burned ${(Number(burned) / 1e18 / 1e6).toFixed(1)}M token (${burnedPct.toFixed(2)}% of supply) | keeper +${ethers.formatEther(keeperNet)} MON`);
+    console.log(`      staking rewards ${(Number(staked) / 1e18 / 1e6).toFixed(1)}M token (${stakedPct.toFixed(2)}% of supply) | keeper +${ethers.formatEther(keeperNet)} MON`);
   });
 });

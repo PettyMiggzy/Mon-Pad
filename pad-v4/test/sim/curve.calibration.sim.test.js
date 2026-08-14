@@ -58,6 +58,7 @@ describe("SIM — MonPad production geometry (373k MON raise, ~$3.4k start, ~$33
     const posm = await (await ethers.getContractFactory("MockPositionManagerV4")).deploy(await pm.getAddress(), await permit2.getAddress());
     const lockVault = await (await ethers.getContractFactory("LockVault")).deploy(await posm.getAddress(), await reg.getAddress());
     const curveDep = await (await ethers.getContractFactory("CurveV4Deployer")).deploy(await dep.getAddress());
+    const stakeDep = await (await ethers.getContractFactory("StakingDeployer")).deploy(await dep.getAddress());
     // BASIC PAD: no floor vault, no ambush vault, no staking — so every share that would route to one is ZERO.
     // Leaving them non-zero with no vault wired would accrue MON into books that only flushFloor()/flushAmbush()
     // can release, and both revert while the target is unset.
@@ -68,7 +69,7 @@ describe("SIM — MonPad production geometry (373k MON raise, ~$3.4k start, ~$33
     });
     const factory = await (await ethers.getContractFactory("MonPadFactoryV4")).deploy(
       await pm.getAddress(), await posm.getAddress(), await permit2.getAddress(), await stateView.getAddress(),
-      await dep.getAddress(), await curveDep.getAddress(), await feeCfg.getAddress(), await reg.getAddress(), await lockVault.getAddress()
+      await dep.getAddress(), await curveDep.getAddress(), await stakeDep.getAddress(), await feeCfg.getAddress(), await reg.getAddress(), await lockVault.getAddress()
     );
     await lockVault.setFactory(await factory.getAddress());
 

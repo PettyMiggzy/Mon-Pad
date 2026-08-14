@@ -40,23 +40,34 @@ platform graduation.
 100 MON (≈$2.10) against a ~0.5 MON worst case, still only ~0.03% of a 373k raise. Asserted in
 `test/sim/curve.graduation.sim.test.js`.
 
-### 2. Leftover reserve burned when no staking sink — `MonPadCurveV4._fundStaking`
+### 2. Unsold reserve → the pad's staking pool, wired by the factory at launch
 
-The audited path transfers the leftover to the staking pool, or returns early and parks it on the curve when
-`staking == address(0)`, for a later `flushStaking()`. The basic pad never wires one, so "parks" means
-"stranded forever". It now transfers to `0x…dEaD` and emits `ReserveBurned`.
+The audited path transfers the leftover to a staking pool, or returns early and parks it on the curve when
+`staking == address(0)` for a later `flushStaking()`. Parking means "stranded forever" if nothing is ever wired,
+so two changes: the factory now deploys a `MonPadLockStaking` pool per pad and wires it inside `launch()`, and
+an unreachable burn fallback catches any curve deployed outside the factory.
+
+Wiring at launch also closes **[M-11]** from the audited suite. `setStaking` is one-shot and had to be called by
+hand *before* `graduate()` — but graduation is permissionless and keeper-driven here, so a pad wired late could
+graduate first and permanently register its locked-LP fee recipient as `address(0)`, needing a separate one-shot
+repair on `LockVault`. Doing it in the launch transaction removes the ordering hazard rather than documenting it.
+
+`MonPadCurveV4.setStaking` accordingly accepts the **factory** as well as the platform fee wallet. That widening
+is safe: the call is still one-shot, still requires a contract, and still requires the pool's stake asset to
+equal the pad's token ([M-25]'s `token()`/`tokenAsset()` probe), so neither caller can point a curve at a
+foreign sink. New: `contracts/pads/MonPadLockStaking.sol` (ported) and `contracts/core/StakingDeployer.sol`
+(creationCode offload, mirroring `CurveV4Deployer`).
 
 This is not dust. The factory's `[HIGH-2]` check sizes `reserveSupply` as if the whole raise seeds the LP, but
 the waterfall routes only the LP share, so the mint cannot consume the reserve it was sized against —
 **~120M tokens, 12% of supply** at the shipped 20%/15% graduation split, measured in the graduation sim and
-predicted independently by `scripts/calibrate.js`. (The burn scales with the split: the more MON the platform and
-creator take at graduation, the less the LP can pair, so the more is burned — 8.5% at 10%/10%, 12% at 20%/15%.)
+predicted independently by `scripts/calibrate.js`. (It scales with the split: the more MON the platform and
+creator take at graduation, the less the LP can pair, so the more is left over — 8.5% at 10%/10%, 12% at
+20%/15%.)
 
 Shrinking the reserve is not an alternative: `[HIGH-2]` is a hard floor whose purpose is to stop the LP mint
 bricking with `InsufficientReserve`. Going under it means editing audited safety logic on the path that holds
-the money.
-
-Wiring `curve.setStaking(pool)` before `graduate()` restores the audited behaviour exactly and skips the burn.
+the money. So the leftover is put to work instead of minimised.
 
 ### 3. Floor / ambush shares zeroed — deploy config, not code
 

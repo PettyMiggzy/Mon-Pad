@@ -79,6 +79,7 @@ async function main() {
   const reg = await deploy("FeeWalletRegistry", [platform, deployer.address]);
   const lockVault = await deploy("LockVault", [POSITION_MANAGER, await reg.getAddress()]);
   const curveDeployer = await deploy("CurveV4Deployer", [await dep.getAddress()]);
+  const stakingDeployer = await deploy("StakingDeployer", [await dep.getAddress()]);
   const feeConfig = await deploy("MonPadV4FeeConfig", [deployer.address, DEFAULTS]);
   const factory = await deploy("MonPadFactoryV4", [
     POOL_MANAGER,
@@ -87,6 +88,7 @@ async function main() {
     STATE_VIEW,
     await dep.getAddress(),
     await curveDeployer.getAddress(),
+    await stakingDeployer.getAddress(),
     await feeConfig.getAddress(),
     await reg.getAddress(),
     await lockVault.getAddress(),

@@ -5,7 +5,7 @@ const { mineHookSalt, hookInitCode } = require("../../scripts/mine");
 // FORK — the definitive end-to-end proof against Monad's LIVE Uniswap V4 stack: launch a free single-sided
 // curve pad, buy it OUT (overshooting the ceiling), then graduate — asserting the ceiling nudge lands spot at
 // gradTick, the permanent LOCKED 2-sided LP mints to the LockVault (reserve pairs the raise), the leftover
-// reserve is BURNED (no staking pool in the basic pad), and the fee books are claimable.
+// reserve streams into the pad's staking pool as holder rewards, and the fee books are claimable.
 //
 // This is the one leg the local tests cannot cover: they run against a locally-deployed PoolManager, which
 // proves the hook/curve logic but not the real PositionManager + Permit2 mint path.
@@ -33,7 +33,7 @@ describe("MonPadFactoryV4 — launch → sellout → graduate on live Monad V4 (
     if (!process.env.FORK_RPC) this.skip();
   });
 
-  it("graduates: nudge to ceiling, locked LP to LockVault, leftover reserve burned, books claimable", async () => {
+  it("graduates: nudge to ceiling, locked LP to LockVault, leftover reserve → staking, books claimable", async () => {
     const [deployer, platform, creator, trader] = await ethers.getSigners();
     await ethers.provider.send("hardhat_setBalance", [trader.address, "0x" + (10n ** 24n).toString(16)]);
 
@@ -42,13 +42,14 @@ describe("MonPadFactoryV4 — launch → sellout → graduate on live Monad V4 (
     const reg = await (await ethers.getContractFactory("FeeWalletRegistry")).deploy(platform.address, deployer.address);
     const lockVault = await (await ethers.getContractFactory("LockVault")).deploy(POSITION_MANAGER, await reg.getAddress());
     const curveDep = await (await ethers.getContractFactory("CurveV4Deployer")).deploy(await dep.getAddress());
+    const stakeDep = await (await ethers.getContractFactory("StakingDeployer")).deploy(await dep.getAddress());
     const stateView = await ethers.getContractAt("IStateView", STATE_VIEW);
 
     // Toy geometry: this test proves the LIVE V4 integration (real PositionManager mint + Permit2 + the
     // graduation unlock), not the economics — production geometry is measured on-chain against a local
     // PoolManager in test/sim/curve.calibration.sim.test.js. Small numbers keep the fork run fast.
     const START = 6000, GRAD = 3000, SPACING = 60, FEE = 3000;
-    // BASIC PAD: no floor vault, no ambush vault, no staking ⇒ every share routing to one is ZERO.
+    // BASIC PAD: no floor vault, no ambush vault ⇒ their shares are ZERO. Staking IS wired, by the factory.
     const feeCfg = await (await ethers.getContractFactory("MonPadV4FeeConfig")).deploy(deployer.address, {
       buyTaxBps: 100, sellTaxBps: 100, sellFloorShareBps: 0, buyLpFloorShareBps: 0, buyBufferShareBps: 2000, referralShareBps: 0,
       platformGradBps: 2000, creatorGradBps: 1500, ambushGradBps: 0,
@@ -57,7 +58,7 @@ describe("MonPadFactoryV4 — launch → sellout → graduate on live Monad V4 (
 
     const factory = await (await ethers.getContractFactory("MonPadFactoryV4")).deploy(
       POOL_MANAGER, POSITION_MANAGER, PERMIT2, STATE_VIEW,
-      await dep.getAddress(), await curveDep.getAddress(), await feeCfg.getAddress(),
+      await dep.getAddress(), await curveDep.getAddress(), await stakeDep.getAddress(), await feeCfg.getAddress(),
       await reg.getAddress(), await lockVault.getAddress()
     );
     await lockVault.setFactory(await factory.getAddress());
@@ -84,7 +85,7 @@ describe("MonPadFactoryV4 — launch → sellout → graduate on live Monad V4 (
     // ── launch ──
     const ret = await factory.launch.staticCall(cfg, tokenSalt, hookSalt, curveSalt);
     await (await factory.launch(cfg, tokenSalt, hookSalt, curveSalt)).wait();
-    const [token, hook, curveAddr] = ret;
+    const [token, hook, curveAddr, , stakingAddr] = ret;
     expect(token).to.equal(predictedToken);
     expect(BigInt(hook) & FLAG_MASK).to.equal(HOOK_FLAGS);
 
@@ -110,7 +111,6 @@ describe("MonPadFactoryV4 — launch → sellout → graduate on live Monad V4 (
     // ── graduate (permissionless; the keeper bounty comes out of the curve's own MON) ──
     const posm = await ethers.getContractAt("IPositionManagerMinimal", POSITION_MANAGER);
     const idBefore = await posm.nextTokenId();
-    const deadBefore = await tok.balanceOf(DEAD);
     await (await curve.graduate()).wait();
 
     expect(await curve.graduated()).to.equal(true);
@@ -118,8 +118,11 @@ describe("MonPadFactoryV4 — launch → sellout → graduate on live Monad V4 (
     expect(await posm.ownerOf(idBefore)).to.equal(await lockVault.getAddress());
     // spot was nudged back to the honest ceiling before seeding
     expect((await stateView.getSlot0(await factory.poolOf(token)))[1]).to.equal(GRAD);
-    // [MONAD] no staking pool wired ⇒ the leftover reserve is BURNED, not stranded on the curve
-    expect((await tok.balanceOf(DEAD)) - deadBefore).to.be.gt(0n);
+    // [MONAD] the factory wired a staking pool at launch ⇒ the leftover reserve streams there as holder rewards
+    expect(stakingAddr).to.not.equal(ZERO);
+    expect(await curve.staking()).to.equal(stakingAddr);
+    expect(await tok.balanceOf(stakingAddr)).to.be.gt(0n);
+    expect(await tok.balanceOf(DEAD)).to.equal(0n); // the burn fallback stays unreached
     expect(await tok.balanceOf(curveAddr)).to.equal(0n);
     // no floor/ambush wired and their shares are 0 ⇒ nothing accrues into an unreachable book
     expect(await curve.floorEthOwed()).to.equal(0n);
