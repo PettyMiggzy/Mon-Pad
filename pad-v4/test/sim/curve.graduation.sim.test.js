@@ -12,6 +12,7 @@ const { mineHookSalt, hookInitCode } = require("../../scripts/mine");
 //   2. THE LEFTOVER RESERVE IS BURNED. The factory's [HIGH-2] check sizes reserveSupply as if the WHOLE raise
 //      seeds the LP, but the waterfall routes only the LP share, so the LP mint cannot consume the reserve. With
 //      no staking sink wired that residue would sit on the curve forever; it is sent to 0x…dEaD instead.
+//      At the 20%/15% graduation split the LP takes less MON, so it pairs less token and MORE is burned: ~12%.
 //   3. THE KEEPER BOUNTY IS SOLVENT ON MONAD. Re-denominated to a 100 MON cap — the ported 0.02 ETH cap would
 //      have been ~0.02 MON (≈$0.0004) against a gas cost of ~0.5 MON, since Monad charges on the tx GAS LIMIT.
 
@@ -21,7 +22,7 @@ const abi = ethers.AbiCoder.defaultAbiCoder();
 const E = (x) => ethers.parseEther(String(x));
 const ONE = 10n ** 18n;
 
-const START = 90900, WIDTH = 23000, GRAD = START - WIDTH, TS = 100, FEE = 10000, MINGRAD = 22800;
+const START = 87300, WIDTH = 23000, GRAD = START - WIDTH, TS = 100, FEE = 10000, MINGRAD = 22800;
 const SUPPLY = 1_000_000_000n * ONE;
 const CURVE = 730_000_000n * ONE;
 const RESERVE = 270_000_000n * ONE;
@@ -47,7 +48,7 @@ describe("SIM — basic-pad graduation (burn the leftover reserve, no floor/ambu
     const curveDep = await (await ethers.getContractFactory("CurveV4Deployer")).deploy(await dep.getAddress());
     const feeCfg = await (await ethers.getContractFactory("MonPadV4FeeConfig")).deploy(deployer.address, {
       buyTaxBps: 100, sellTaxBps: 100, sellFloorShareBps: 0, buyLpFloorShareBps: 0, buyBufferShareBps: 2000, referralShareBps: 0,
-      platformGradBps: 1000, creatorGradBps: 1000, ambushGradBps: 0,
+      platformGradBps: 2000, creatorGradBps: 1500, ambushGradBps: 0,
       lpFee: FEE, startTickMag: START, curveWidth: WIDTH, minGradWidth: MINGRAD,
     });
     const factory = await (await ethers.getContractFactory("MonPadFactoryV4")).deploy(
@@ -76,8 +77,8 @@ describe("SIM — basic-pad graduation (burn the leftover reserve, no floor/ambu
     // ── buy the curve out to the ceiling ──
     const gradSqrt = await th.sqrt(GRAD);
     await (await sw.connect(whale).swap(
-      key, { zeroForOne: true, amountSpecified: -E(280_000), sqrtPriceLimitX96: gradSqrt },
-      { takeClaims: false, settleUsingBurn: false }, "0x", { value: E(280_000) }
+      key, { zeroForOne: true, amountSpecified: -E(400_000), sqrtPriceLimitX96: gradSqrt },
+      { takeClaims: false, settleUsingBurn: false }, "0x", { value: E(400_000) }
     )).wait();
     expect(await curve.ready()).to.equal(true);
 
@@ -105,7 +106,7 @@ describe("SIM — basic-pad graduation (burn the leftover reserve, no floor/ambu
     expect(burned).to.be.gt(0n);
     expect(burned).to.be.lt(reserveOnCurve);           // the LP consumed the rest of the reserve
     const burnedPct = Number(burned * 10000n / SUPPLY) / 100;
-    expect(burnedPct).to.be.within(5, 12);             // ~8.5% of supply at this geometry + waterfall
+    expect(burnedPct).to.be.within(9, 16);             // ~12.0% of supply at this geometry + waterfall
 
     // ── 3. the permanent LP is locked and holds real liquidity ──
     expect(await posm.ownerOf(idBefore)).to.equal(await lockVault.getAddress());

@@ -33,10 +33,9 @@ const STATE_VIEW = process.env.STATE_VIEW || "0x77395f3b2e73ae90843717371294fa97
 
 // Governed DEFAULT launch params (stamped IMMUTABLY per-pad at launch; retunable for FUTURE launches only).
 //
-// Geometry targets a ~260,000 MON graduation — deliberately the same line as the live MonPad V3 pad — over a
-// ~10x chart. Derived from  raise = curveSupply / 1.0001^((startTick+gradTick)/2)  and proven end-to-end in
+// Geometry targets a ~$34k graduation FDV — a ~373,000 MON raise at $0.021/MON — over a ~10x chart. Derived from  raise = curveSupply / 1.0001^((startTick+gradTick)/2)  and proven end-to-end in
 // test/sim/curve.calibration.sim.test.js. Re-derive with `node scripts/calibrate.js` if the target moves.
-// Magnitudes are tick-spacing-aligned for ts=100 (90900/100, 23000/100, 22800/100 are integers) — launches
+// Magnitudes are tick-spacing-aligned for ts=100 (87300/100, 23000/100, 22800/100 are integers) — launches
 // must pass tickSpacing=100.
 //
 // BASIC PAD: this configuration ships with no floor vault, no ambush vault and no staking pool, so every share
@@ -50,11 +49,11 @@ const DEFAULTS = {
   buyLpFloorShareBps: Number(process.env.BUY_LP_FLOOR_SHARE_BPS || 0), // NO floor vault ⇒ 0
   buyBufferShareBps: Number(process.env.BUY_BUFFER_SHARE_BPS || 2000), // 20% of the buy tax → curve buffer → platform @ grad
   referralShareBps: Number(process.env.REFERRAL_SHARE_BPS || 2500), // 25% of the platform buy cut → referrer
-  platformGradBps: Number(process.env.PLATFORM_GRAD_BPS || 1000), // 10% of the raise → platform at graduation
-  creatorGradBps: Number(process.env.CREATOR_GRAD_BPS || 1000), // 10% of the raise → creator at graduation
-  ambushGradBps: Number(process.env.AMBUSH_GRAD_BPS || 0), // NO ambush vault ⇒ 0 (LP takes the 80% remainder)
+  platformGradBps: Number(process.env.PLATFORM_GRAD_BPS || 2000), // 20% of the raise → platform at graduation
+  creatorGradBps: Number(process.env.CREATOR_GRAD_BPS || 1500), // 15% of the raise → creator at graduation
+  ambushGradBps: Number(process.env.AMBUSH_GRAD_BPS || 0), // NO ambush vault ⇒ 0 (LP takes the 65% remainder)
   lpFee: Number(process.env.LP_FEE || 10000), // 1% static pool LP fee
-  startTickMag: Number(process.env.START_TICK_MAG || 90900), // curve top — calibrated for MON, not ETH
+  startTickMag: Number(process.env.START_TICK_MAG || 87300), // curve top — calibrated for MON, not ETH
   curveWidth: Number(process.env.CURVE_WIDTH || 23000), // start → graduation ceiling span (~10x chart)
   minGradWidth: Number(process.env.MIN_GRAD_WIDTH || 22800), // informational min-grad marker (< curveWidth)
 };
@@ -122,7 +121,7 @@ async function main() {
   console.log("  1. transfer FeeWalletRegistry + MonPadV4FeeConfig ownership to the platform multisig (Ownable2Step)");
   console.log("  2. verify on monadscan (npx hardhat verify --network monad <addr> <args>)");
   console.log("  3. point the app/indexer at contracts.curveFactory and watch CurvePadLaunched from curveFactoryBlock");
-  console.log("\n  NOTE: the basic pad wires no staking pool, so at graduation the leftover reserve (~8.5% of supply)");
+  console.log("\n  NOTE: the basic pad wires no staking pool, so at graduation the leftover reserve (~12% of supply)");
   console.log("  is BURNED to 0x…dEaD. To route it to holders instead, deploy a staking pool and call");
   console.log("  curve.setStaking(pool) BEFORE graduate() — it is one-shot and ordering matters.");
 }

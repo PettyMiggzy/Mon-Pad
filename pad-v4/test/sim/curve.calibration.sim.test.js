@@ -4,11 +4,12 @@ const { mineHookSalt, hookInitCode } = require("../../scripts/mine");
 
 // SIM — CALIBRATION at the real MonPad production geometry, proven against the actual V4 curve impl.
 //
-//   START_TICK 90900, CURVE_WIDTH 23000 (≈10x), ts=100, 1B supply @ 73% curve / 27% reserve
-//   → ~260,000 MON raised, start FDV ~$2.4k, graduate FDV ~$23.6k, 10x chart.
+//   START_TICK 87300, CURVE_WIDTH 23000 (≈10x), ts=100, 1B supply @ 73% curve / 27% reserve
+//   → ~373,000 MON raised, start FDV ~$3.4k, graduate FDV ~$33.9k, 10x chart.
 //
-// The 260,000 MON graduation target is deliberately the SAME as the live MonPad V3 pad, so the V4 pad is the
-// same product with a better curve rather than a differently-priced one.
+// Targets a ~$34k graduation FDV. At $0.021/MON that is a ~373,000 MON raise, which funds a 20%/15%
+// platform/creator split at graduation (~$1,566 / ~$1,174) while still leaving ~$5.1k of MON in the permanent
+// locked LP. Raising the target further trades post-graduation liquidity for launch-day payout.
 //
 // Geometry is derived from the closed form for a single-sided currency1 range that is bought from its upper
 // bound down to its lower bound:
@@ -26,7 +27,7 @@ const abi = ethers.AbiCoder.defaultAbiCoder();
 const E = (x) => ethers.parseEther(String(x));
 const ONE = 10n ** 18n;
 
-const START = 90900, WIDTH = 23000, GRAD = START - WIDTH, TS = 100, FEE = 10000, MINGRAD = 22800;
+const START = 87300, WIDTH = 23000, GRAD = START - WIDTH, TS = 100, FEE = 10000, MINGRAD = 22800;
 const SUPPLY = 1_000_000_000n * ONE;
 const CURVE = 730_000_000n * ONE;   // 73% sold on the curve
 const RESERVE = 270_000_000n * ONE; // 27% held back (pairs the permanent LP; the residue is burned at graduation)
@@ -43,10 +44,10 @@ function poolIdOf(k) {
   );
 }
 
-describe("SIM — MonPad production geometry (260k MON raise, ~$2.4k start, ~$23.6k graduate, 10x)", () => {
+describe("SIM — MonPad production geometry (373k MON raise, ~$3.4k start, ~$33.9k graduate, 10x)", () => {
   it("launches at the MonPad geometry and reproduces the headline raise + market caps on the V4 curve", async () => {
     const [deployer, platform, creator, whale] = await ethers.getSigners();
-    // the raise alone is ~260k MON, well past hardhat's default 10k account balance
+    // the raise alone is ~373k MON, well past hardhat's default 10k account balance
     await ethers.provider.send("hardhat_setBalance", [whale.address, "0x" + (10n ** 24n).toString(16)]);
 
     const pm = await (await ethers.getContractFactory("PoolManager")).deploy(deployer.address);
@@ -62,7 +63,7 @@ describe("SIM — MonPad production geometry (260k MON raise, ~$2.4k start, ~$23
     // can release, and both revert while the target is unset.
     const feeCfg = await (await ethers.getContractFactory("MonPadV4FeeConfig")).deploy(deployer.address, {
       buyTaxBps: 100, sellTaxBps: 100, sellFloorShareBps: 0, buyLpFloorShareBps: 0, buyBufferShareBps: 2000, referralShareBps: 0,
-      platformGradBps: 1000, creatorGradBps: 1000, ambushGradBps: 0,
+      platformGradBps: 2000, creatorGradBps: 1500, ambushGradBps: 0,
       lpFee: FEE, startTickMag: START, curveWidth: WIDTH, minGradWidth: MINGRAD,
     });
     const factory = await (await ethers.getContractFactory("MonPadFactoryV4")).deploy(
@@ -94,13 +95,13 @@ describe("SIM — MonPad production geometry (260k MON raise, ~$2.4k start, ~$23
     const startMc = mcUsd(startTick);
 
     // ── buy the curve OUT, capping EXACTLY at the graduation price (gradSqrt) so spot lands on the ceiling ──
-    // Sized a modest margin above the ~260k MON principal: the buy tax is a fee-on-INPUT computed on the
+    // Sized a modest margin above the ~373k MON principal: the buy tax is a fee-on-INPUT computed on the
     // REQUESTED amount, so a wildly oversized request would over-tax the whale on MON that never swaps.
     const gradSqrt = await th.sqrt(GRAD);
     const wBefore = await ethers.provider.getBalance(whale.address);
     const rc = await (await sw.connect(whale).swap(
-      key, { zeroForOne: true, amountSpecified: -E(280_000), sqrtPriceLimitX96: gradSqrt },
-      { takeClaims: false, settleUsingBurn: false }, "0x", { value: E(280_000) }
+      key, { zeroForOne: true, amountSpecified: -E(400_000), sqrtPriceLimitX96: gradSqrt },
+      { takeClaims: false, settleUsingBurn: false }, "0x", { value: E(400_000) }
     )).wait();
     const spent = wBefore - await ethers.provider.getBalance(whale.address) - rc.gasUsed * rc.gasPrice;
     // the RAISE = the pool PRINCIPAL (what graduation distributes) = whale spend − the buy tax (which is money the
@@ -120,9 +121,9 @@ describe("SIM — MonPad production geometry (260k MON raise, ~$2.4k start, ~$23
     console.log(`      start FDV ~$${Math.round(startMc).toLocaleString()} | grad FDV ~$${Math.round(gradMc).toLocaleString()} | raise ${Math.round(raiseMon).toLocaleString()} MON ($${Math.round(raiseMon * MON_USD).toLocaleString()}) | ${multiple.toFixed(1)}x`);
 
     // ── assertions: the headline economics hold on the real V4 curve ──
-    expect(raiseMon).to.be.within(240_000, 280_000);  // target ~260,000 MON — the V3 pad's graduation line
+    expect(raiseMon).to.be.within(340_000, 410_000);  // target ~373,000 MON (~$7.8k)
     expect(multiple).to.be.within(9, 11);             // ~10x chart (geometry-fixed, MON-price-independent)
-    expect(startMc).to.be.within(1_900, 3_000);       // target ~$2.4k at $0.021/MON
-    expect(gradMc).to.be.within(19_000, 30_000);      // target ~$23.6k at $0.021/MON
+    expect(startMc).to.be.within(2_800, 4_200);       // target ~$3.4k at $0.021/MON
+    expect(gradMc).to.be.within(28_000, 42_000);      // target ~$33.9k at $0.021/MON
   });
 });

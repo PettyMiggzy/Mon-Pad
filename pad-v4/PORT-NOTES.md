@@ -37,7 +37,7 @@ transaction's gas limit, not gas used**, so a keeper submitting `graduate()` wit
 rational keeper would ever call `graduate()` and every pad would stall at the ceiling awaiting a manual
 platform graduation.
 
-100 MON (≈$2.10) against a ~0.5 MON worst case, still only ~0.04% of a 260k raise. Asserted in
+100 MON (≈$2.10) against a ~0.5 MON worst case, still only ~0.03% of a 373k raise. Asserted in
 `test/sim/curve.graduation.sim.test.js`.
 
 ### 2. Leftover reserve burned when no staking sink — `MonPadCurveV4._fundStaking`
@@ -48,8 +48,9 @@ The audited path transfers the leftover to the staking pool, or returns early an
 
 This is not dust. The factory's `[HIGH-2]` check sizes `reserveSupply` as if the whole raise seeds the LP, but
 the waterfall routes only the LP share, so the mint cannot consume the reserve it was sized against —
-**~85M tokens, 8.5% of supply**, measured in the graduation sim and predicted independently by
-`scripts/calibrate.js`.
+**~120M tokens, 12% of supply** at the shipped 20%/15% graduation split, measured in the graduation sim and
+predicted independently by `scripts/calibrate.js`. (The burn scales with the split: the more MON the platform and
+creator take at graduation, the less the LP can pair, so the more is burned — 8.5% at 10%/10%, 12% at 20%/15%.)
 
 Shrinking the reserve is not an alternative: `[HIGH-2]` is a hard floor whose purpose is to stop the LP mint
 bricking with `InsufficientReserve`. Going under it means editing audited safety logic on the path that holds
@@ -76,11 +77,11 @@ With the floor gone the sell tax has no carve, so the **full 1% goes to the crea
 
 ### 4. Geometry recalibrated for MON
 
-`startTickMag 201600 → 90900`. `curveWidth` unchanged at 23000.
+`startTickMag 201600 → 87300`. `curveWidth` unchanged at 23000. Graduation split `10%/10% → 20%/15%`.
 
 Robin's geometry is calibrated against a ~$3,000 quote asset. MON is ~$0.021, so ported verbatim the pad would
-have raised ~4 MON (≈$0.09). Recalibrated to a **260,000 MON** graduation — deliberately the same line as the
-live MonPad V3 pad, so the V4 pad is the same product with a better curve rather than a differently-priced one.
+have raised ~4 MON (≈$0.09). Recalibrated to a **~$34k graduation FDV** (~373,000 MON at $0.021/MON), matching the
+audited suite's USD targets rather than its ETH numbers.
 
 Derived from the closed form for a single-sided currency1 range bought from its upper bound to its lower bound:
 
@@ -93,8 +94,8 @@ independent, so this solves directly rather than by search. The formula reproduc
 measured ~4.1 ETH raise from START 201600 / WIDTH 23000 (`node scripts/calibrate.js --verify`), which is what
 validates it before it is trusted on new numbers.
 
-Measured on-chain against a real V4 PoolManager in `test/sim/curve.calibration.sim.test.js`: **262,762 MON**,
-10.0× chart, start FDV $2,370, graduation FDV $23,632.
+Measured on-chain against a real V4 PoolManager in `test/sim/curve.calibration.sim.test.js`: **376,617 MON**,
+10.0× chart, start FDV $3,396, graduation FDV $33,872.
 
 ### 5. Toolchain and chain plumbing
 
@@ -109,6 +110,26 @@ Measured on-chain against a real V4 PoolManager in `test/sim/curve.calibration.s
 - **Compiler unchanged** — solc 0.8.26, viaIR, optimizer runs 1, evmVersion cancun. Monad supports every
   Ethereum opcode including EIP-1153 transient storage, which the live V4 PoolManager already depends on.
 
+### 6. MONSHI buy pressure — new, additive, touches nothing audited
+
+`contracts/monshi/MonshiBuyback.sol` + `PlatformFeeSplitter.sol`. Neither is in the money path of the curve,
+hook or factory: the splitter is simply installed as `FeeWalletRegistry.platformFeeWallet`, so it sees only
+platform revenue that had already been paid out. No audited contract changed to support this.
+
+Two facts that shaped the design, both verified live rather than assumed:
+
+- **MONSHI has graduated off the nad.fun bonding curve.** It trades in a Uniswap-V3-style WMON/MONSHI pool
+  (`fee()` 10000, `tickSpacing()` 200, `factory()` = nad.fun's `0x6B5F…B7F3`). So the DEX router is the venue,
+  not the bonding-curve router. The router's `buy` is payable, takes native MON, and accepts an arbitrary `to` —
+  simulated live at 1 MON → 1,870 MONSHI delivered to `0x…dEaD`.
+- **The pool absorbs far more than its reported TVL suggests.** DexScreener shows ~$6.7k liquidity and ~$3/day
+  volume, which reads as unusably thin. Simulated against the live pool, a 1,000 MON buy moves the price only
+  ~2.0% and 2,500 MON ~2.6%. `maxSpendPerCall` is set to 1,000 MON on that basis.
+
+Also worth recording: `docs/REFERENCES/nad-fun-v2-api.md` lists a `V2_NAD_FUN_ROUTER` at
+`0x75588668999cA0557b78046b8a5E86b47b9234ec`. **That address has no code on Monad mainnet.** Use the V3
+`DEX_ROUTER` `0x0B79…b137`.
+
 ## Not yet done
 
 - **Fork test against the live Monad PoolManager.** Everything here runs against a locally-deployed V4
@@ -118,6 +139,9 @@ Measured on-chain against a real V4 PoolManager in `test/sim/curve.calibration.s
   to the next few leaders). The Robin suite's sandwich analysis assumes Ethereum-style mempool dynamics. Nothing
   in the *basic* pad is known to depend on it — the add-only vaults where it mattered are the parts not ported —
   but it should be re-derived before a floor vault is ever added here.
+- **A live buyback.** `MonshiBuyback` is unit-tested against a mock router that reproduces the live contract's
+  observed behaviour (payable `buy`, `InvalidAmountOut()` on a zero bound, `InsufficientOutput()` on an
+  unmeetable one). The real call has been simulated via `eth_call` but never sent.
 - **Optimizer runs.** Monad's contract size limit is 128 KB vs Ethereum's 24 KB, so `runs: 1` is no longer
   forced by size pressure and could be raised to cut per-swap gas. Left at 1 so deployed bytecode matches what
   was audited.
