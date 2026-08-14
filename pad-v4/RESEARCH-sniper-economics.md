@@ -240,3 +240,70 @@ percentages fall accordingly.
 Width 86250 reverted `BadGeometry()` in the first sweep. That was an error in choosing the value, not a
 contract limit: `gradTick = startTick − width`, so **width must be a multiple of tickSpacing (100)** or the
 graduation tick lands unaligned. 86250 is not; 86000 is, and launches fine.
+
+---
+
+# 9. The $100 dev first-buy — paper vs real
+
+`test/sim/devbuy.sweep.sim.test.js`. The dev puts **$100** in as the very first buy on their own launch, the
+curve fills to the graduation ceiling, and the dev exits. Same ~373,000 MON (~$7,833) raise in every row.
+
+*PAPER* = the bag marked at the graduation price — what a chart screenshot shows.
+*REAL* = what the dev actually receives selling back into the curve, including their own slippage and fees.
+
+```
+  width  dev supply   PAPER x     PAPER $   REAL x    REAL $   % of raise
+  23000       2.81%      9.5x        $952    8.62x      $862       11.0%
+  34500       4.83%     29.2x      $2,919   21.98x    $2,198       28.1%
+  46000       8.19%     87.6x      $8,765   43.01x    $4,301       54.9%
+  57500      13.34%    254.8x     $25,481   62.05x    $6,205       79.2%
+  69000      20.83%    703.7x     $70,369   71.73x    $7,173       91.6%
+  86000      35.26%   2786.5x    $278,658   76.38x    $7,638       97.5%
+ 115000      58.35%  19658.4x  $1,965,877   77.45x    $7,745       98.9%
+```
+
+## Answer: the highest real gain is ~77x, and it stops there
+
+Going from width 46000 to 115000 multiplies the **paper** return by 224x (87.6x → 19,658x) and the **real**
+return by less than two (43x → 77x). Real gain asymptotes around **77x / $7,745**.
+
+## Why it caps — and what the cap actually is
+
+The dev's exit is bounded by the MON that entered the curve, not by the price multiple. The total raise is
+$7,833. At width 115000 the dev realises **$7,745 — 98.9% of it.**
+
+That is the finding. Beyond a certain width the geometry alone lets a **$100 first buy take essentially the
+entire raise**, with no malicious code, no hidden mint, no privileged function. Just a curve steep enough that
+the first buyer owns the supply everyone else then pays for.
+
+The paper/real gap is the tell:
+
+| width | paper | real | dev keeps |
+|---:|---:|---:|---:|
+| 23000 | 9.5x | 8.62x | 91% of paper |
+| 46000 | 87.6x | 43x | 49% |
+| 115000 | **19,658x** | **77x** | **0.4%** |
+
+At width 115000 the chart shows $1.97M and $7,745 comes out. The dev's own exit *is* the dump — they hold 58%
+of supply, so selling it collapses the price against them.
+
+## This changes the width recommendation
+
+§8 concluded width 46000 was the sweet spot on the grounds that a single opening buy takes only 8.6% of supply.
+That framing missed the money. At width 46000 a **$100** first buy extracts **54.9% of the entire raise**.
+
+Supply share understated it because the dev's tokens are the *cheapest* in the whole distribution — 8.19% of
+supply bought at the very bottom is worth vastly more than 8.19% of the raise.
+
+Read as "what fraction of everyone else's money can the first $100 take":
+
+| width | dev takes |
+|---:|---:|
+| 23000 | 11.0% |
+| 34500 | 28.1% |
+| 46000 | 54.9% |
+| 57500+ | 79–99% |
+
+Only **width 23000 — the current geometry** — keeps first-buyer extraction near a tenth of the raise. Every
+step toward the Robinhood-style chart hands the first buyer a proportionally larger share of everyone who
+follows. That is not a side effect of the steep curve; measured across seven widths, it *is* the steep curve.
