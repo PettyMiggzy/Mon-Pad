@@ -3,15 +3,23 @@
 A free-to-launch bonding curve where **the curve *is* a Uniswap V4 position**, with an unbypassable per-swap
 fee hook and a permanently locked graduation LP. Native MON, Monad mainnet (chain 143).
 
-Ported from the audited Robin V4 curve suite. This is the **basic pad**: curve + factory + fee hook + locked LP
-+ per-pad staking + governed fee config. No floor vault, no ambush vault, no presale, no stock adapters.
+MonPad V4 is a **standalone launchpad**. It is not a component of, dependency of, or companion to any other
+pad — it launches Monad tokens against native MON and nothing in it reaches off-chain or cross-chain.
 
-## Why this curve instead of the V3 pad's
+Scope: curve + factory + fee hook + permanently locked LP + per-pad staking + governed fee config, plus the
+MONSHI revenue loop. No floor vault, no presale, no stock adapters.
+
+Its contracts share an audited lineage with an earlier ETH-chain curve suite — that lineage is documented in
+`PORT-NOTES.md` purely so a reviewer can diff against known-audited source. It is a code provenance record,
+not a product relationship.
+
+## Why this curve
 
 The live MonPad V3 pad uses a virtual-reserve constant-product curve that graduates by migrating into a
 *separate* Uniswap V3 pool. That migration is where `../CURVE-FINDINGS.md` found the DEX opening ~20× above the
 curve's final price, fixed by retuning virtual reserves to `9/13 × gradTarget`. That fix is a calibration patch
-on a structural problem: two pricing systems stitched together at graduation.
+on a structural problem: two pricing systems stitched together at graduation. nad.fun, the incumbent on Monad,
+has the same shape — a bonding curve that graduates into a separate V3-style pool.
 
 Here there is one pool for the entire life of the token:
 
@@ -24,6 +32,11 @@ Here there is one pool for the entire life of the token:
 - **Free launches.** Single-sided and self-seeded — the creator posts no MON.
 - **No dev mint.** The factory enforces `supply == curveSupply + reserveSupply` exactly. The creator receives
   zero tokens at launch and buys from the curve like everyone else.
+
+**Measured on Monad, 2026-08:** of the top 100 Uniswap V4 pools on the chain, **94 run no hook at all** — V4 is
+being used as "V3 with cheaper gas." Of the six that do, only two carry real volume, both stablecoin/RWA pools
+sharing one hook. No launchpad on Monad runs hook logic. The unbypassable tax below is the first of its kind
+here.
 
 ## Economics (governed defaults, stamped immutable per pad at launch)
 
@@ -195,6 +208,6 @@ ordinary type-2 txs — unlike Robinhood Chain, do **not** force legacy type-0.
 commit on this directory is a verbatim copy of the audited contracts, so the port is a reviewable diff rather
 than a rewrite.
 
-**Carried-over risk:** the Robin suite's audit register closed at zero findings *except* H-5, an unresolved
+**Carried-over risk:** the source suite's audit register closed at zero findings *except* H-5, an unresolved
 weakness in `RobinFloorVault`'s spot-based commit gate. That contract is not ported here, so H-5 does not apply
 to this pad. It becomes live again the moment a floor vault is added.

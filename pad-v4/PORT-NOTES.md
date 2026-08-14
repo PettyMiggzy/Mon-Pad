@@ -1,4 +1,8 @@
-# Port notes — Robin V4 curve suite → MonPad V4 (Monad, chain 143)
+# Port notes — code provenance for MonPad V4 (Monad, chain 143)
+
+> **Scope note.** MonPad V4 is a standalone launchpad. This document records where its contracts came from so a
+> reviewer can diff them against known-audited source — it is a code-lineage record, nothing more. MonPad does
+> not depend on, integrate with, or share governance, liquidity or branding with the source project.
 
 This directory is a port, not a rewrite. Commit 1 on `pad-v4/` is a **verbatim copy** of the audited Robin
 contracts with zero edits, so everything below is a reviewable diff against known-audited source rather than a
