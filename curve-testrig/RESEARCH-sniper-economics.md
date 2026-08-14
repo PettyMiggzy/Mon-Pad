@@ -1,9 +1,9 @@
 # Research — sniper economics, measured
 
-Two sources: an agent sim against MonPad's own contracts, and the on-chain history of a real launch that
+Two sources: an agent sim against the rig's own contracts, and the on-chain history of a real launch that
 bots pumped. They disagree, and the real launch wins.
 
-## 1. Sim against our own curve
+## 1. Sim against the rig's curve
 
 `test/sim/snipers.sim.test.js`, production geometry, real `MonPadCurveV4` + `MonPadFeeHook`:
 
@@ -58,9 +58,9 @@ by more than a factor of ten.
 MonPad's curve **structurally cannot do what BRACKETS did**, and that is a geometry decision, not a tax one.
 
 - `curveWidth = 23000` ticks ⇒ `1.0001^23000` ≈ **9.97x maximum**, launch to graduation. Then it graduates.
-- The sim measured 15,000 MON moving our curve **1.18x**. BRACKETS moved **22.3x** on ~$22.5k of buying.
+- The sim measured 15,000 MON moving the rig's curve **1.18x**. BRACKETS moved **22.3x** on ~$22.5k of buying.
 - $22,542 at $0.021/MON is ~1.07M MON — **2.9x our entire 373k MON graduation raise**. The same money that
-  22x'd BRACKETS would blow straight through our curve to graduation and stop at 10x.
+  22x'd BRACKETS would blow straight through the rig's curve to graduation and stop at 10x.
 
 So the two designs answer a different question:
 

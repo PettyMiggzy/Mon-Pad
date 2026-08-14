@@ -1,8 +1,8 @@
 {
-  "name": "monpad-v4",
+  "name": "curve-testrig",
   "version": "0.1.0",
   "private": true,
-  "description": "MonPad V4 \u2014 free-to-launch single-sided bonding curve on Uniswap V4, native MON (Monad, chain 143). Basic pad: curve + factory + unbypassable fee hook + permanently locked graduation LP.",
+  "description": "Research rig for measuring bonding-curve behaviour on Uniswap V4. NOT a production launchpad \u2014 exists to run simulations against real curve contracts and is not intended to launch tokens with real value.",
   "scripts": {
     "build": "hardhat compile",
     "test": "hardhat test test/unit/MonPadV4FeeConfig.test.js test/unit/MonPadCurveV4.test.js test/unit/MonshiBuyback.test.js",

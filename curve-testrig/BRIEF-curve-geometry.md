@@ -33,7 +33,7 @@ Sampling every Robinhood memecoin launch with meaningful volume: median peak mul
 4,666x, median drawdown from peak −44% with a fat tail at −95% to −100%. Where measurable, 31–60% of lifetime
 volume lands in the first hour.
 
-`curveWidth = 23000` caps our curve at 9.97x before graduation. That is one to two orders of magnitude below
+`curveWidth = 23000` caps the rig's curve at 9.97x before graduation. That is one to two orders of magnitude below
 where the observed winners live.
 
 **3. Width is the only dial.**

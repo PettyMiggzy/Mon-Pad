@@ -1,44 +1,65 @@
-# MonPad V4 — curve-on-Uniswap-V4 pad for Monad
+# curve-testrig — a research rig for curve-on-Uniswap-V4 behaviour
 
-A free-to-launch bonding curve where **the curve *is* a Uniswap V4 position**, with an unbypassable per-swap
-fee hook and a permanently locked graduation LP. Native MON, Monad mainnet (chain 143).
+**This is a test rig, not a product.** It exists so that claims about single-sided bonding-curve geometry can
+be *measured against real contracts* instead of asserted from a spreadsheet. It is not a launchpad, it is not
+anyone's production pad, and it is not intended to launch tokens with real value. Deploy scripts refuse
+mainnet unless deliberately overridden.
 
-MonPad V4 is a **standalone launchpad**. It is not a component of, dependency of, or companion to any other
-pad — it launches Monad tokens against native MON and nothing in it reaches off-chain or cross-chain.
+What it is: a complete, executable implementation of a bonding curve where **the curve *is* a Uniswap V4
+position**, wired up far enough that simulations run through the same code paths a real launch would — real
+`PoolManager` swaps, real tick math, real fee accounting — so numbers that come out of `test/sim/` are
+measurements rather than estimates. The Monad-specific constants (native MON, chain 143 addresses) are the
+concrete substrate the experiments run on; the findings are about curve geometry, not about any one chain.
 
-Scope: curve + factory + fee hook + permanently locked LP + per-pad staking + governed fee config, plus the
-MONSHI revenue loop. No floor vault, no presale, no stock adapters.
+Scope: curve + factory + fee hook + permanently locked LP + per-pad staking + governed fee config, plus a
+revenue-recycling leg. No floor vault, no presale, no stock adapters.
 
 Its contracts share an audited lineage with an earlier ETH-chain curve suite — that lineage is documented in
-`PORT-NOTES.md` purely so a reviewer can diff against known-audited source. It is a code provenance record,
-not a product relationship.
+`PORT-NOTES.md` so a reviewer can diff the rig against known-audited source and see that the behaviour being
+measured is not an artifact of rewritten code. It is a code provenance record, not a product relationship.
 
-## Why this curve
+## What has actually been measured here
 
-The live MonPad V3 pad uses a virtual-reserve constant-product curve that graduates by migrating into a
-*separate* Uniswap V3 pool. That migration is where `../CURVE-FINDINGS.md` found the DEX opening ~20× above the
-curve's final price, fixed by retuning virtual reserves to `9/13 × gradTarget`. That fix is a calibration patch
-on a structural problem: two pricing systems stitched together at graduation. nad.fun, the incumbent on Monad,
-has the same shape — a bonding curve that graduates into a separate V3-style pool.
+| Finding | Where |
+|---|---|
+| Conservation law: a first buyer spending `m` can never realise more than the total raise `R`, so max real return is `R/m` — **independent of curve width**. Verified to 0.1% across 7 geometries. | `BRIEF-curve-geometry.md`, `test/sim/geometry.sweep.sim.test.js` |
+| Paper multiples diverge from realisable ones by orders of magnitude: at width 115000 a $100 first buy shows **19,658x on the chart and 77x in the money**. | `test/sim/devbuy.sweep.sim.test.js` |
+| Widening the curve asymptotes ROI (~+1160%) but **not** supply capture, which keeps climbing to 72% of supply. | `test/sim/geometry.sweep.sim.test.js` |
+| Three snipers with 5,000 MON take 8.4% of supply, leave retail at 1.54× cost basis, and clear **+87.3%**; the sell tax that would break even is 47.1%, which is why no sell-tax defence is implemented. | `RESEARCH-sniper-economics.md`, `test/sim/snipers.sim.test.js` |
 
-Here there is one pool for the entire life of the token:
+Each row is reproducible from a clean checkout with `npm test`/`npm run test:sim`; the fork test replays the
+whole lifecycle against a live V4 deployment.
+
+## Why this curve shape is the one under study
+
+The dominant launchpad design is a virtual-reserve constant-product curve that graduates by **migrating into a
+separate AMM pool** — nad.fun on Monad works this way, as does most of the pump.fun lineage. Migration is a
+structural seam: two pricing systems stitched together at graduation, so the opening DEX price is a *calibration
+choice* rather than a consequence of the curve. Retuning virtual reserves patches the symptom; the seam stays.
+
+The rig implements the alternative, so the two can be compared on measurements rather than on argument. Here
+there is one pool for the entire life of the token:
 
 - **No graduation discontinuity.** The pool opens at `startTick` holding only token. Buys walk the tick down.
   At `gradTick` the curve is sold out and graduation converts the position in place — it does not migrate to a
   new venue, so the seam cannot reopen.
 - **The tax cannot be routed around.** It lives in the V4 hook (`beforeSwap` fee-on-input for buys, `afterSwap`
-  on the money leg for sells), so aggregator, DexScreener and raw-pool trades all pay it. The V3 pad's router
-  tax leaks on every non-router trade.
+  on the money leg for sells), so aggregator, chart-site and raw-pool trades all pay it. Router-level taxes,
+  the usual alternative, leak on every non-router trade — which matters here because it means fee revenue in
+  the sims is not overstated by an assumption about routing.
 - **Free launches.** Single-sided and self-seeded — the creator posts no MON.
 - **No dev mint.** The factory enforces `supply == curveSupply + reserveSupply` exactly. The creator receives
   zero tokens at launch and buys from the curve like everyone else.
 
 **Measured on Monad, 2026-08:** of the top 100 Uniswap V4 pools on the chain, **94 run no hook at all** — V4 is
 being used as "V3 with cheaper gas." Of the six that do, only two carry real volume, both stablecoin/RWA pools
-sharing one hook. No launchpad on Monad runs hook logic. The unbypassable tax below is the first of its kind
-here.
+sharing one hook. No launchpad on Monad runs hook logic, which is the practical reason this behaviour had to be
+simulated rather than observed in the wild.
 
-## Economics (governed defaults, stamped immutable per pad at launch)
+## Economics under test (governed defaults, stamped immutable per pad at launch)
+
+These are the parameters the simulations are run *at*. They are a plausible production configuration chosen so
+the measurements land in a realistic regime — not a proposal, and not the settings of any shipped pad.
 
 | | On a **BUY** (MON→token) | On a **SELL** (token→MON) |
 |---|---|---|
@@ -174,15 +195,22 @@ FORK_RPC=https://rpc.monad.xyz FORK_CHAINID=143 npm run test:fork   # 1 passing 
 It runs launch → sellout → graduate end to end and asserts the permanent LP mints through the real
 PositionManager into `LockVault`, the leftover reserve burns, and no MON strands in an unwired book.
 
-## Deploy
+## Deploy (testnet only)
+
+The rig is meant to run against a local fork or a testnet. `scripts/deploy-curve.js` and
+`scripts/deploy-monshi.js` **refuse to run on Monad mainnet (chain 143)** and abort unless
+`ALLOW_MAINNET_DEPLOY=1` is set explicitly — the guard is there so an experiment cannot become a live launch by
+accident.
 
 ```bash
-MONAD_RPC=<rpc> PRIVATE_KEY=<key> PLATFORM_WALLET=<multisig> \
-  npx hardhat run scripts/deploy-curve.js --network monad
+MONAD_RPC=<testnet-rpc> PRIVATE_KEY=<throwaway-key> PLATFORM_WALLET=<addr> \
+  POOL_MANAGER=<testnet> POSITION_MANAGER=<testnet> STATE_VIEW=<testnet> \
+  npx hardhat run scripts/deploy-curve.js --network monadTestnet
 ```
 
-Then transfer `FeeWalletRegistry` + `MonPadV4FeeConfig` ownership to the platform multisig (both Ownable2Step),
-verify on monadscan, and point the app/indexer at `contracts.curveFactory`.
+The V4 addresses default to Monad *mainnet* and must be overridden for any other chain — take them from
+https://developers.uniswap.org/contracts/v4/deployments. Most experiments need no deploy at all: the sims run
+entirely in-process, and `npm run test:fork` exercises the live V4 stack read-only against a fork.
 
 ## Uniswap V4 on Monad (chain 143)
 
@@ -206,8 +234,16 @@ ordinary type-2 txs — unlike Robinhood Chain, do **not** force legacy type-0.
 
 `PORT-NOTES.md` maps every file to its source in the Robin suite and lists every intentional change. The first
 commit on this directory is a verbatim copy of the audited contracts, so the port is a reviewable diff rather
-than a rewrite.
+than a rewrite. That matters for the research claim specifically: the measurements below come from contracts
+whose lineage a reader can check line by line, not from a model written to produce them.
 
 **Carried-over risk:** the source suite's audit register closed at zero findings *except* H-5, an unresolved
 weakness in `RobinFloorVault`'s spot-based commit gate. That contract is not ported here, so H-5 does not apply
-to this pad. It becomes live again the moment a floor vault is added.
+to the rig. It becomes live again the moment a floor vault is added.
+
+## Standing limitation
+
+Audited lineage is not the same as being audited *as configured*. The geometry, the graduation split, the
+factory-side staking wiring and the re-denominated keeper bounty are all changes made for this rig and have
+been verified only by its own test suite. Nothing here has been reviewed for production use, and the deploy
+guards exist to keep it that way.

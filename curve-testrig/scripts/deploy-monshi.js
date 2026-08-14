@@ -50,7 +50,20 @@ async function deploy(name, args = []) {
   return c;
 }
 
+// Research rig — see scripts/deploy-curve.js. Chain 143 is refused unless explicitly overridden.
+async function assertNotMainnet() {
+  const { chainId } = await ethers.provider.getNetwork();
+  if (Number(chainId) === 143 && process.env.ALLOW_MAINNET_DEPLOY !== "1") {
+    throw new Error(
+      "Refusing to deploy curve-testrig to Monad mainnet (chain 143). This is a research rig, not a " +
+        "production launchpad. Point it at a testnet or a fork, or set ALLOW_MAINNET_DEPLOY=1 if you " +
+        "genuinely mean to do this.",
+    );
+  }
+}
+
 async function main() {
+  await assertNotMainnet();
   const [deployer] = await ethers.getSigners();
   const treasury = process.env.TREASURY;
   const owner = process.env.OWNER || deployer.address;

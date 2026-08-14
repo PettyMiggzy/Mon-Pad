@@ -66,7 +66,21 @@ async function deploy(name, args = []) {
   return c;
 }
 
+// This is a RESEARCH RIG. Deploying it to Monad mainnet would put experiment-grade contracts in front of real
+// money, so refuse chain 143 outright unless someone opts in deliberately and in writing.
+async function assertNotMainnet() {
+  const { chainId } = await ethers.provider.getNetwork();
+  if (Number(chainId) === 143 && process.env.ALLOW_MAINNET_DEPLOY !== "1") {
+    throw new Error(
+      "Refusing to deploy curve-testrig to Monad mainnet (chain 143). This is a research rig, not a " +
+        "production launchpad. Point it at a testnet or a fork, or set ALLOW_MAINNET_DEPLOY=1 if you " +
+        "genuinely mean to do this.",
+    );
+  }
+}
+
 async function main() {
+  await assertNotMainnet();
   const [deployer] = await ethers.getSigners();
   // Require PLATFORM_WALLET explicitly. Defaulting it to the hot deploy key silently makes that key the platform
   // fee wallet AND the root admin — undoing which costs FeeWalletRegistry.TIMELOCK (2 days). Fail loudly instead.

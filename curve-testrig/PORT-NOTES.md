@@ -1,14 +1,17 @@
-# Port notes — code provenance for MonPad V4 (Monad, chain 143)
+# Port notes — code provenance for curve-testrig
 
-> **Scope note.** MonPad V4 is a standalone launchpad. This document records where its contracts came from so a
-> reviewer can diff them against known-audited source — it is a code-lineage record, nothing more. MonPad does
-> not depend on, integrate with, or share governance, liquidity or branding with the source project.
+> **Scope note.** `curve-testrig` is a standalone research rig, not a launchpad and not anyone's production
+> pad. This document records where its contracts came from so a reviewer can diff them against known-audited
+> source and confirm that measured behaviour is not an artifact of rewritten code. It is a code-lineage
+> record, nothing more — the rig does not depend on, integrate with, or share governance, liquidity or
+> branding with the source project.
 
-This directory is a port, not a rewrite. Commit 1 on `pad-v4/` is a **verbatim copy** of the audited Robin
-contracts with zero edits, so everything below is a reviewable diff against known-audited source rather than a
-claim to be taken on trust.
+This directory is a port, not a rewrite. Commit 1 on it is a **verbatim copy** of the audited Robin contracts
+with zero edits, so everything below is a reviewable diff against known-audited source rather than a claim to
+be taken on trust.
 
-Source: `PettyMiggzy/sherif` → `pad-v4/` (read-only reference; not modified by this work).
+Source: `PettyMiggzy/sherif` → `pad-v4/` (read-only reference; not modified by this work). Ported here as
+`Mon-Pad/curve-testrig/`.
 
 ## What was ported, and what was left behind
 
