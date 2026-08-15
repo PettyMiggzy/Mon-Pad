@@ -118,6 +118,7 @@ function connect() {
     ws.send(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_subscribe", params: ["newPendingTransactions", true] }));
     ws.send(JSON.stringify({ jsonrpc: "2.0", id: 2, method: "eth_subscribe", params: ["logs", { address: FACTORY, topics: [T_PAIR_CREATED] }] }));
     ws.send(JSON.stringify({ jsonrpc: "2.0", id: 3, method: "eth_subscribe", params: ["logs", { topics: [T_V2_SWAP] }] }));
+    ws.send(JSON.stringify({ jsonrpc: "2.0", id: 5, method: "eth_subscribe", params: ["logs", { topics: [T_V2_MINT] }] }));
     ws.send(JSON.stringify({ jsonrpc: "2.0", id: 4, method: "eth_subscribe", params: ["newHeads"] }));
   });
 
@@ -148,6 +149,27 @@ function connect() {
         if (quoted) trackToken(token, pair, blk);
         stats.pairs++;
         emit({ kind: "pair", pair, token, token0: t0, token1: t1, quotePaired: quoted, block: blk, tx: r.transactionHash });
+        return;
+      }
+      if (r.topics[0] === T_V2_MINT) {
+        // The pair's FIRST Mint is the seed. This is the exposure variable: what a launch actually cost
+        // its creator, and therefore what a test launch has to match to be comparable.
+        const addr = r.address.toLowerCase();
+        let hit = null;
+        for (const rec of tracked.values()) if (rec.pair === addr) { hit = rec; break; }
+        if (!hit || hit.seeded) return;
+        try {
+          const [a0, a1] = abi.decode(["uint256", "uint256"], r.data);
+          hit.seeded = true;
+          // orient per pair, never assume WBNB sorted first
+          const wbnbIsToken0 = hit.token !== undefined && hit.token > WBNB;
+          emit({
+            kind: "seed", pair: addr, token: hit.token, block: parseInt(r.blockNumber, 16),
+            amount0: a0.toString(), amount1: a1.toString(), wbnbIsToken0,
+            seedQuoteWei: (wbnbIsToken0 ? a0 : a1).toString(),
+            tx: r.transactionHash,
+          });
+        } catch (e) { /* non-standard Mint */ }
         return;
       }
       if (r.topics[0] === T_V2_SWAP) {
