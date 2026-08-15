@@ -266,6 +266,15 @@ contract AtomicExperimentPad is Ownable2Step, ReentrancyGuard {
     error NotPool();
     error RefundFailed();
     error ZeroAddress();
+    /// @dev CONSTRUCTOR-ONLY, all five. They cost zero runtime bytes (constructor code is not deployed) and
+    /// they exist because every one of them names a mistake that is UNRECOVERABLE once made: the values they
+    /// guard are immutables, so the only fix is a redeploy of a pad that has already been announced.
+    error BadStartLaunchId();
+    error NpmFactoryMismatch(address expected, address got);
+    error NpmWeth9Mismatch(address expected, address got);
+    error PoolProbeRequired();
+    error PoolProbeNotCanonical(address probe, address viaFactory);
+    error PoolInitCodeHashMismatch(address probe, address derived);
     error NoProposal();
     error TimelockNotElapsed(uint256 eta);
     error RenounceDisabled();
@@ -275,6 +284,17 @@ contract AtomicExperimentPad is Ownable2Step, ReentrancyGuard {
     // Construction
     // ---------------------------------------------------------------------------------------------------
 
+    /// @param poolProbe_ An EXISTING pool at this venue, used once to bind `poolInitCodeHash_` and `factory_`
+    /// to reality. REQUIRED whenever `poolInitCodeHash_` is nonzero; ignored (and conventionally address(0))
+    /// in the unmeasured-hash mode, where per-launch getPool verification does the same job at runtime.
+    /// On Robinhood Chain pass 0x479a1d0d9aec941382d9cab3ba69dd3914d981e9.
+    /// @dev WHY A PROBE AND NOT A SCRIPT CHECK. Every argument below is frozen the instant this runs, and two
+    /// of them (`factory_`, `poolInitCodeHash_`) are unverifiable by inspection: a wrong 32-byte hash deploys
+    /// perfectly cleanly and then makes EVERY launch revert PoolAddressMismatch, which is discovered with real
+    /// money on the table. A check in deploy-experiment-pad.js protects deploy-experiment-pad.js and nothing
+    /// else — scripts/rehearse-arm.js and the fork test each carry their own hardcoded copies of these
+    /// constants, and a hand deploy carries none. So the invariant lives HERE, inside the artifact that is
+    /// actually immutable, where it cannot be routed around.
     constructor(
         address initialOwner,
         address rescueRecipient_,
@@ -284,7 +304,8 @@ contract AtomicExperimentPad is Ownable2Step, ReentrancyGuard {
         address weth_,
         uint256 expectedChainId_,
         uint256 startLaunchId_,
-        bytes32 poolInitCodeHash_
+        bytes32 poolInitCodeHash_,
+        address poolProbe_
     ) Ownable(initialOwner) {
         if (
             initialOwner == address(0) || rescueRecipient_ == address(0) || lpVault_ == address(0)
@@ -300,6 +321,52 @@ contract AtomicExperimentPad is Ownable2Step, ReentrancyGuard {
         // protects one script and is bypassed by any other. Checked HERE ONLY, not per launch: a wrong-network
         // deploy then costs a failed tx instead of a live pad, and re-checking every launch protects nothing.
         if (block.chainid != expectedChainId_) revert WrongChain();
+
+        // START_LAUNCH_ID exists ONLY to keep this pad's ids clear of the reference pad's 3..8, so a zero
+        // start defeats the entire point: launchId would be 0 + (++launchCount), i.e. 1,2,3... colliding head
+        // on with the very ids the immutable was introduced to avoid. This is a BACKSTOP, not the fix — the
+        // real failure is a JS defaulting bug (`BigInt(process.env.X ?? 1000n)` yields 0n for an
+        // exported-but-empty var) and it belongs in the deploy script, because START_LAUNCH_ID=1 collides too
+        // and no constant compiled in here can know the reference pad's id range. One line, no runtime cost.
+        if (startLaunchId_ == 0) revert BadStartLaunchId();
+
+        // VENUE COHERENCE, checked once, here, while it is still free. FACTORY, NPM and WETH are three
+        // independent immutables that must describe ONE venue; the real NPM publishes its own view of two of
+        // them, so ask it rather than trusting three separate constructor arguments to have been typed
+        // consistently. Both selectors were probed on the live NPM before this was written (see
+        // IUniswapV3Minimal), so the strict form cannot brick the intended deploy — and if a future venue's
+        // NPM lacks them, this reverts loudly BEFORE any money is committed, which is the correct direction
+        // to fail in.
+        {
+            address npmFactory = INonfungiblePositionManager(npm_).factory();
+            if (npmFactory != factory_) revert NpmFactoryMismatch(factory_, npmFactory);
+            address npmWeth = INonfungiblePositionManager(npm_).WETH9();
+            if (npmWeth != weth_) revert NpmWeth9Mismatch(weth_, npmWeth);
+        }
+
+        // BIND THE INIT CODE HASH TO THE VENUE. `poolInitCodeHash_` is the one argument that is both
+        // load-bearing on every launch and impossible to sanity-check by looking at it. Reading an EXISTING
+        // pool's own (token0, token1, fee) and requiring BOTH
+        //   (a) factory_.getPool(t0,t1,fee) == poolProbe_   — the factory admits it minted this pool, and
+        //   (b) create2(factory_, keccak(abi.encode(t0,t1,fee)), poolInitCodeHash_) == poolProbe_
+        // reproduces the address turns a 32-byte guess into a measured fact. (a) additionally proves
+        // `factory_` is the factory that actually minted this venue's pools, which no amount of script-side
+        // checking gets at. The two together are exactly the prediction `_predictPool` will make on every
+        // launch, so if this passes, PoolAddressMismatch can only fire for a real front-run.
+        //
+        // NOTE the derivation goes through `_poolFor` with LOCALS, never the immutables: an immutable is not
+        // readable during construction, so a version reading FACTORY/POOL_INIT_CODE_HASH here would not
+        // compile. `_predictPool` calls the same helper, so the constructor and the hot path can never drift.
+        if (poolInitCodeHash_ != bytes32(0)) {
+            if (poolProbe_ == address(0)) revert PoolProbeRequired();
+            address t0 = IUniswapV3Pool(poolProbe_).token0();
+            address t1 = IUniswapV3Pool(poolProbe_).token1();
+            uint24 probeFee = IUniswapV3Pool(poolProbe_).fee();
+            address viaFactory = IUniswapV3Factory(factory_).getPool(t0, t1, probeFee);
+            if (viaFactory != poolProbe_) revert PoolProbeNotCanonical(poolProbe_, viaFactory);
+            address derived = _poolFor(factory_, poolInitCodeHash_, t0, t1, probeFee);
+            if (derived != poolProbe_) revert PoolInitCodeHashMismatch(poolProbe_, derived);
+        }
 
         FACTORY = IUniswapV3Factory(factory_);
         NPM = INonfungiblePositionManager(npm_);
@@ -829,15 +896,25 @@ contract AtomicExperimentPad is Ownable2Step, ReentrancyGuard {
     }
 
     function _predictPool(address token0, address token1, uint24 fee) internal view returns (address) {
+        return _poolFor(address(FACTORY), POOL_INIT_CODE_HASH, token0, token1, fee);
+    }
+
+    /// @dev The V3 pool CREATE2 derivation, parameterised on (factory, initHash) rather than reading the
+    /// immutables, for ONE reason: the constructor's probe-pool check needs this exact math before FACTORY and
+    /// POOL_INIT_CODE_HASH are readable. Keeping it in a single `pure` helper is what makes the constructor's
+    /// assertion and every launch's assertion provably the same computation — two copies would let a future
+    /// edit fix one and leave the other quietly wrong.
+    function _poolFor(address factory_, bytes32 initHash, address token0, address token1, uint24 fee)
+        internal
+        pure
+        returns (address)
+    {
         return address(
             uint160(
                 uint256(
                     keccak256(
                         abi.encodePacked(
-                            bytes1(0xff),
-                            address(FACTORY),
-                            keccak256(abi.encode(token0, token1, fee)),
-                            POOL_INIT_CODE_HASH
+                            bytes1(0xff), factory_, keccak256(abi.encode(token0, token1, fee)), initHash
                         )
                     )
                 )

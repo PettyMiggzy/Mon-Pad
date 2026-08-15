@@ -22,6 +22,9 @@ const NPM = "0x73991a25c818bf1f1128deaab1492d45638de0d3";
 const WETH = "0x0bd7d308f8e1639fab988df18a8011f41eacad73";
 const POOL_INIT_CODE_HASH = "0xe34f199b19b2b4f47f68442619d555527d244f78a3297ea89325f843f87b8b54";
 const CHAIN_ID = 4663n;
+// A REAL pool minted by FACTORY. The constructor re-derives its address from POOL_INIT_CODE_HASH and
+// asserts the match, so a wrong hash can no longer deploy cleanly and brick every launch.
+const POOL_PROBE = "0x479a1d0d9aec941382d9cab3ba69dd3914d981e9";
 
 const V4_LIQUIDITY = 32341460503543476955346n;
 const V4_AMOUNT1 = 999999999999999999999994558n;
@@ -52,6 +55,7 @@ function mineSalt(pad, cfg, weth, wantToken0) {
     const [owner] = await ethers.getSigners();
     const pad = await (await ethers.getContractFactory("AtomicExperimentPad")).deploy(
       owner.address, owner.address, owner.address, FACTORY, NPM, WETH, CHAIN_ID, 1000n, POOL_INIT_CODE_HASH,
+      POOL_PROBE,
     );
     return { owner, pad, padAddr: await pad.getAddress() };
   }

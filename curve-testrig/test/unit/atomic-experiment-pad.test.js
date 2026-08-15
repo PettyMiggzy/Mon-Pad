@@ -68,13 +68,21 @@ describe("AtomicExperimentPad — parameterised launch rig", () => {
 
     const weth = await (await ethers.getContractFactory("MockWETH9")).deploy();
     const factory = await (await ethers.getContractFactory("MockV3Factory")).deploy();
-    const npm = await (await ethers.getContractFactory("MockNPM")).deploy(await factory.getAddress());
+    const npm = await (await ethers.getContractFactory("MockNPM")).deploy(
+      await factory.getAddress(),
+      await weth.getAddress(),
+    );
     const ticks = await (await ethers.getContractFactory("TickHelper")).deploy();
 
     // The mock pool's bytecode can never hash to the canonical 0xe34f199b..., which is exactly why the pad
     // takes the hash as a constructor immutable — otherwise the CREATE2 assertion could not be exercised
     // offline at all.
     const poolInitHash = ethers.keccak256((await ethers.getContractFactory("MockV3Pool")).bytecode);
+
+    // The pad now REFUSES to deploy with a nonzero init hash it cannot bind to a real pool at this venue, so
+    // the venue must have one before the pad exists. This is not a mock-only concession: the live deploy
+    // passes 0x479a1d0d9aec941382d9cab3ba69dd3914d981e9 for exactly the same reason.
+    const probePool = await makeProbePool(factory);
 
     const pad = await (await ethers.getContractFactory("AtomicExperimentPad")).deploy(
       owner.address,
@@ -86,17 +94,30 @@ describe("AtomicExperimentPad — parameterised launch rig", () => {
       HARDHAT_CHAIN,
       100n, // START_LAUNCH_ID — clears the reference pad's ids 3..8
       poolInitHash,
+      probePool,
     );
     await pad.connect(owner).setOperator(operator.address, true);
 
     const ctx = {
-      owner, operator, stranger, rescue, vault, weth, factory, npm, ticks, pad, poolInitHash,
+      owner, operator, stranger, rescue, vault, weth, factory, npm, ticks, pad, poolInitHash, probePool,
       padAddr: await pad.getAddress(),
       wethAddr: await weth.getAddress(),
       npmAddr: await npm.getAddress(),
       factoryAddr: await factory.getAddress(),
     };
     return ctx;
+  }
+
+  /**
+   * Mint one throwaway pool so the pad's constructor has something to bind POOL_INIT_CODE_HASH against.
+   * Deliberately a pair of nonsense addresses: the probe is only ever read for (token0, token1, fee), it is
+   * never launched into, and using the real WETH would let a probe pool collide with a test's own pool.
+   */
+  const PROBE_A = "0x0000000000000000000000000000000000000a11";
+  const PROBE_B = "0x0000000000000000000000000000000000000b22";
+  async function makeProbePool(factory, fee = 10000) {
+    await factory.createPool(PROBE_A, PROBE_B, fee);
+    return await factory.getPool(PROBE_A, PROBE_B, fee);
   }
 
   /** The reference pad's exact geometry: single-sided token wall, ZERO quote, token sorts as token1. */
@@ -1074,6 +1095,7 @@ describe("AtomicExperimentPad — parameterised launch rig", () => {
       const pad2 = await (await ethers.getContractFactory("AtomicExperimentPad")).deploy(
         ctx.owner.address, ctx.rescue.address, ctx.vault.address,
         ctx.factoryAddr, ctx.npmAddr, ctx.wethAddr, HARDHAT_CHAIN, 200n, ethers.ZeroHash,
+        ethers.ZeroAddress, // no hash to bind ⇒ no probe pool required (see I2/I8)
       );
       const pad2Addr = await pad2.getAddress();
       await pad2.connect(ctx.owner).setOperator(ctx.operator.address, true);
@@ -1152,6 +1174,151 @@ describe("AtomicExperimentPad — parameterised launch rig", () => {
       await ctx.weth.setReenterTarget(ctx.padAddr); // WETH.deposit() will call back into sweepStrandedNative
       const { p } = build(ctx, straddleDefaults());
       await expect(launch(ctx, p)).to.be.revertedWithCustomError(ctx.pad, "ReentrancyGuardReentrantCall");
+    });
+  });
+
+  // =========================================================================================================
+  // GROUP I — the constructor makes a BRICKED IMMUTABLE DEPLOY impossible
+  //
+  // Everything this group guards is frozen the moment the pad is deployed, which is what makes it a different
+  // class of test from every group above: a launch-time bug costs one failed transaction, whereas a wrong
+  // `factory`, `npm`, `weth`, `poolInitCodeHash` or `startLaunchId` costs a REDEPLOY of a pad that has already
+  // been announced, plus a broken arm boundary. Each test below feeds the constructor exactly one plausible
+  // typo and proves the deploy now fails LOUDLY and for free instead of succeeding and bricking later.
+  // =========================================================================================================
+  describe("I — constructor venue binding (an unrecoverable deploy is refused up front)", () => {
+    /** Deploy a pad with the fixture's good venue, overriding exactly one argument at a time. */
+    async function deployPad(ctx, over = {}) {
+      const a = {
+        owner: ctx.owner.address,
+        rescue: ctx.rescue.address,
+        vault: ctx.vault.address,
+        factory: ctx.factoryAddr,
+        npm: ctx.npmAddr,
+        weth: ctx.wethAddr,
+        chainId: HARDHAT_CHAIN,
+        startLaunchId: 300n,
+        poolInitHash: ctx.poolInitHash,
+        poolProbe: ctx.probePool,
+        ...over,
+      };
+      return (await ethers.getContractFactory("AtomicExperimentPad")).deploy(
+        a.owner, a.rescue, a.vault, a.factory, a.npm, a.weth,
+        a.chainId, a.startLaunchId, a.poolInitHash, a.poolProbe,
+      );
+    }
+
+    it("I1: THE REDEPLOY BUG — a wrong POOL_INIT_CODE_HASH is refused at construction", async () => {
+      const ctx = await setup();
+      // Before this check a wrong 32-byte hash deployed perfectly cleanly and then made EVERY launch revert
+      // PoolAddressMismatch — discovered with real money on the table and fixable only by redeploying.
+      const wrong = ethers.id("not this venue's pool bytecode");
+      const derived = ethers.getCreate2Address(
+        ctx.factoryAddr,
+        ethers.keccak256(abi.encode(["address", "address", "uint24"], [PROBE_A, PROBE_B, 10000])),
+        wrong,
+      );
+      await expect(deployPad(ctx, { poolInitHash: wrong }))
+        .to.be.revertedWithCustomError(ctx.pad, "PoolInitCodeHashMismatch")
+        .withArgs(ctx.probePool, derived);
+    });
+
+    it("I1b: even the CANONICAL Robinhood hash is refused against a venue it does not describe", async () => {
+      // The realistic form of the mistake is not a random blob, it is a hash copied from the right chain into
+      // the wrong deployment (a fork, a second factory, a rehearsal rig). It must fail just as hard.
+      const ctx = await setup();
+      await expect(deployPad(ctx, { poolInitHash: V3_CANONICAL_INIT_HASH }))
+        .to.be.revertedWithCustomError(ctx.pad, "PoolInitCodeHashMismatch");
+    });
+
+    it("I2: a nonzero hash with NO probe pool is refused — the check cannot be skipped by omission", async () => {
+      const ctx = await setup();
+      await expect(deployPad(ctx, { poolProbe: ethers.ZeroAddress }))
+        .to.be.revertedWithCustomError(ctx.pad, "PoolProbeRequired");
+    });
+
+    it("I3: a LOOKALIKE probe the factory did not mint is refused, even at a pair the factory knows", async () => {
+      const ctx = await setup();
+      // The dangerous shape is not an obviously-bogus address, it is a pool that answers every question
+      // plausibly: correctly shaped, reports a (token0, token1, fee) the factory really does have a pool for,
+      // and simply is not that pool. The check is an ADDRESS equality against the factory's own answer, so it
+      // catches this — a "does the probe look like a pool" check would not.
+      const orphan = await (await ethers.getContractFactory("MockV3Pool")).deploy();
+      await orphan.init(PROBE_A, PROBE_B, 10000, 200);
+      const orphanAddr = await orphan.getAddress();
+      expect(orphanAddr).to.not.equal(ctx.probePool);
+      await expect(deployPad(ctx, { poolProbe: orphanAddr }))
+        .to.be.revertedWithCustomError(ctx.pad, "PoolProbeNotCanonical")
+        .withArgs(orphanAddr, ctx.probePool); // the factory names the pool it actually minted
+    });
+
+    it("I4: the probe also pins FACTORY — a factory that did not mint this venue's pools is refused", async () => {
+      // This is the half of the venue check no script can reach: getPool(t0,t1,fee) == probe is simultaneously
+      // a statement about the hash AND about which factory actually minted the pools we are predicting.
+      const ctx = await setup();
+      const factory2 = await (await ethers.getContractFactory("MockV3Factory")).deploy();
+      const npm2 = await (await ethers.getContractFactory("MockNPM")).deploy(
+        await factory2.getAddress(), ctx.wethAddr,
+      );
+      await expect(
+        deployPad(ctx, { factory: await factory2.getAddress(), npm: await npm2.getAddress() }),
+      ).to.be.revertedWithCustomError(ctx.pad, "PoolProbeNotCanonical")
+        .withArgs(ctx.probePool, ethers.ZeroAddress);
+    });
+
+    it("I5: an NPM built against a DIFFERENT factory is refused — four V3 factories are live on 4663", async () => {
+      const ctx = await setup();
+      const factory2 = await (await ethers.getContractFactory("MockV3Factory")).deploy();
+      const npm2 = await (await ethers.getContractFactory("MockNPM")).deploy(
+        await factory2.getAddress(), ctx.wethAddr,
+      );
+      await expect(deployPad(ctx, { npm: await npm2.getAddress() }))
+        .to.be.revertedWithCustomError(ctx.pad, "NpmFactoryMismatch")
+        .withArgs(ctx.factoryAddr, await factory2.getAddress());
+    });
+
+    it("I6: an NPM whose WETH9 is not our quote token is refused", async () => {
+      const ctx = await setup();
+      const npm2 = await (await ethers.getContractFactory("MockNPM")).deploy(
+        ctx.factoryAddr, ctx.stranger.address,
+      );
+      await expect(deployPad(ctx, { npm: await npm2.getAddress() }))
+        .to.be.revertedWithCustomError(ctx.pad, "NpmWeth9Mismatch")
+        .withArgs(ctx.wethAddr, ctx.stranger.address);
+    });
+
+    it("I7: START_LAUNCH_ID 0 is refused — it would collide with the reference pad's ids 3..8", async () => {
+      // The live failure is a JS defaulting bug: an exported-but-empty START_LAUNCH_ID makes `?? 1000n` not
+      // fire and BigInt("") === 0n, so ids run 1,2,3... straight into the reference pad's range. This is only
+      // a BACKSTOP — START_LAUNCH_ID=1 collides too and the contract cannot know that — but it is free.
+      const ctx = await setup();
+      await expect(deployPad(ctx, { startLaunchId: 0n }))
+        .to.be.revertedWithCustomError(ctx.pad, "BadStartLaunchId");
+      await expect(deployPad(ctx, { startLaunchId: 1000n })).to.not.be.reverted;
+    });
+
+    it("I8: the good venue deploys, and the constructor's derivation IS the launch-time derivation", async () => {
+      const ctx = await setup();
+      // Same computation, done independently in JS: this is the mock-venue analogue of A5, which proves the
+      // identical arithmetic reproduces the real BRACKETS pool from the real canonical hash.
+      expect(
+        ethers.getCreate2Address(
+          ctx.factoryAddr,
+          ethers.keccak256(abi.encode(["address", "address", "uint24"], [PROBE_A, PROBE_B, 10000])),
+          ctx.poolInitHash,
+        ),
+      ).to.equal(ctx.probePool);
+
+      expect(await ctx.pad.FACTORY()).to.equal(ctx.factoryAddr);
+      expect(await ctx.pad.NPM()).to.equal(ctx.npmAddr);
+      expect(await ctx.pad.WETH()).to.equal(ctx.wethAddr);
+      expect(await ctx.pad.POOL_INIT_CODE_HASH()).to.equal(ctx.poolInitHash);
+      expect(await ctx.pad.START_LAUNCH_ID()).to.equal(100n);
+
+      // And the unmeasured-hash mode still deploys with no probe at all: the binding is required only for the
+      // argument it binds, so a fork whose hash has never been measured stays deployable (see G4).
+      const pad3 = await deployPad(ctx, { poolInitHash: ethers.ZeroHash, poolProbe: ethers.ZeroAddress });
+      expect(await pad3.POOL_INIT_CODE_HASH()).to.equal(ethers.ZeroHash);
     });
   });
 });

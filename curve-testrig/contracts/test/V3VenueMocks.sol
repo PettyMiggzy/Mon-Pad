@@ -255,7 +255,12 @@ contract MockNPM {
         uint128 liquidity;
     }
 
+    /// @dev `factory` and `WETH9` mirror the REAL NPM's two immutable self-descriptions (selectors 0xc45a0155
+    /// and 0x4aa4a4fc, both probed present on 0x73991a25...). The pad's constructor asks the NPM which venue
+    /// it belongs to, so the mock has to be able to answer — and to be able to answer WRONGLY, which is what
+    /// makes the cross-check testable offline instead of being dead code until deploy day.
     MockV3Factory public immutable factory;
+    address public immutable WETH9;
     uint256 public nextId = 1;
     mapping(uint256 => address) internal _owners;
     mapping(uint256 => Position) internal _positions;
@@ -269,8 +274,9 @@ contract MockNPM {
     error SlippageCheck();
     error NoPosition();
 
-    constructor(address factory_) {
+    constructor(address factory_, address weth_) {
         factory = MockV3Factory(factory_);
+        WETH9 = weth_;
     }
 
     function setPoolOverride(address p) external {

@@ -92,6 +92,19 @@ interface INonfungiblePositionManager {
         );
 
     function ownerOf(uint256 tokenId) external view returns (address);
+
+    /// @notice Selector 0xc45a0155. The factory this NPM was deployed against — IMMUTABLE in the real NPM.
+    /// @dev PROBED LIVE on 0x73991a25c818bf1f1128deaab1492d45638de0d3: returns
+    /// 0x1f7d7550b1b028f7571e69a784071f0205fd2efa, i.e. the canonical factory. Declared here so the pad can
+    /// prove at CONSTRUCTION that its `factory` and `npm` immutables describe the SAME venue. Four V3
+    /// factories are live on this chain and a mismatch bricks every launch with no recovery but a redeploy.
+    function factory() external view returns (address);
+
+    /// @notice Selector 0x4aa4a4fc. The wrapped-native the NPM will accept — IMMUTABLE in the real NPM.
+    /// @dev PROBED LIVE on the same address: returns 0x0bd7d308f8e1639fab988df18a8011f41eacad73, the chain's
+    /// wrapped NATIVE. Both selectors were confirmed present before the pad was made to depend on them, so
+    /// the strict constructor form cannot brick the real deploy.
+    function WETH9() external view returns (address);
 }
 
 /// @dev Canonical UniswapV3Pool bytecode, verified via the init code hash above.
@@ -112,6 +125,14 @@ interface IUniswapV3Pool {
     /// @notice The spacing BAKED INTO the deployed pool. Cross-checked against the factory's map so a
     /// venue whose map drifted after the pool was created fails loudly instead of minting a misaligned range.
     function tickSpacing() external view returns (int24);
+
+    /// @notice The pool's own idea of its identity, used ONLY by the constructor's probe-pool check.
+    /// @dev These three plus `factory.getPool` are what turn POOL_INIT_CODE_HASH from an unverifiable 32-byte
+    /// blob into something bound to a pool that demonstrably exists at this venue. Not used on the hot path:
+    /// a launch's pool identity comes from the CREATE2 prediction it just asserted.
+    function token0() external view returns (address);
+    function token1() external view returns (address);
+    function fee() external view returns (uint24);
 
     /// @notice Direct dev-buy path. `zeroForOne` must be `!tokenIsToken0` (the pad always SELLS the quote).
     /// Requires the caller to implement uniswapV3SwapCallback and authenticate msg.sender.

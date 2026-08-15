@@ -16,6 +16,14 @@ const FACTORY = "0x1f7d7550b1b028f7571e69a784071f0205fd2efa";
 const NPM = "0x73991a25c818bf1f1128deaab1492d45638de0d3";
 const WETH = "0x0bd7d308f8e1639fab988df18a8011f41eacad73";
 const INIT_HASH = "0xe34f199b19b2b4f47f68442619d555527d244f78a3297ea89325f843f87b8b54";
+// A real FACTORY-minted pool; the constructor proves INIT_HASH reproduces it.
+const POOL_PROBE = "0x479a1d0d9aec941382d9cab3ba69dd3914d981e9";
+// Mirror run-arm.js's salt layout EXACTLY. Now that both arms ship byte-identical name/symbol/supply,
+// a shared salt space would mine the SAME token address for arm 2 as arm 1 and every launch would
+// revert. Each arm owns a 2**24 block, each replicate a 2**20 slot inside it.
+const ARM_BLOCK = 2 ** 24;
+const REPLICATE_BLOCK = 2 ** 20;
+const armOffset = (armId) => Number(BigInt(armId) % 1024n) * ARM_BLOCK;
 const Recipient = { OPERATOR: 0, VAULT: 1, BURN: 2 };
 const abi = ethers.AbiCoder.defaultAbiCoder();
 
@@ -39,7 +47,7 @@ function mineSalt(pad, cfg, wantToken0, startAt) {
   console.log(`  balance ${ethers.formatEther(await ethers.provider.getBalance(op.address))} (fork funny money)\n`);
 
   const pad = await (await ethers.getContractFactory("AtomicExperimentPad")).deploy(
-    op.address, op.address, op.address, FACTORY, NPM, WETH, chainId, 1n, INIT_HASH);
+    op.address, op.address, op.address, FACTORY, NPM, WETH, chainId, 1n, INIT_HASH, POOL_PROBE);
   await pad.waitForDeployment();
   const padAddr = await pad.getAddress();
   console.log(`pad deployed ${padAddr}`);
@@ -56,9 +64,10 @@ function mineSalt(pad, cfg, wantToken0, startAt) {
     console.log(`ARM "${spec.arm}"  x${spec.replicates}`);
     for (let r = 1; r <= spec.replicates; r++) {
       const c = spec.cell;
-      const mined = mineSalt(padAddr, c, c.wantTokenIsToken0, r * 2 ** 20);
+      const armId = ethers.id(spec.arm);
+      const mined = mineSalt(padAddr, c, c.wantTokenIsToken0, armOffset(armId) + r * REPLICATE_BLOCK);
       const p = {
-        experimentId: expId, armId: ethers.id(spec.arm), replicate: r,
+        experimentId: expId, armId, replicate: r,
         name: c.name, symbol: c.symbol, decimals: c.decimals,
         totalSupply: BigInt(c.totalSupply), tokenSalt: mined.salt,
         wantTokenIsToken0: c.wantTokenIsToken0, fee: c.fee,
