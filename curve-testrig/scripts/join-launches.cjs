@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * Join AtomicExperimentPad launches against the OBSERVATIONAL feed produced by scripts/watch-launches.cjs.
+ * Join RektPad launches against the OBSERVATIONAL feed produced by scripts/watch-launches.cjs.
  *
  * This is the falsifiability check for the whole instrument. A pad whose rows do not land in the same schema,
  * same units and same transaction shape as the wild population has failed at its only job — and that failure

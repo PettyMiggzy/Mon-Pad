@@ -17,7 +17,7 @@ import {
     IWETH9
 } from "../interfaces/IUniswapV3Minimal.sol";
 
-/// @title AtomicExperimentPad — a research instrument for launch-visibility experiments
+/// @title RektPad — a research instrument for launch-visibility experiments
 /// @notice A launchpad whose only purpose is to run CONTROLLED EXPERIMENTS on what makes a token launch get
 /// picked up. It is not a product and it is not permissionless: only the owner and an owner-curated operator
 /// set can launch.
@@ -59,7 +59,7 @@ import {
 /// That is all, and it is structural rather than merely bounded — launches are funded from `msg.value` so the
 /// pad holds no standing float, no operator-callable function takes a destination address, and every value
 /// sink is one of three fixed `Recipient` levels. `setOperator(key,false)` closes it in one owner tx.
-contract AtomicExperimentPad is Ownable2Step, ReentrancyGuard {
+contract RektPad is Ownable2Step, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     // ---------------------------------------------------------------------------------------------------
@@ -201,7 +201,7 @@ contract AtomicExperimentPad is Ownable2Step, ReentrancyGuard {
     address public constant BURN_ADDRESS = 0x000000000000000000000000000000000000dEaD;
     uint256 public constant RESCUE_TIMELOCK = 2 days;
 
-    /// @dev keccak256("AtomicExperimentPad.swapPool"). MUST be a literal uint256: solc rejects a
+    /// @dev keccak256("RektPad.swapPool"). MUST be a literal uint256: solc rejects a
     /// `bytes32 constant X = keccak256(...)` inside inline assembly ("Only direct number constants ... are
     /// supported"), and the latch is read with `tload`.
     uint256 private constant SWAP_POOL_SLOT = 0xa894fe7419a48581a5a3a149af14226b29f433ecc568d25833b609745d234f0c;

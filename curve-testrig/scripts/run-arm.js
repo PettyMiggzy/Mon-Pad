@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * Run ONE arm of an experiment through AtomicExperimentPad.
+ * Run ONE arm of an experiment through RektPad.
  *
  * ------------------------------------------------------------------------------------------------------
  * THE TEXT ON THE TOKEN IS AN EXPERIMENTAL VARIABLE. IT MUST NOT ENCODE THE ARM.
@@ -618,11 +618,11 @@ async function main() {
   }
 
   const padAddr = process.env.PAD;
-  if (!padAddr || !ethers.isAddress(padAddr)) throw new Error("PAD must be the deployed AtomicExperimentPad address");
+  if (!padAddr || !ethers.isAddress(padAddr)) throw new Error("PAD must be the deployed RektPad address");
   const dry = process.env.DRY_RUN === "1";
 
   const [signer] = await ethers.getSigners();
-  const pad = await ethers.getContractAt("AtomicExperimentPad", padAddr, signer);
+  const pad = await ethers.getContractAt("RektPad", padAddr, signer);
   const provider = ethers.provider;
   const weth = await pad.WETH();
   const { chainId } = await provider.getNetwork();

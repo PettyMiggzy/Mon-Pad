@@ -46,7 +46,7 @@ function mineSalt(pad, cfg, wantToken0, startAt) {
   console.log(`rehearsing on forked chain ${chainId} as ${op.address}`);
   console.log(`  balance ${ethers.formatEther(await ethers.provider.getBalance(op.address))} (fork funny money)\n`);
 
-  const pad = await (await ethers.getContractFactory("AtomicExperimentPad")).deploy(
+  const pad = await (await ethers.getContractFactory("RektPad")).deploy(
     op.address, op.address, op.address, FACTORY, NPM, WETH, chainId, 1n, INIT_HASH, POOL_PROBE);
   await pad.waitForDeployment();
   const padAddr = await pad.getAddress();

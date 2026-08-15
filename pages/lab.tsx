@@ -162,7 +162,7 @@ export default function LabPage() {
         <meta key="robots" name="robots" content="noindex,nofollow" />
       </Head>
 
-      <h1 style={{ fontSize: 22, marginBottom: 4 }}>Seed-quote experiment</h1>
+      <h1 style={{ fontSize: 22, marginBottom: 4 }}>REKT — seed-quote experiment</h1>
       <div style={{ opacity: 0.6, fontSize: 13, marginBottom: 20 }}>
         Robinhood Chain · chainId 4663 · unlisted
       </div>

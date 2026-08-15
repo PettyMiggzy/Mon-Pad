@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-/// @title IUniswapV3Minimal — hand-written V3 surface for AtomicExperimentPad
+/// @title IUniswapV3Minimal — hand-written V3 surface for RektPad
 /// @notice node_modules carries @uniswap/v4-core and @uniswap/v4-periphery ONLY; there is no v3-core or
 /// v3-periphery package to import from. Rather than vendor two more packages for six functions, the exact
 /// surface the pad touches is declared here.

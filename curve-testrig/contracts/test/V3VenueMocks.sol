@@ -145,7 +145,7 @@ contract MockV3Pool {
         emit Swap(msg.sender, recipient, amount0, amount1, sqrtPriceX96, liquidity, tick);
     }
 
-    /// @dev Same form as AtomicExperimentPad._amountsForLiquidity — v4-periphery has no
+    /// @dev Same form as RektPad._amountsForLiquidity — v4-periphery has no
     /// getAmountsForLiquidity, so the reverse direction is v4-core SqrtPriceMath with roundUp = true.
     function amountsForLiquidity(uint160 sp, uint160 sLo, uint160 sHi, uint128 liq)
         public

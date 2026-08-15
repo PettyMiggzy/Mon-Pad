@@ -4,7 +4,7 @@ const { expect } = require("chai");
 const PadTokenArtifact = require("../../artifacts/contracts/pads/PadToken.sol/PadToken.json");
 
 /**
- * AtomicExperimentPad against the REAL Robinhood Chain venue.
+ * RektPad against the REAL Robinhood Chain venue.
  *
  * SKIPPED BY DEFAULT. https://api.robinlab.io/rpc is the user's own paid proxy with two collectors already
  * running against it, so the default suite must spend ZERO RPC. Run explicitly:
@@ -50,10 +50,10 @@ function mineSalt(pad, cfg, weth, wantToken0) {
   throw new Error("no salt found");
 }
 
-(RUN ? describe : describe.skip)("AtomicExperimentPad — Robinhood Chain fork", () => {
+(RUN ? describe : describe.skip)("RektPad — Robinhood Chain fork", () => {
   async function deployPad() {
     const [owner] = await ethers.getSigners();
-    const pad = await (await ethers.getContractFactory("AtomicExperimentPad")).deploy(
+    const pad = await (await ethers.getContractFactory("RektPad")).deploy(
       owner.address, owner.address, owner.address, FACTORY, NPM, WETH, CHAIN_ID, 1000n, POOL_INIT_CODE_HASH,
       POOL_PROBE,
     );

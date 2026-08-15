@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * Run a WHOLE experiment — every arm, INTERLEAVED — through AtomicExperimentPad.
+ * Run a WHOLE experiment — every arm, INTERLEAVED — through RektPad.
  *
  * ------------------------------------------------------------------------------------------------------
  * WHY INTERLEAVE. Not for anonymity: the pad address, the operator EOA and LP_VAULT are constant across
@@ -41,7 +41,7 @@
  * Env:
  *   ARMS       comma-separated arm JSON paths (default: the two shipped seed-quote arms)
  *   SEED       REQUIRED. The named seed for the within-pair order. Publish it with the sequence.
- *   PAD        deployed AtomicExperimentPad
+ *   PAD        deployed RektPad
  *   DRY_RUN=1  run every gate for every cell, send nothing
  *   SEQUENCE_ONLY=1  print the sequence + digest and exit; touches no network
  *   MIN_GAP_MS, STATIC_CALL_GAS, DECLARED_FROM_BLOCK, PROGRESS — as run-arm.js
@@ -184,11 +184,11 @@ async function main() {
   }
 
   const padAddr = process.env.PAD;
-  if (!padAddr || !ethers.isAddress(padAddr)) throw new Error("PAD must be the deployed AtomicExperimentPad address");
+  if (!padAddr || !ethers.isAddress(padAddr)) throw new Error("PAD must be the deployed RektPad address");
   const dry = process.env.DRY_RUN === "1";
 
   const [signer] = await ethers.getSigners();
-  const pad = await ethers.getContractAt("AtomicExperimentPad", padAddr, signer);
+  const pad = await ethers.getContractAt("RektPad", padAddr, signer);
   const provider = ethers.provider;
   const weth = await pad.WETH();
   const { chainId } = await provider.getNetwork();

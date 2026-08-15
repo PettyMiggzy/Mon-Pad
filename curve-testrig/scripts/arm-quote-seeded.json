@@ -27,8 +27,8 @@
   "replicates": 8,
   "declaredTx": null,
   "cell": {
-    "name": "Probe",
-    "symbol": "PRB",
+    "name": "Rekt",
+    "symbol": "REKT",
     "decimals": 18,
     "totalSupply": "100000000000000000000000000000",
     "wantTokenIsToken0": false,

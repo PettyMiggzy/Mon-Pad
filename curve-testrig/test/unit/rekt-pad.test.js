@@ -62,7 +62,7 @@ function mineSalt(pad, cfg, weth, wantToken0, from = 0) {
   throw new Error("no salt found");
 }
 
-describe("AtomicExperimentPad — parameterised launch rig", () => {
+describe("RektPad — parameterised launch rig", () => {
   async function setup() {
     const [owner, operator, stranger, rescue, vault] = await ethers.getSigners();
 
@@ -84,7 +84,7 @@ describe("AtomicExperimentPad — parameterised launch rig", () => {
     // passes 0x479a1d0d9aec941382d9cab3ba69dd3914d981e9 for exactly the same reason.
     const probePool = await makeProbePool(factory);
 
-    const pad = await (await ethers.getContractFactory("AtomicExperimentPad")).deploy(
+    const pad = await (await ethers.getContractFactory("RektPad")).deploy(
       owner.address,
       rescue.address,
       vault.address,
@@ -1092,7 +1092,7 @@ describe("AtomicExperimentPad — parameterised launch rig", () => {
 
     it("G4: with an unmeasured init hash the pad falls back to getPool — and still catches a mismatch", async () => {
       const ctx = await setup();
-      const pad2 = await (await ethers.getContractFactory("AtomicExperimentPad")).deploy(
+      const pad2 = await (await ethers.getContractFactory("RektPad")).deploy(
         ctx.owner.address, ctx.rescue.address, ctx.vault.address,
         ctx.factoryAddr, ctx.npmAddr, ctx.wethAddr, HARDHAT_CHAIN, 200n, ethers.ZeroHash,
         ethers.ZeroAddress, // no hash to bind ⇒ no probe pool required (see I2/I8)
@@ -1202,7 +1202,7 @@ describe("AtomicExperimentPad — parameterised launch rig", () => {
         poolProbe: ctx.probePool,
         ...over,
       };
-      return (await ethers.getContractFactory("AtomicExperimentPad")).deploy(
+      return (await ethers.getContractFactory("RektPad")).deploy(
         a.owner, a.rescue, a.vault, a.factory, a.npm, a.weth,
         a.chainId, a.startLaunchId, a.poolInitHash, a.poolProbe,
       );

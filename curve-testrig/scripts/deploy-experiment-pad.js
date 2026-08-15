@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * Deploy AtomicExperimentPad.
+ * Deploy RektPad.
  *
  * EVERY address comes from the environment with NO DEFAULT. A defaulted address on a research rig is how you
  * end up with the hot deploy key as the rescue recipient, or a pad pointed at the wrong one of the four V3
@@ -239,7 +239,7 @@ async function main() {
     console.log("  POOL_INIT_CODE_HASH unset — the pad will verify each pool with factory.getPool instead");
   }
 
-  console.log(`\nDeploying AtomicExperimentPad from ${deployer.address} on ${network.name} (chain ${live})`);
+  console.log(`\nDeploying RektPad from ${deployer.address} on ${network.name} (chain ${live})`);
   console.log(`  owner ${owner}\n  rescue ${rescue}\n  lpVault ${lpVault}`);
   console.log(`  factory ${factory}\n  npm ${npm}\n  weth ${weth}`);
   console.log(`  startLaunchId ${startLaunchId}  poolInitCodeHash ${initHash}`);
@@ -248,20 +248,20 @@ async function main() {
   // The constructor takes the probe as a 10th argument so the hash↔venue binding lives inside the artifact
   // that is actually immutable, not only in this script. Tolerate the 9-argument build so a stale compile
   // fails LOUDLY here rather than as an opaque ethers arity error.
-  const padFactory = await ethers.getContractFactory("AtomicExperimentPad");
+  const padFactory = await ethers.getContractFactory("RektPad");
   const ctorInputs = padFactory.interface.deploy.inputs;
   const args = [owner, rescue, lpVault, factory, npm, weth, expectedChainId, startLaunchId, initHash];
   if (ctorInputs.length === 10 && ctorInputs[9].type === "address") {
     args.push(poolProbe || ethers.ZeroAddress);
   } else if (ctorInputs.length === 9) {
     console.warn(
-      "NOTE: the compiled AtomicExperimentPad takes 9 constructor arguments, i.e. it has no poolProbe check.\n" +
+      "NOTE: the compiled RektPad takes 9 constructor arguments, i.e. it has no poolProbe check.\n" +
         "      The init-code-hash / factory binding above was verified by this script only. Run\n" +
         "      `npx hardhat compile` if you expected the probe argument.",
     );
   } else {
     throw new Error(
-      `AtomicExperimentPad's constructor takes ${ctorInputs.length} arguments (${ctorInputs.map((i) => i.type).join(", ")}), ` +
+      `RektPad's constructor takes ${ctorInputs.length} arguments (${ctorInputs.map((i) => i.type).join(", ")}), ` +
         "which this script does not know how to fill. Refusing to guess at the ORDER of nine immutables.",
     );
   }
@@ -277,7 +277,7 @@ async function main() {
   await pad.waitForDeployment();
   const padAddr = await pad.getAddress();
   const rc = await ethers.provider.getTransactionReceipt(deployTx.hash);
-  console.log(`\nAtomicExperimentPad ${padAddr}`);
+  console.log(`\nRektPad ${padAddr}`);
   console.log(`  tx ${deployTx.hash}  block ${rc.blockNumber}`);
 
   // Grant operators FIRST, while the deploy key still owns the pad — after the handover only OWNER can.

@@ -8,7 +8,7 @@ require("dotenv").config();
 // EIP-1153 transient storage (the live V4 PoolManager at 0x188d58... depends on it), so
 // cancun is correct here.
 //
-// The same holds for Robinhood Chain (4663), the venue AtomicExperimentPad targets, whose
+// The same holds for Robinhood Chain (4663), the venue RektPad targets, whose
 // _devBuy latch uses TSTORE/TLOAD. MEASURED against https://api.robinlab.io/rpc on 2026-08-15,
 // not inferred: eth_call of raw initcode 0x604260005d60005c60005260206000f3 (TSTORE(0,0x42);
 // TLOAD(0); return it) returned 0x..42, while the negative control 0x0c60005260206000f3
@@ -44,7 +44,7 @@ module.exports = {
           chains: {
             143: { hardforkHistory: { cancun: 0 } },
             10143: { hardforkHistory: { cancun: 0 } },
-            // Robinhood Chain — the venue AtomicExperimentPad targets. Needed only by
+            // Robinhood Chain — the venue RektPad targets. Needed only by
             // test/fork/atomic-pad-robinhood.fork.test.js, which is skipped unless FORK_RPC is set.
             //
             // cancun:0 is a claim about the VENUE, and pinning it means a fork rehearsal can never
@@ -74,7 +74,7 @@ module.exports = {
       chainId: 10143,
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
     },
-    // Robinhood Chain — where AtomicExperimentPad actually deploys and where the arms run.
+    // Robinhood Chain — where RektPad actually deploys and where the arms run.
     // Without this entry the documented `--network robinhood` commands in
     // scripts/deploy-experiment-pad.js and scripts/run-arm.js are unrunnable, and a deploy
     // blocked at the last step is the moment people improvise with the wrong key or the wrong RPC.
