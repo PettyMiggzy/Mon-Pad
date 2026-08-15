@@ -1,0 +1,38 @@
+{
+  "_comment": [
+    "TREATMENT ARM. Matches the profile the resident bot fleet actually buys, measured over 2,843 pools",
+    "on factory 0x1f7d7550: median seeded quote 1.0 WETH, median seeded token 9.8e10. Five independent",
+    "bots bought 0-2% zero-quote pools vs 63-78% zero-quote among the pools they skipped.",
+    "",
+    "NOTE the range differs from the control arm and this is FORCED BY V3, not a design choice: a",
+    "position holding quote must straddle spot, a token-only position must not. 'Seed quote' and",
+    "'straddling range' cannot be separated in a single position, so this tests the BUNDLE - which is",
+    "the same bundle the wild pools present.",
+    "OPENING TICK 253000 is CALIBRATED, not chosen: at a full range 1 WETH pairs with 1.0001^tick tokens, so matching the observed 1 WETH / 98e9 profile forces tick ~253093, aligned to 253000. A fork rehearsal at tick 206800 seeded only 9.57e8 tokens - 100x short - which would have made the arms differ on token amount as well as quote."
+  ],
+  "experiment": "seed-quote-sweep",
+  "arm": "quote=1e18 (treatment)",
+  "replicates": 8,
+  "declaredFromBlock": 0,
+  "cell": {
+    "name": "Probe Q1",
+    "symbol": "PQ1",
+    "decimals": 18,
+    "totalSupply": "100000000000000000000000000000",
+    "wantTokenIsToken0": false,
+    "fee": 10000,
+    "openingTick": 253000,
+    "tickLower": -887200,
+    "tickUpper": 887200,
+    "seedTokenAmount": "98000000000000000000000000000",
+    "seedQuoteWei": "1000000000000000000",
+    "seedTokenMin": "0",
+    "seedQuoteMin": "0",
+    "lpTo": "VAULT",
+    "devBuyQuoteWei": "0",
+    "devBuyMinTokensOut": "0",
+    "devBuySqrtPriceLimitX96": "0",
+    "devBuyTo": "OPERATOR",
+    "residualTo": "BURN"
+  }
+}

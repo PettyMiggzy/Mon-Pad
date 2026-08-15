@@ -1,0 +1,37 @@
+{
+  "_comment": [
+    "CONTROL ARM. The reference pad's regime: token-only, ZERO quote seeded. This is the profile the bot",
+    "fleet skips, and the one TROLLCAT was launched in. Identical to the treatment arm on supply, seeded",
+    "token amount, fee, opening tick and every recipient - the range is token-only because a position",
+    "holding no quote cannot straddle spot.",
+    "",
+    "PRE-REGISTERED PREDICTION: treatment draws a fast-flip buyer within 1,000 blocks; control does not.",
+    "By the rule of three, 0 hits in 8 controls bounds the control rate below ~31% at 95%.",
+    "OPENING TICK 253000 is CALIBRATED, not chosen: at a full range 1 WETH pairs with 1.0001^tick tokens, so matching the observed 1 WETH / 98e9 profile forces tick ~253093, aligned to 253000. A fork rehearsal at tick 206800 seeded only 9.57e8 tokens - 100x short - which would have made the arms differ on token amount as well as quote."
+  ],
+  "experiment": "seed-quote-sweep",
+  "arm": "quote=0 (control)",
+  "replicates": 8,
+  "declaredFromBlock": 0,
+  "cell": {
+    "name": "Probe Q0",
+    "symbol": "PQ0",
+    "decimals": 18,
+    "totalSupply": "100000000000000000000000000000",
+    "wantTokenIsToken0": false,
+    "fee": 10000,
+    "openingTick": 253000,
+    "tickLower": 46000,
+    "tickUpper": 253000,
+    "seedTokenAmount": "98000000000000000000000000000",
+    "seedQuoteWei": "0",
+    "seedTokenMin": "0",
+    "seedQuoteMin": "0",
+    "lpTo": "VAULT",
+    "devBuyQuoteWei": "0",
+    "devBuyMinTokensOut": "0",
+    "devBuySqrtPriceLimitX96": "0",
+    "devBuyTo": "OPERATOR",
+    "residualTo": "BURN"
+  }
+}
