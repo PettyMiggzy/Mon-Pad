@@ -81,12 +81,18 @@ const emit = (o) => out.write(JSON.stringify({ t: Date.now(), ...o }) + "\n");
 const tracked = new Map();
 /** pending tx hash -> the record we already emitted, so we can close the loop when it mines. */
 const pending = new Map();
+/** pair address -> Mint log seen BEFORE its PairCreated was processed. A pair is created and seeded in
+ *  the SAME transaction, and the two logs arrive on different subscriptions with no ordering guarantee,
+ *  so ~79% of seeds were being dropped as "unknown pair" before this buffer existed. */
+const orphanMints = new Map();
 let head = 0;
 const stats = { pairs: 0, pendingSeen: 0, hits: 0, mined: 0, swaps: 0, reconnects: 0 };
 
-function trackToken(token, pair, block) {
+function trackToken(token, pair, block, token0) {
   if (MAJORS.has(token)) return;
-  tracked.set(token, { token, pair, bornBlock: block, bornAt: Date.now(), hits: 0 });
+  // token0 is carried so the seed can be oriented from the pair's real ordering rather than an
+  // address comparison — getting this backwards reads the token leg as the quote leg.
+  tracked.set(token, { token, pair, bornBlock: block, bornAt: Date.now(), hits: 0, token0 });
   if (tracked.size > MAX_TRACKED) tracked.delete(tracked.keys().next().value);
 }
 
@@ -146,9 +152,27 @@ function connect() {
         const token = t0 === WBNB ? t1 : t0;
         const quoted = t0 === WBNB || t1 === WBNB;
         // Only quote-paired pairs are launches. A token/token pair is a routing hop, not a launch.
-        if (quoted) trackToken(token, pair, blk);
+        if (quoted) trackToken(token, pair, blk, t0);
         stats.pairs++;
         emit({ kind: "pair", pair, token, token0: t0, token1: t1, quotePaired: quoted, block: blk, tx: r.transactionHash });
+        const orphan = orphanMints.get(pair);
+        if (orphan && quoted) {
+          orphanMints.delete(pair);
+          const rec = tracked.get(token);
+          if (rec && !rec.seeded) {
+            try {
+              const [a0, a1] = abi.decode(["uint256", "uint256"], orphan.data);
+              rec.seeded = true;
+              const wbnbIsToken0 = t0 === WBNB;
+              emit({
+                kind: "seed", pair, token, block: parseInt(orphan.blockNumber, 16),
+                amount0: a0.toString(), amount1: a1.toString(), wbnbIsToken0,
+                seedQuoteWei: (wbnbIsToken0 ? a0 : a1).toString(),
+                tx: orphan.transactionHash, viaOrphanBuffer: true,
+              });
+            } catch (e) { /* non-standard Mint */ }
+          }
+        }
         return;
       }
       if (r.topics[0] === T_V2_MINT) {
@@ -157,12 +181,19 @@ function connect() {
         const addr = r.address.toLowerCase();
         let hit = null;
         for (const rec of tracked.values()) if (rec.pair === addr) { hit = rec; break; }
-        if (!hit || hit.seeded) return;
+        if (!hit) {
+          // pair not registered yet — hold the Mint until PairCreated arrives
+          if (!orphanMints.has(addr)) orphanMints.set(addr, r);
+          if (orphanMints.size > 2000) orphanMints.delete(orphanMints.keys().next().value);
+          return;
+        }
+        if (hit.seeded) return;
         try {
           const [a0, a1] = abi.decode(["uint256", "uint256"], r.data);
           hit.seeded = true;
           // orient per pair, never assume WBNB sorted first
-          const wbnbIsToken0 = hit.token !== undefined && hit.token > WBNB;
+          // orientation from the pair's recorded token0, not an address comparison
+          const wbnbIsToken0 = hit.token0 !== undefined ? hit.token0 === WBNB : hit.token > WBNB;
           emit({
             kind: "seed", pair: addr, token: hit.token, block: parseInt(r.blockNumber, 16),
             amount0: a0.toString(), amount1: a1.toString(), wbnbIsToken0,
