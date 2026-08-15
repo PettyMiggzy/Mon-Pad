@@ -1,0 +1,38 @@
+{
+  "_comment": [
+    "Example arm for scripts/run-arm.js. Units are the contract's: fee is hundredths of a bip, ticks are V3",
+    "ticks in POOL orientation, every amount is RAW base units, seedQuoteWei is wei of WETH.",
+    "",
+    "This cell is ARM ZERO: the reference pad's exact geometry (fee 10000, opening tick 206800, range",
+    "[46000, 206800], 1e27 tokens, ZERO quote, no dev buy). It exists to prove the rig reproduces the",
+    "population's modal launch before any variable is moved. Copy it and change ONE field per arm.",
+    "",
+    "declareExperiment(keccak256('seed-quote-sweep'), ...) must already have fired in an EARLIER transaction",
+    "or run-arm.js refuses to send anything."
+  ],
+  "experiment": "seed-quote-sweep",
+  "arm": "quote=0 (arm zero, reference geometry)",
+  "replicates": 1,
+  "declaredFromBlock": 0,
+  "cell": {
+    "name": "Arm Zero",
+    "symbol": "AZ",
+    "decimals": 18,
+    "totalSupply": "1000000000000000000000000000",
+    "wantTokenIsToken0": false,
+    "fee": 10000,
+    "openingTick": 206800,
+    "tickLower": 46000,
+    "tickUpper": 206800,
+    "seedTokenAmount": "1000000000000000000000000000",
+    "seedQuoteWei": "0",
+    "seedTokenMin": "0",
+    "seedQuoteMin": "0",
+    "lpTo": "VAULT",
+    "devBuyQuoteWei": "0",
+    "devBuyMinTokensOut": "0",
+    "devBuySqrtPriceLimitX96": "0",
+    "devBuyTo": "OPERATOR",
+    "residualTo": "BURN"
+  }
+}

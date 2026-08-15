@@ -37,6 +37,9 @@ module.exports = {
           chains: {
             143: { hardforkHistory: { cancun: 0 } },
             10143: { hardforkHistory: { cancun: 0 } },
+            // Robinhood Chain — the venue AtomicExperimentPad targets. Needed only by
+            // test/fork/atomic-pad-robinhood.fork.test.js, which is skipped unless FORK_RPC is set.
+            4663: { hardforkHistory: { cancun: 0 } },
           },
         }
       : {},
