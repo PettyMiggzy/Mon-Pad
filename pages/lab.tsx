@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useAccount, useConnect, useDisconnect, useWalletClient } from 'wagmi';
+import { useAccount, useConnect, useDisconnect, useSendTransaction, useWalletClient } from 'wagmi';
 import Head from 'next/head';
 import {
-  createPublicClient, http, keccak256, encodeAbiParameters, concat,
+  createPublicClient, http, keccak256, encodeAbiParameters, encodeDeployData, concat,
   getCreate2Address, parseEther, formatEther, stringToHex, pad as padHex, type Address,
 } from 'viem';
 import { robinhood } from '@/lib/wagmi';
 import { isAdmin, ADMIN_WALLETS } from '@/lib/constants';
 import { REKT_PAD_ABI, PAD_TOKEN_BYTECODE } from '@/lib/rekt/abi';
+import { VENUES, START_LAUNCH_ID, ROBINHOOD_CHAIN_ID, type VenueId } from '@/lib/rekt/venues';
 
 /**
  * HIDDEN launcher — RektPad, Robinhood Chain (4663).
@@ -42,22 +43,29 @@ const WETH = '0x0bd7d308f8e1639fab988df18a8011f41eacad73' as Address;
 
 const Recipient = { OPERATOR: 0, VAULT: 1, BURN: 2 } as const;
 
-/** Each preset is a measured cell, not a guess. `hit` is the observed fast-bot rate. */
+/**
+ * Each preset is a measured cell, not a guess. `hit` is the observed fast-bot rate.
+ *
+ * `venue` is part of the cell, not a footnote: the factory and the sort side only mean anything together,
+ * so a preset run against a pad built on the other factory isn't a weaker version of the same bet — it is
+ * a different cell entirely (e51960f1+token1 is 85%, e51960f1+token0 is 13%). The pad you point at is
+ * therefore checked against this field before anything can launch.
+ */
 const PRESETS = [
   {
     id: 'free-best', label: 'Best free', hit: '85%', cost: 'gas only',
-    note: 'Highest rate that costs nothing. Needs the pad deployed against factory e51960f1.',
-    wantTokenIsToken0: false, seedQuoteWei: 0n,
+    note: 'Highest rate that costs nothing.',
+    wantTokenIsToken0: false, seedQuoteWei: 0n, venue: 'sushi' as VenueId,
   },
   {
     id: 'free-alt', label: 'Free, other factory', hit: '51%', cost: 'gas only',
-    note: 'For a pad deployed against factory 1f7d7550 — the token must sort as token0 there.',
-    wantTokenIsToken0: true, seedQuoteWei: 0n,
+    note: 'The other venue — there the token has to sort as token0 instead.',
+    wantTokenIsToken0: true, seedQuoteWei: 0n, venue: 'canonical' as VenueId,
   },
   {
     id: 'paid', label: 'Seed 1 ETH', hit: '92%', cost: '~$1,883',
     note: 'Seven points more than free, and that ETH sits in the pool for anyone to sell into.',
-    wantTokenIsToken0: false, seedQuoteWei: parseEther('1'),
+    wantTokenIsToken0: false, seedQuoteWei: parseEther('1'), venue: 'sushi' as VenueId,
   },
 ] as const;
 
@@ -146,6 +154,7 @@ export default function LabPage() {
   const { address, isConnected, chainId } = useAccount();
   const { data: wallet } = useWalletClient();
   const { disconnect } = useDisconnect();
+  const { sendTransactionAsync } = useSendTransaction();
 
   // Connector list is browser-only (EIP-6963 announcements arrive after mount), so the server render
   // and the first client render would disagree. Hold the first paint rather than hydrate a mismatch.
@@ -209,11 +218,71 @@ export default function LabPage() {
     };
   }, [cfg, devBuy, mineSalt, name, symbol]);
 
+  /**
+   * Deploy a pad from the browser, so running this needs a wallet and nothing else — no funded deploy key,
+   * no CLI, no env vars. Same constructor arguments scripts/deploy-experiment-pad.js passes, with the
+   * venue's measured factory/NPM/WETH and its verified init-code-hash-plus-probe pair.
+   *
+   * Owner, rescue recipient and LP vault all become the connected wallet: it is the only address the
+   * browser can prove control of, and every one of those is a destination for value. The vault is where
+   * position NFTs land, so pointing it anywhere unverified is how liquidity gets lost.
+   */
+  const deployPad = useCallback(async () => {
+    if (!wallet || !address) return;
+    const venue = VENUES[cfg.venue];
+    setBusy(true); setStatus('preparing pad bytecode…'); setResult(null); setPreview(null);
+    try {
+      // ~20 KB of bytecode that only matters on this click — keep it out of the page's first load.
+      const { REKT_PAD_BYTECODE, REKT_PAD_CONSTRUCTOR_ABI } = await import('@/lib/rekt/padBytecode');
+      // encodeDeployData + sendTransaction rather than wallet.deployContract: the latter's parameter type is
+      // a union that TypeScript resolves into the EIP-4844 blob branch here and then demands a `kzg` field.
+      // This is what deployContract does internally anyway, and the constructor args still typecheck against
+      // the ABI — which is the part worth keeping, since they are ten near-identical addresses in a row.
+      const data = encodeDeployData({
+        abi: REKT_PAD_CONSTRUCTOR_ABI, bytecode: REKT_PAD_BYTECODE,
+        args: [
+          address as Address,             // owner
+          address as Address,             // rescue recipient
+          address as Address,             // LP vault — position NFTs land here
+          venue.factory, venue.npm, venue.weth,
+          BigInt(ROBINHOOD_CHAIN_ID), START_LAUNCH_ID,
+          venue.initCodeHash, venue.probe,
+        ],
+      });
+      setStatus('confirm the deploy in your wallet…');
+      // wagmi's sendTransaction rather than the wallet client's: viem's own parameter type is a union over
+      // transaction kinds that, with a generic chain, resolves to the EIP-4844 blob branch and demands a KZG
+      // trusted setup for a plain deploy. wagmi's version is written over the configured chains, so it
+      // resolves concretely — which is the other reason 4663 belongs in the wagmi config.
+      const hash = await sendTransactionAsync({ chainId: ROBINHOOD_CHAIN_ID, data });
+      setStatus('deploying, waiting for the chain…');
+      const receipt = await client.waitForTransactionReceipt({ hash });
+      if (!receipt.contractAddress) throw new Error('deploy mined without a contract address');
+      setPadAddr(receipt.contractAddress);
+      setStatus(`pad deployed on ${venue.label} — now Check first`);
+    } catch (e: any) {
+      setStatus('deploy failed: ' + String(e?.shortMessage || e?.message || e).slice(0, 180));
+    } finally { setBusy(false); }
+  }, [address, cfg.venue, client, sendTransactionAsync, wallet]);
+
   const check = useCallback(async () => {
     if (!padOk) return;
     setBusy(true); setStatus('checking…'); setPreview(null); setResult(null);
     try {
       const pad = padAddr as Address;
+      // The factory is half of the measured cell, so a pad built on the other venue quietly turns an 85%
+      // setup into a 13% one. Ask the pad which factory it is welded to before trusting the preset's number.
+      const padFactory = await client.readContract({ address: pad, abi: REKT_PAD_ABI, functionName: 'FACTORY' }) as Address;
+      const want = VENUES[cfg.venue];
+      if (padFactory.toLowerCase() !== want.factory.toLowerCase()) {
+        const actual = Object.values(VENUES).find((v) => v.factory.toLowerCase() === padFactory.toLowerCase());
+        setStatus(
+          `wrong pad for this setup: "${cfg.label}" was measured on ${want.label} (${want.short}), but this pad is built on ` +
+          `${actual ? `${actual.label} (${actual.short})` : padFactory} — pick the matching setup, or deploy a pad below.`,
+        );
+        setBusy(false);
+        return;
+      }
       const p = buildParams(pad);
       const pv = await client.readContract({ address: pad, abi: REKT_PAD_ABI, functionName: 'previewLaunch', args: [p] });
       // The preflight that matters: simulate the REAL call. previewLaunch skips several checks, so a
@@ -227,7 +296,7 @@ export default function LabPage() {
     } catch (e: any) {
       setStatus('would fail: ' + String(e?.shortMessage || e?.message || e).slice(0, 180));
     } finally { setBusy(false); }
-  }, [address, buildParams, client, padAddr, padOk]);
+  }, [address, buildParams, cfg.label, cfg.venue, client, padAddr, padOk]);
 
   const launch = useCallback(async () => {
     if (!wallet || !preview) return;
@@ -320,7 +389,18 @@ export default function LabPage() {
 
       <div style={S.card}>
         <div style={S.lab}>Pad address</div>
-        <input style={S.input} value={padAddr} onChange={(e) => setPadAddr(e.target.value.trim())} placeholder="0x… (deploy first)" />
+        <input style={S.input} value={padAddr} onChange={(e) => setPadAddr(e.target.value.trim())} placeholder="0x… paste one, or deploy below" />
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 12, flexWrap: 'wrap' }}>
+          <button style={S.btn(!!wallet && !busy && onRobinhood)} disabled={!wallet || busy || !onRobinhood} onClick={() => void deployPad()}>
+            Deploy a pad on {VENUES[cfg.venue].label}
+          </button>
+          <span style={{ fontSize: 12, opacity: .6 }}>one-off, gas only — reuse it for every launch after</span>
+        </div>
+        <div style={{ fontSize: 12, opacity: .55, marginTop: 10, lineHeight: 1.5 }}>
+          A pad is welded to one venue when it&apos;s built, and the venue is half of what decides whether bots
+          come — so the button follows the setup you picked below. You end up owner, and the LP positions come
+          to you. Deploying twice on the same venue just wastes gas; keep the address.
+        </div>
       </div>
 
       <div style={S.card}>
@@ -331,7 +411,9 @@ export default function LabPage() {
               <input type="radio" name="preset" checked={preset === p.id} onChange={() => setPreset(p.id)} style={{ marginTop: 3 }} />
               <span>
                 <b>{p.label}</b> · <span style={{ color: '#5EC5B8' }}>{p.hit} draw a bot</span> · <span style={{ opacity: .65 }}>{p.cost}</span>
-                <br /><span style={{ fontSize: 12, opacity: .6 }}>{p.note}</span>
+                <br /><span style={{ fontSize: 12, opacity: .6 }}>
+                  {p.note} Needs a pad on {VENUES[p.venue].label} ({VENUES[p.venue].short}), token as {p.wantTokenIsToken0 ? 'token0' : 'token1'}.
+                </span>
               </span>
             </label>
           ))}
