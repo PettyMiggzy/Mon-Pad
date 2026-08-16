@@ -27,3 +27,23 @@ const dest = path.join(__dirname, "../../lib/rekt/abi.ts");
 fs.mkdirSync(path.dirname(dest), { recursive: true });
 fs.writeFileSync(dest, out);
 console.log(`wrote ${dest} (${(out.length / 1024).toFixed(1)} KB)`);
+
+// The pad's own creation bytecode, so the site can deploy a pad instead of requiring a funded key and a
+// CLI. Kept in a SEPARATE module from the ABI on purpose: it is ~20 KB of bytecode that only matters on
+// the one click that deploys, so /lab import()s it lazily and nobody pays for it on the way to a launch.
+const ctor = pad.abi.find((x) => x.type === "constructor");
+if (!ctor) throw new Error("RektPad artifact has no constructor in its ABI");
+const deployed = (pad.deployedBytecode.length - 2) / 2;
+if (deployed > 24576) throw new Error(`RektPad deployed bytecode is ${deployed} bytes, over the EIP-170 limit`);
+
+const bytecodeOut = `// GENERATED from curve-testrig artifacts — do not hand-edit.
+// Regenerate after any RektPad change:  npx hardhat run scripts/export-abi-for-site.js
+//
+// Deployed size at export: ${deployed} bytes (EIP-170 limit 24576).
+export const REKT_PAD_BYTECODE = ${JSON.stringify(pad.bytecode)} as const;
+
+export const REKT_PAD_CONSTRUCTOR_ABI = ${JSON.stringify([ctor])} as const;
+`;
+const bytecodeDest = path.join(__dirname, "../../lib/rekt/padBytecode.ts");
+fs.writeFileSync(bytecodeDest, bytecodeOut);
+console.log(`wrote ${bytecodeDest} (${(bytecodeOut.length / 1024).toFixed(1)} KB, deployed ${deployed} bytes)`);
