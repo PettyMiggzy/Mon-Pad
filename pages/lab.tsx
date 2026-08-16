@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAccount, useConnect, useDisconnect, useWalletClient } from 'wagmi';
 import Head from 'next/head';
 import {
-  createPublicClient, http, defineChain, keccak256, encodeAbiParameters, concat,
+  createPublicClient, http, keccak256, encodeAbiParameters, concat,
   getCreate2Address, parseEther, formatEther, stringToHex, pad as padHex, type Address,
 } from 'viem';
+import { robinhood } from '@/lib/wagmi';
 import { isAdmin, ADMIN_WALLETS } from '@/lib/constants';
 import { REKT_PAD_ABI, PAD_TOKEN_BYTECODE } from '@/lib/rekt/abi';
 
@@ -14,9 +15,10 @@ import { REKT_PAD_ABI, PAD_TOKEN_BYTECODE } from '@/lib/rekt/abi';
  * UNLISTED: no nav entry anywhere (compare /admin, which IS linked for admin wallets), gated to
  * ADMIN_WALLETS, noindex,nofollow. URL only.
  *
- * SELF-CONTAINED: reads 4663 through its own viem client and signs through the connected wallet with an
- * explicit chain id. lib/wagmi.ts is untouched — adding 4663 there would put a chain switcher in front
- * of every ordinary Monad user for the sake of one hidden page.
+ * READS ARE SELF-CONTAINED: the preflight goes through this page's own viem client, so "Check first"
+ * works whatever chain the wallet is on. SIGNING is not — 4663 is declared in lib/wagmi.ts because
+ * wagmi ignores a switch to any chain it doesn't know, which pinned the app to Monad and made
+ * RainbowKit report "Wrong network" with no way out. See the note there.
  *
  * WHAT THE PRESETS ENCODE, measured over ~2,900 real launches on this chain:
  *   Two settings decide whether bots show up, and they only mean anything TOGETHER — which launchpad
@@ -35,13 +37,6 @@ import { REKT_PAD_ABI, PAD_TOKEN_BYTECODE } from '@/lib/rekt/abi';
  * chain costs gas for nothing.
  */
 
-const robinhood = defineChain({
-  id: 4663,
-  name: 'Robinhood Chain',
-  nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
-  rpcUrls: { default: { http: ['https://robinhoodchain.blockscout.com/api/eth-rpc'] } },
-  blockExplorers: { default: { name: 'Blockscout', url: 'https://robinhoodchain.blockscout.com' } },
-});
 const EXPLORER = robinhood.blockExplorers.default.url;
 const WETH = '0x0bd7d308f8e1639fab988df18a8011f41eacad73' as Address;
 
