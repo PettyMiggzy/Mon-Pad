@@ -1,0 +1,249 @@
+# curve-testrig — a research rig for curve-on-Uniswap-V4 behaviour
+
+**This is a test rig, not a product.** It exists so that claims about single-sided bonding-curve geometry can
+be *measured against real contracts* instead of asserted from a spreadsheet. It is not a launchpad, it is not
+anyone's production pad, and it is not intended to launch tokens with real value. Deploy scripts refuse
+mainnet unless deliberately overridden.
+
+What it is: a complete, executable implementation of a bonding curve where **the curve *is* a Uniswap V4
+position**, wired up far enough that simulations run through the same code paths a real launch would — real
+`PoolManager` swaps, real tick math, real fee accounting — so numbers that come out of `test/sim/` are
+measurements rather than estimates. The Monad-specific constants (native MON, chain 143 addresses) are the
+concrete substrate the experiments run on; the findings are about curve geometry, not about any one chain.
+
+Scope: curve + factory + fee hook + permanently locked LP + per-pad staking + governed fee config, plus a
+revenue-recycling leg. No floor vault, no presale, no stock adapters.
+
+Its contracts share an audited lineage with an earlier ETH-chain curve suite — that lineage is documented in
+`PORT-NOTES.md` so a reviewer can diff the rig against known-audited source and see that the behaviour being
+measured is not an artifact of rewritten code. It is a code provenance record, not a product relationship.
+
+## What has actually been measured here
+
+| Finding | Where |
+|---|---|
+| Conservation law: a first buyer spending `m` can never realise more than the total raise `R`, so max real return is `R/m` — **independent of curve width**. Verified to 0.1% across 7 geometries. | `BRIEF-curve-geometry.md`, `test/sim/geometry.sweep.sim.test.js` |
+| Paper multiples diverge from realisable ones by orders of magnitude: at width 115000 a $100 first buy shows **19,658x on the chart and 77x in the money**. | `test/sim/devbuy.sweep.sim.test.js` |
+| Widening the curve asymptotes ROI (~+1160%) but **not** supply capture, which keeps climbing to 72% of supply. | `test/sim/geometry.sweep.sim.test.js` |
+| Three snipers with 5,000 MON take 8.4% of supply, leave retail at 1.54× cost basis, and clear **+87.3%**; the sell tax that would break even is 47.1%, which is why no sell-tax defence is implemented. | `RESEARCH-sniper-economics.md`, `test/sim/snipers.sim.test.js` |
+
+Each row is reproducible from a clean checkout with `npm test`/`npm run test:sim`; the fork test replays the
+whole lifecycle against a live V4 deployment.
+
+## Why this curve shape is the one under study
+
+The dominant launchpad design is a virtual-reserve constant-product curve that graduates by **migrating into a
+separate AMM pool** — nad.fun on Monad works this way, as does most of the pump.fun lineage. Migration is a
+structural seam: two pricing systems stitched together at graduation, so the opening DEX price is a *calibration
+choice* rather than a consequence of the curve. Retuning virtual reserves patches the symptom; the seam stays.
+
+The rig implements the alternative, so the two can be compared on measurements rather than on argument. Here
+there is one pool for the entire life of the token:
+
+- **No graduation discontinuity.** The pool opens at `startTick` holding only token. Buys walk the tick down.
+  At `gradTick` the curve is sold out and graduation converts the position in place — it does not migrate to a
+  new venue, so the seam cannot reopen.
+- **The tax cannot be routed around.** It lives in the V4 hook (`beforeSwap` fee-on-input for buys, `afterSwap`
+  on the money leg for sells), so aggregator, chart-site and raw-pool trades all pay it. Router-level taxes,
+  the usual alternative, leak on every non-router trade — which matters here because it means fee revenue in
+  the sims is not overstated by an assumption about routing.
+- **Free launches.** Single-sided and self-seeded — the creator posts no MON.
+- **No dev mint.** The factory enforces `supply == curveSupply + reserveSupply` exactly. The creator receives
+  zero tokens at launch and buys from the curve like everyone else.
+
+**Measured on Monad, 2026-08:** of the top 100 Uniswap V4 pools on the chain, **94 run no hook at all** — V4 is
+being used as "V3 with cheaper gas." Of the six that do, only two carry real volume, both stablecoin/RWA pools
+sharing one hook. No launchpad on Monad runs hook logic, which is the practical reason this behaviour had to be
+simulated rather than observed in the wild.
+
+## Economics under test (governed defaults, stamped immutable per pad at launch)
+
+These are the parameters the simulations are run *at*. They are a plausible production configuration chosen so
+the measurements land in a realistic regime — not a proposal, and not the settings of any shipped pad.
+
+| | On a **BUY** (MON→token) | On a **SELL** (token→MON) |
+|---|---|---|
+| **1% trade tax** (hook) | 0.2% curve buffer → platform at graduation · 0.2% referrer (if a ref link is passed) · rest platform | **100% → creator** |
+| **1% LP fee** (pool) | → platform | → platform |
+
+The creator is paid in **MON**, natively. The sell tax is taken from the MON output leg, so there is nothing to
+convert — no swapping the creator's own coin into their own pool to pay them.
+
+**Graduation** at the ceiling (~373,000 MON raised): keeper bounty off the top, then platform 20% / creator 15%
+/ **LP takes the 65% remainder**, minted as a permanent full-range position and locked in `LockVault` forever.
+
+Geometry — `startTick 87300`, `curveWidth 23000`, `tickSpacing 100`, 1B supply @ 73% curve / 27% reserve:
+
+| | |
+|---|---|
+| Graduation raise | ~373,000 MON (~$7,830) |
+| Start FDV | ~$3,396 |
+| Graduation FDV | ~$33,872 |
+| Chart | ~10× launch → graduation |
+| Platform / creator at graduation | ~$1,566 / ~$1,174 |
+| Left in the permanent locked LP | ~$5,088 |
+
+The split is the main lever on launch appeal: every MON taken out at graduation is liquidity the coin does not
+have afterwards. 20/15 clears enough for a creator to want to launch while leaving the pool able to absorb sells.
+Each bucket is capped at 25% by `MonPadV4FeeConfig`.
+
+Re-derive with `node scripts/calibrate.js` if the target moves; `--verify` checks the formula against the
+audited ETH geometry first.
+
+## The unsold reserve becomes holder rewards
+
+The factory's reserve check sizes `reserveSupply` on the assumption that the **whole** raise seeds the permanent
+LP, but the waterfall routes only the LP share (65% after the platform and creator cuts). So the LP mint
+structurally cannot consume the reserve it was sized against — **~120M tokens, 12% of supply**, are left over at
+graduation.
+
+That residue streams into the pad's own `MonPadLockStaking` pool: **stake the coin, earn the coin.** Rewards
+drip out of a finite reservoir at a bounded Synthetix `rewardRate`, so no whale can drain it in a block, and the
+reservoir is self-filling — it is fed by the graduation leftover, by the locked LP's sell-side fees, and by a
+10% early-exit penalty recycled back to whoever is still staked. Impatience pays the diamond hands.
+
+**The factory deploys and wires that pool during `launch()`**, so every pad has staking from block one. That is
+deliberate: `setStaking` is one-shot and had to happen *before* `graduate()`, but graduation is permissionless
+and keeper-driven, so a hand-wired pad could graduate first and permanently register its locked-LP fee recipient
+as `address(0)` — [M-11] in the audited suite. Wiring at launch removes the ordering entirely.
+
+A burn to `0x…dEaD` remains as an unreachable fallback for a curve deployed outside the factory, so the reserve
+can never strand. In normal operation it is never hit.
+
+## Graduation is automatic
+
+There is no "let it ride" — no dev-settable graduation target, no minimum/ceiling range to choose between, no
+abandon timeout. `ready()` flips the moment spot reaches `gradTick` (the curve is fully sold), and `graduate()`
+is permissionless from there. `MonPadV4FeeConfig` still carries a `minGradWidth` field, validated at launch but
+never read by the curve — it is inert by design, not an unimplemented feature.
+
+**The curve pays for its own graduation.** `graduate()` carves `min(0.2% of the raise, 100 MON)` off the top and
+pays it to whoever called, so the trigger gas comes out of the curve's MON and the caller keeps a tip. Nobody
+subsidises anything and nobody has to babysit a launch.
+
+That bounty is load-bearing on Monad specifically, because **gas is charged on the transaction's gas limit, not
+gas used** — a 5M-limit `graduate()` at the observed ~100 gwei costs ~0.5 MON regardless of what it burns. At
+100 MON the margin is ~200x. At the Robin original's 0.02 ETH cap it would have been ~0.02 MON, i.e. 25x *less*
+than the cost of claiming it, and no pad would ever have graduated.
+
+`scripts/auto-graduate.cjs` is the watcher that closes the loop — graduation can't run inside the crossing buy
+(it needs its own `PoolManager.unlock`, and the buy already holds the singleton's lock), so a keeper polls
+`ready()` and fires. It earns the bounty, so it funds itself.
+
+```bash
+MONAD_RPC=<rpc> KEEPER_PRIVATE_KEY=<key> node scripts/auto-graduate.cjs      # run forever
+MONAD_RPC=<rpc> KEEPER_PRIVATE_KEY=<key> node scripts/auto-graduate.cjs --once
+```
+
+Note `CHUNK` defaults to **100**: Monad's public RPC caps `eth_getLogs` at a 100-block range and rejects wider
+calls with `-32614`. A dedicated provider lifts it — worth raising for backfills.
+
+## MONSHI buy pressure
+
+`contracts/monshi/` turns platform revenue into permanent MONSHI burns, without touching the swap path.
+
+```
+                                                                                     ┌→ 40% treasury
+platform revenue → PlatformFeeSplitter → 20% → MonshiBuyback → nad.fun DEX → MONSHI ─┼→ 30% MONSHI stakers
+                                       → 80% → treasury (MON)                        └→ 30% burned
+```
+
+**Stake MONSHI, earn MONSHI.** The staking leg is what turns a buyback into a *hold* incentive. A burn is
+one-off flow — it spends the money once and the pressure is gone. Rewarding stakers gives holders a standing
+reason to buy and keep MONSHI staked, which removes float instead of just cycling it, and the pool's 10%
+early-exit penalty recycles to whoever stays. At an $11k market cap, removing float matters more than adding
+flow. The pool is the same audited `MonPadLockStaking` every pad gets, pointed at MONSHI.
+
+Treasury + stakers are **jointly capped at 70% on-chain** (`MAX_DIVERTED_BPS`), so **at least 30% of every buy
+burns** and the owner cannot govern that away. "Platform fees buy and burn MONSHI" is a promise to the MONSHI
+community, and a burn that can be set to zero is not one. Rounding dust burns rather than accruing to a
+beneficiary, and if the staking pool is ever unset its share burns rather than stranding.
+
+MONSHI has **already graduated** off the nad.fun bonding curve and trades in a Uniswap-V3-style WMON/MONSHI pool
+(1% fee, tickSpacing 200, factory `0x6B5F…B7F3`), so the DEX router `0x0B79…b137` is the venue — not the bonding
+curve. Its `buy` is payable and takes native MON, and its `to` parameter is set to the burn address, so bought
+MONSHI is never held by any contract we control.
+
+Measured against the live pool: **1,000 MON moves the price ~2.0%** (1% of which is the pool's own fee) and
+2,500 MON ~2.6% — far more absorptive than its ~$6.7k reported TVL suggests. `maxSpendPerCall` defaults to
+1,000 MON to keep each buy inside that range.
+
+The buy is **keeper-gated, not permissionless**. It needs a price, and whoever supplies `minOut` decides the
+slippage tolerance — a permissionless version lets any caller pass a loose bound and sandwich the trade, and
+deriving the bound from live `slot0` is the exact mistake `FLOOR-REDESIGN.md` refuted four times. Since this is
+the platform spending its own revenue on its own token, no user funds are at risk and a keeper computing
+`minOut` off-chain is both safer and simpler. `maxSpendPerCall` + `cooldown` bound a compromised keeper, and
+there is **no MON withdrawal path** — MON can only ever leave as a MONSHI buy, and the bought MONSHI leaves
+only via the capped treasury/burn split (both `buyback` and `sweepStrandedMonshi` settle on identical terms).
+
+## Build & test
+
+```bash
+npm install          # postinstall links solmate/forge-std/permit2 for Hardhat
+npm run build        # solc 0.8.26, viaIR, runs 1, cancun
+npm test             # unit: fee config + curve
+npm run test:sim     # production-geometry calibration + graduation (burn, conservation, bounty)
+npm run test:all     # everything, including the MONSHI buyback + splitter
+```
+
+Fork test against Monad's **live** V4 stack (PoolManager `0x188d58…`, real PositionManager + Permit2):
+
+```bash
+FORK_RPC=https://rpc.monad.xyz FORK_CHAINID=143 npm run test:fork   # 1 passing (21s)
+```
+
+It runs launch → sellout → graduate end to end and asserts the permanent LP mints through the real
+PositionManager into `LockVault`, the leftover reserve burns, and no MON strands in an unwired book.
+
+## Deploy (testnet only)
+
+The rig is meant to run against a local fork or a testnet. `scripts/deploy-curve.js` and
+`scripts/deploy-monshi.js` **refuse to run on Monad mainnet (chain 143)** and abort unless
+`ALLOW_MAINNET_DEPLOY=1` is set explicitly — the guard is there so an experiment cannot become a live launch by
+accident.
+
+```bash
+MONAD_RPC=<testnet-rpc> PRIVATE_KEY=<throwaway-key> PLATFORM_WALLET=<addr> \
+  POOL_MANAGER=<testnet> POSITION_MANAGER=<testnet> STATE_VIEW=<testnet> \
+  npx hardhat run scripts/deploy-curve.js --network monadTestnet
+```
+
+The V4 addresses default to Monad *mainnet* and must be overridden for any other chain — take them from
+https://developers.uniswap.org/contracts/v4/deployments. Most experiments need no deploy at all: the sims run
+entirely in-process, and `npm run test:fork` exercises the live V4 stack read-only against a fork.
+
+## Uniswap V4 on Monad (chain 143)
+
+Each verified to carry code on `rpc.monad.xyz`:
+
+```
+POOL_MANAGER      0x188d586ddcf52439676ca21a244753fa19f9ea8e
+POSITION_MANAGER  0x5b7ec4a94ff9bedb700fb82ab09d5846972f4016
+STATE_VIEW        0x77395f3b2e73ae90843717371294fa97cc419d64
+QUOTER            0xa222dd357a9076d1091ed6aa2e16c9742dd26891
+UNIVERSAL_ROUTER  0x0d97dc33264bfc1c226207428a79b26757fb9dc3
+PERMIT2           0x000000000022D473030F116dDEE9F6B43aC78BA3
+CREATE2           0x4e59b44847b379578588920cA78FbF26c0B4956C
+WMON              0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A
+```
+
+Native MON sentinel = `address(0)`, always sorts as `currency0`. Monad supports EIP-1559, so deploys are
+ordinary type-2 txs — unlike Robinhood Chain, do **not** force legacy type-0.
+
+## Provenance
+
+`PORT-NOTES.md` maps every file to its source in the Robin suite and lists every intentional change. The first
+commit on this directory is a verbatim copy of the audited contracts, so the port is a reviewable diff rather
+than a rewrite. That matters for the research claim specifically: the measurements below come from contracts
+whose lineage a reader can check line by line, not from a model written to produce them.
+
+**Carried-over risk:** the source suite's audit register closed at zero findings *except* H-5, an unresolved
+weakness in `RobinFloorVault`'s spot-based commit gate. That contract is not ported here, so H-5 does not apply
+to the rig. It becomes live again the moment a floor vault is added.
+
+## Standing limitation
+
+Audited lineage is not the same as being audited *as configured*. The geometry, the graduation split, the
+factory-side staking wiring and the re-denominated keeper bounty are all changes made for this rig and have
+been verified only by its own test suite. Nothing here has been reviewed for production use, and the deploy
+guards exist to keep it that way.
