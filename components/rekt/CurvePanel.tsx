@@ -45,6 +45,23 @@ const S = {
 
 const EXPLORER = robinhood.blockExplorers.default.url;
 
+/**
+ * Wallet and RPC failures arrive wrapped several layers deep, and the useful sentence is rarely the top
+ * one — a rate-limited 4663 endpoint surfaces as a generic "internal error" until you read `details`.
+ * Walk the chain and keep what actually names the problem.
+ */
+function explain(e: any): string {
+  const parts: string[] = [];
+  for (let x = e, i = 0; x && i < 4; x = x.cause, i++) {
+    for (const k of ['shortMessage', 'details', 'message'] as const) {
+      const v = (x as any)?.[k];
+      if (typeof v === 'string' && v && !parts.includes(v)) parts.push(v);
+    }
+  }
+  return (parts.join(' | ') || String(e)).slice(0, 400);
+}
+
+
 export function CurvePanel({ onRobinhood }: { onRobinhood: boolean }) {
   const { address } = useAccount();
   const { data: wallet } = useWalletClient();
@@ -120,14 +137,16 @@ export function CurvePanel({ onRobinhood }: { onRobinhood: boolean }) {
         ],
       });
       setStatus('confirm the deploy…');
-      const hash = await sendTransactionAsync({ chainId: ROBINHOOD_CHAIN_ID, data });
+      // Explicit gas — wagmi would otherwise estimate through the wallet's own 4663 RPC, and a rate
+      // limit there kills the deploy before any signing prompt. Unused gas is refunded.
+      const hash = await sendTransactionAsync({ chainId: ROBINHOOD_CHAIN_ID, data, gas: 8_000_000n });
       setStatus('deploying…');
       const r = await client.waitForTransactionReceipt({ hash });
       if (!r.contractAddress) throw new Error('deploy mined without a contract address');
       setCurveAddr(r.contractAddress);
       setStatus(`curve pad deployed on ${venue.label} — now create a token`);
     } catch (e: any) {
-      setStatus('deploy failed: ' + String(e?.shortMessage || e?.message || e).slice(0, 180));
+      setStatus('deploy failed: ' + explain(e));
     } finally { setBusy(false); }
   }, [address, client, sendTransactionAsync, venue]);
 
@@ -157,7 +176,7 @@ export function CurvePanel({ onRobinhood }: { onRobinhood: boolean }) {
       setToken(predicted);
       setStatus('curve open — anyone can buy now');
     } catch (e: any) {
-      setStatus('create failed: ' + String(e?.shortMessage || e?.message || e).slice(0, 180));
+      setStatus('create failed: ' + explain(e));
     } finally { setBusy(false); }
   }, [address, client, curveAddr, curveOk, mineSalt, name, symbol, target, venueId, wallet]);
 
@@ -174,7 +193,7 @@ export function CurvePanel({ onRobinhood }: { onRobinhood: boolean }) {
       setStatus('bought');
       await refresh();
     } catch (e: any) {
-      setStatus('buy failed: ' + String(e?.shortMessage || e?.message || e).slice(0, 180));
+      setStatus('buy failed: ' + explain(e));
     } finally { setBusy(false); }
   }, [address, buyAmt, client, curveAddr, refresh, token, tokenOk, wallet]);
 
