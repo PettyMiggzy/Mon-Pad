@@ -5,7 +5,7 @@ import {
   createPublicClient, http, keccak256, encodeAbiParameters, encodeDeployData, concat,
   getCreate2Address, parseEther, formatEther, stringToHex, pad as padHex, type Address,
 } from 'viem';
-import { robinhood } from '@/lib/wagmi';
+import { robinhood, robinhoodForWallet } from '@/lib/wagmi';
 import { isAdmin, ADMIN_WALLETS } from '@/lib/constants';
 import { REKT_PAD_ABI, PAD_TOKEN_BYTECODE } from '@/lib/rekt/abi';
 import { VENUES, START_LAUNCH_ID, ROBINHOOD_CHAIN_ID, type VenueId } from '@/lib/rekt/venues';
@@ -40,6 +40,34 @@ import { CurvePanel } from '@/components/rekt/CurvePanel';
  */
 
 const EXPLORER = robinhood.blockExplorers.default.url;
+
+/**
+ * Gas limit supplied explicitly for the two deploys, NOT to save a call but to remove a dependency:
+ * wagmi runs eth_estimateGas through the CONNECTOR's client — i.e. the wallet's own RPC for 4663, which
+ * is whatever endpoint the wallet was given. When that endpoint rate-limits, estimation fails and the
+ * deploy dies before a signing prompt ever appears. Passing `gas` skips estimation entirely.
+ *
+ * Measured against chain 4663: RektPad's constructor uses 4,217,893. Unused gas is refunded, so the
+ * headroom costs nothing and covers RektCurve as well.
+ */
+const DEPLOY_GAS = 8_000_000n;
+
+/**
+ * Wallet and RPC failures arrive wrapped several layers deep, and the useful sentence is rarely the top
+ * one — a rate-limited 4663 endpoint surfaces as a generic "internal error" until you read `details`.
+ * Walk the chain and keep what actually names the problem.
+ */
+function explain(e: any): string {
+  const parts: string[] = [];
+  for (let x = e, i = 0; x && i < 4; x = x.cause, i++) {
+    for (const k of ['shortMessage', 'details', 'message'] as const) {
+      const v = (x as any)?.[k];
+      if (typeof v === 'string' && v && !parts.includes(v)) parts.push(v);
+    }
+  }
+  return (parts.join(' | ') || String(e)).slice(0, 400);
+}
+
 const WETH = '0x0bd7d308f8e1639fab988df18a8011f41eacad73' as Address;
 
 const Recipient = { OPERATOR: 0, VAULT: 1, BURN: 2 } as const;
@@ -258,14 +286,14 @@ export default function LabPage() {
       // transaction kinds that, with a generic chain, resolves to the EIP-4844 blob branch and demands a KZG
       // trusted setup for a plain deploy. wagmi's version is written over the configured chains, so it
       // resolves concretely — which is the other reason 4663 belongs in the wagmi config.
-      const hash = await sendTransactionAsync({ chainId: ROBINHOOD_CHAIN_ID, data });
+      const hash = await sendTransactionAsync({ chainId: ROBINHOOD_CHAIN_ID, data, gas: DEPLOY_GAS });
       setStatus('deploying, waiting for the chain…');
       const receipt = await client.waitForTransactionReceipt({ hash });
       if (!receipt.contractAddress) throw new Error('deploy mined without a contract address');
       setPadAddr(receipt.contractAddress);
       setStatus(`pad deployed on ${venue.label} — now Check first`);
     } catch (e: any) {
-      setStatus('deploy failed: ' + String(e?.shortMessage || e?.message || e).slice(0, 180));
+      setStatus('deploy failed: ' + explain(e));
     } finally { setBusy(false); }
   }, [address, cfg.venue, client, sendTransactionAsync, wallet]);
 
@@ -298,7 +326,7 @@ export default function LabPage() {
       setPreview({ pv, params: p });
       setStatus('ready — this would go through');
     } catch (e: any) {
-      setStatus('would fail: ' + String(e?.shortMessage || e?.message || e).slice(0, 180));
+      setStatus('would fail: ' + explain(e));
     } finally { setBusy(false); }
   }, [address, buildParams, cfg.label, cfg.venue, client, padAddr, padOk]);
 
@@ -316,7 +344,7 @@ export default function LabPage() {
       setResult({ token: preview.pv[0], tx: hash });
       setStatus('launched');
     } catch (e: any) {
-      setStatus('failed: ' + String(e?.shortMessage || e?.message || e).slice(0, 180));
+      setStatus('failed: ' + explain(e));
     } finally { setBusy(false); }
   }, [address, client, padAddr, preview, wallet]);
 
@@ -332,10 +360,10 @@ export default function LabPage() {
       await wallet.switchChain({ id: robinhood.id });
     } catch {
       try {
-        await wallet.addChain({ chain: robinhood });
+        await wallet.addChain({ chain: robinhoodForWallet });
         await wallet.switchChain({ id: robinhood.id });
       } catch (e: any) {
-        setStatus('chain switch failed: ' + String(e?.shortMessage || e?.message || e).slice(0, 160));
+        setStatus('chain switch failed: ' + explain(e));
       }
     }
   }, [wallet]);
