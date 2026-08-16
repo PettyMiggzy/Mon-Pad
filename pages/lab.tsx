@@ -9,6 +9,7 @@ import { robinhood } from '@/lib/wagmi';
 import { isAdmin, ADMIN_WALLETS } from '@/lib/constants';
 import { REKT_PAD_ABI, PAD_TOKEN_BYTECODE } from '@/lib/rekt/abi';
 import { VENUES, START_LAUNCH_ID, ROBINHOOD_CHAIN_ID, type VenueId } from '@/lib/rekt/venues';
+import { CurvePanel } from '@/components/rekt/CurvePanel';
 
 /**
  * HIDDEN launcher — RektPad, Robinhood Chain (4663).
@@ -161,6 +162,9 @@ export default function LabPage() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
+  // The curve pad is the default: it is the one where a pool that opens holding 1 ETH costs gas rather
+  // than 1 ETH, because the buyers put the ETH there.
+  const [mode, setMode] = useState<'curve' | 'oneshot'>('curve');
   const [padAddr, setPadAddr] = useState('');
   const [preset, setPreset] = useState<string>('free-best');
   const [devBuy, setDevBuy] = useState('0');
@@ -367,8 +371,17 @@ export default function LabPage() {
     <div style={S.page}>
       <Head><title>Lab | Mon-Pad</title><meta key="robots" name="robots" content="noindex,nofollow" /></Head>
 
-      <h1 style={{ fontSize: 22, marginBottom: 4 }}>RektPad</h1>
-      <div style={{ opacity: .6, fontSize: 13, marginBottom: 20 }}>Robinhood Chain · 4663 · unlisted</div>
+      <h1 style={{ fontSize: 22, marginBottom: 4 }}>Rekt</h1>
+      <div style={{ opacity: .6, fontSize: 13, marginBottom: 16 }}>Robinhood Chain · 4663 · unlisted</div>
+
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+        <button style={{ ...S.btn(true), flex: 1, borderColor: mode === 'curve' ? '#5EC5B8' : 'rgba(255,255,255,.2)' }} onClick={() => setMode('curve')}>
+          Curve pad <span style={{ opacity: .6, fontSize: 12 }}>— buyers fund the seed</span>
+        </button>
+        <button style={{ ...S.btn(true), flex: 1, borderColor: mode === 'oneshot' ? '#5EC5B8' : 'rgba(255,255,255,.2)' }} onClick={() => setMode('oneshot')}>
+          One-shot <span style={{ opacity: .6, fontSize: 12 }}>— you fund the seed</span>
+        </button>
+      </div>
 
       <div style={S.warn}>
         Real chain, real money. Tokens matching this pattern die in about three minutes — 0 of 330 were
@@ -387,6 +400,10 @@ export default function LabPage() {
         </div>
       )}
 
+      {mode === 'curve' && <CurvePanel onRobinhood={onRobinhood} />}
+
+      {mode === 'oneshot' && (
+      <>
       <div style={S.card}>
         <div style={S.lab}>Pad address</div>
         <input style={S.input} value={padAddr} onChange={(e) => setPadAddr(e.target.value.trim())} placeholder="0x… paste one, or deploy below" />
@@ -464,6 +481,9 @@ export default function LabPage() {
             <a href={`${EXPLORER}/tx/${result.tx}`} target="_blank" rel="noreferrer" style={{ ...S.mono, color: '#7dd3fc', fontSize: 12 }}>view transaction</a>
           </div>
         </div>
+      )}
+
+      </>
       )}
 
       <div style={{ fontSize: 12, opacity: .45, marginTop: 24 }}>
