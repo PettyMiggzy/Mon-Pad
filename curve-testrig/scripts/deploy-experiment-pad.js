@@ -226,6 +226,13 @@ async function main() {
   }
 
   // ------------------------------------------------------------------ venue, verified BEFORE the deploy tx
+  // On an in-process FORK, "latest" IS the fork block, which the EVM treats as historical and refuses
+  // to execute against — so the venue eth_calls below fail and a dry run cannot exercise the checks the
+  // real deploy will. Mining one block fixes it. No-op on a real network.
+  if (network.name === "hardhat") {
+    try { await network.provider.send("hardhat_mine", ["0x1"]); } catch (e) { /* not a fork */ }
+  }
+
   console.log(`Verifying the venue on ${network.name} (chain ${live}) before deploying:`);
   await requireCode("FACTORY", factory);
   await requireCode("POSITION_MANAGER", npm);
