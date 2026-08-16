@@ -47,3 +47,44 @@ export const REKT_PAD_CONSTRUCTOR_ABI = ${JSON.stringify([ctor])} as const;
 const bytecodeDest = path.join(__dirname, "../../lib/rekt/padBytecode.ts");
 fs.writeFileSync(bytecodeDest, bytecodeOut);
 console.log(`wrote ${bytecodeDest} (${(bytecodeOut.length / 1024).toFixed(1)} KB, deployed ${deployed} bytes)`);
+
+// ----------------------------------------------------------------------------------------------------
+// RektCurve — the bonding-curve pad, where the raise becomes the pool's quote side.
+// ----------------------------------------------------------------------------------------------------
+const curve = require("../artifacts/contracts/experiments/RektCurve.sol/RektCurve.json");
+const CURVE_KEEP = new Set([
+  "create", "buy", "sell", "graduate", "curves", "previewBuy", "previewSell", "predictToken",
+  "tokenCount", "tokens", "isOperator", "setOperator", "totalRaised", "FACTORY", "WETH", "NPM", "owner",
+]);
+const curveAbi = curve.abi.filter(
+  (x) =>
+    (x.type === "function" && CURVE_KEEP.has(x.name)) ||
+    x.type === "error" ||
+    x.type === "constructor" ||
+    (x.type === "event" && ["Created", "Bought", "Sold", "Graduated"].includes(x.name)),
+);
+const curveDeployed = (curve.deployedBytecode.length - 2) / 2;
+if (curveDeployed > 24576) throw new Error(`RektCurve deployed bytecode is ${curveDeployed} bytes, over EIP-170`);
+
+// ABI and bytecode go in SEPARATE modules, same as the pad's, and for a reason worth stating: the panel
+// imports the ABI statically (every read needs it) and the bytecode dynamically (only the deploy click
+// does). Put them in one module and the static import drags the bytecode into the page chunk, so the
+// dynamic import defers nothing at all.
+const curveOut = `// GENERATED from curve-testrig artifacts — do not hand-edit.
+// Regenerate after any RektCurve change:  npx hardhat run scripts/export-abi-for-site.js
+export const REKT_CURVE_ABI = ${JSON.stringify(curveAbi)} as const;
+`;
+const curveDest = path.join(__dirname, "../../lib/rekt/curve.ts");
+fs.writeFileSync(curveDest, curveOut);
+console.log(`wrote ${curveDest} (${(curveOut.length / 1024).toFixed(1)} KB)`);
+
+const curveBcOut = `// GENERATED from curve-testrig artifacts — do not hand-edit.
+// Regenerate after any RektCurve change:  npx hardhat run scripts/export-abi-for-site.js
+//
+// Deployed size at export: ${curveDeployed} bytes (EIP-170 limit 24576).
+// Kept apart from the ABI so a static ABI import cannot pull this into the page's first load.
+export const REKT_CURVE_BYTECODE = ${JSON.stringify(curve.bytecode)} as const;
+`;
+const curveBcDest = path.join(__dirname, "../../lib/rekt/curveBytecode.ts");
+fs.writeFileSync(curveBcDest, curveBcOut);
+console.log(`wrote ${curveBcDest} (${(curveBcOut.length / 1024).toFixed(1)} KB, deployed ${curveDeployed} bytes)`);
