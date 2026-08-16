@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/router';
 import { useAccount, useWalletClient } from 'wagmi';
 import Head from 'next/head';
 import {
   createPublicClient, http, defineChain, keccak256, encodeAbiParameters, concat,
   getCreate2Address, parseEther, formatEther, stringToHex, pad as padHex, type Address,
 } from 'viem';
-import { isAdmin } from '@/lib/constants';
+import { isAdmin, ADMIN_WALLETS } from '@/lib/constants';
 import { REKT_PAD_ABI, PAD_TOKEN_BYTECODE } from '@/lib/rekt/abi';
 
 /**
@@ -89,7 +88,6 @@ const S = {
 };
 
 export default function LabPage() {
-  const router = useRouter();
   const { address, isConnected } = useAccount();
   const { data: wallet } = useWalletClient();
 
@@ -103,7 +101,9 @@ export default function LabPage() {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ token: string; tx: string } | null>(null);
 
-  useEffect(() => { if (isConnected && !isAdmin(address)) router.replace('/'); }, [address, isConnected, router]);
+  // Deliberately does NOT redirect. Bouncing an unrecognised wallet to "/" is indistinguishable from
+  // the page not existing — it silently lands you on the normal pad and looks like a broken link. The
+  // gate still refuses to render anything operational; it just says why, and which address it saw.
 
   const client = useMemo(() => createPublicClient({ chain: robinhood, transport: http() }), []);
   const cfg = PRESETS.find((p) => p.id === preset)!;
@@ -186,8 +186,27 @@ export default function LabPage() {
     } finally { setBusy(false); }
   }, [address, client, padAddr, preview, wallet]);
 
-  if (!isConnected) return <div style={S.page}>Connect wallet.</div>;
-  if (!isAdmin(address)) return <div style={S.page}>Not authorized. Redirecting…</div>;
+  if (!isConnected) return <div style={S.page}>Connect a wallet to continue.</div>;
+  if (!isAdmin(address)) {
+    return (
+      <div style={S.page}>
+        <Head><title>Lab | Mon-Pad</title><meta key="robots" name="robots" content="noindex,nofollow" /></Head>
+        <h1 style={{ fontSize: 20, marginBottom: 12 }}>This wallet isn&apos;t on the list</h1>
+        <div style={S.card}>
+          <div style={S.lab}>Connected</div>
+          <div style={S.mono}>{address}</div>
+        </div>
+        <div style={S.card}>
+          <div style={S.lab}>Allowed</div>
+          {ADMIN_WALLETS.map((w) => <div key={w} style={{ ...S.mono, marginBottom: 4 }}>{w}</div>)}
+        </div>
+        <p style={{ fontSize: 13, opacity: .7, maxWidth: '48ch' }}>
+          Either connect one of those, or add the address above to <code style={S.mono}>ADMIN_WALLETS</code> in
+          <code style={S.mono}> lib/constants.ts</code> and redeploy.
+        </p>
+      </div>
+    );
+  }
 
   const total = (cfg.seedQuoteWei + (devBuy && Number(devBuy) > 0 ? parseEther(devBuy) : 0n));
 
