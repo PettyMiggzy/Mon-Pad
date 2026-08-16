@@ -21,6 +21,7 @@ export const ADMIN_WALLETS = [
   '0x57C8A5AeC1c172fE41416A2FAE6eBDD92b552A16',
   '0xB9d4B73bE18914c6d64Bee65a806648370be467f',
   '0xb11ef49656645f7a212bcce2babee5ca0c4166d3',
+  '0x2ad8f6839c48e5e3c39462d2147f456786bd3cb4',
 ] as const;
 
 export function isAdmin(address?: string | null): boolean {
