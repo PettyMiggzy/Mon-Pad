@@ -1,9 +1,9 @@
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { ConnectButton, useConnectModal } from '@rainbow-me/rainbowkit';
-import { useAccount } from 'wagmi';
+import { useAccount, useSwitchChain } from 'wagmi';
 import { Home, Plus, ArrowLeftRight, User, Shield, BookOpen, FileText, Trophy, Bot, Target } from 'lucide-react';
-import { isAdmin } from '@/lib/constants';
+import { isAdmin, MONAD_CHAIN_ID } from '@/lib/constants';
 import { AddressGuard } from './AddressGuard';
 import type { ReactNode } from 'react';
 
@@ -48,6 +48,34 @@ function NavLink({
   );
 }
 
+/**
+ * Robinhood Chain (4663) is in the wagmi config so the research pad at /lab can sign there. Every read
+ * hook on the rest of the site follows the connected chain and none of them pin an id, so a wallet left
+ * on 4663 after a launch would make the whole app quietly read the wrong chain and render empty — the
+ * worst kind of broken, the kind that looks like no data. Say so instead, and offer the way back.
+ */
+function WrongChainBar() {
+  const { isConnected, chainId } = useAccount();
+  const { switchChain } = useSwitchChain();
+  const router = useRouter();
+
+  // /lab and /pad are supposed to be on 4663 — they carry their own chain guard.
+  const isLab = router.pathname === '/lab' || router.pathname === '/pad';
+  if (isLab || !isConnected || chainId === undefined || chainId === MONAD_CHAIN_ID) return null;
+
+  return (
+    <div style={{ background: 'rgba(245,158,11,.15)', borderBottom: '1px solid rgba(245,158,11,.45)', padding: '8px 16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, flexWrap: 'wrap', fontSize: 13 }}>
+      <span>Your wallet is on chain <b>{chainId}</b>. Mon-Pad runs on Monad — nothing here will load until you switch back.</span>
+      <button
+        onClick={() => switchChain({ chainId: MONAD_CHAIN_ID })}
+        style={{ border: '1px solid rgba(245,158,11,.6)', background: 'rgba(245,158,11,.2)', color: 'inherit', borderRadius: 6, padding: '4px 12px', fontSize: 13, cursor: 'pointer' }}
+      >
+        Switch to Monad
+      </button>
+    </div>
+  );
+}
+
 export function Layout({ children }: { children: ReactNode }) {
   const { address } = useAccount();
   const { openConnectModal } = useConnectModal();
@@ -59,6 +87,7 @@ export function Layout({ children }: { children: ReactNode }) {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <AddressGuard />
+      <WrongChainBar />
       <header
         style={{
           position: 'sticky',

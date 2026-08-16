@@ -24,12 +24,35 @@ if (!WC_PROJECT_ID) {
   console.warn('[wagmi] NEXT_PUBLIC_WC_PROJECT_ID not set — WalletConnect will be limited.');
 }
 
+/**
+ * Robinhood Chain — the research pad at /lab and /pad launches here, nothing else does.
+ *
+ * It has to be declared HERE and not only inside the page, because wagmi drops any chain change to an
+ * unconfigured id on the floor (createConfig: `if (!isChainConfigured) return`). With 4663 missing,
+ * switching to it left the top-level chainId stuck on Monad and RainbowKit's header showed "Wrong
+ * network" — whose only offered fix was switching straight back to Monad. Declaring it costs one extra
+ * entry in the network picker; leaving it out made the pad unusable.
+ *
+ * Its own public RPC, deliberately: MONAD_RPC_URL is the /api/rpc proxy to Monad and would answer every
+ * 4663 call with Monad state.
+ */
+export const robinhood = defineChain({
+  id: 4663,
+  name: 'Robinhood Chain',
+  nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+  rpcUrls: { default: { http: ['https://robinhoodchain.blockscout.com/api/eth-rpc'] } },
+  blockExplorers: { default: { name: 'Blockscout', url: 'https://robinhoodchain.blockscout.com' } },
+});
+
 export const wagmiConfig = getDefaultConfig({
   appName: 'MonPad',
   projectId: WC_PROJECT_ID || 'monpad-dev-placeholder',
-  chains: [monad],
+  // Monad stays first — createConfig seeds the initial chainId from chains[0], so ordinary visitors
+  // still land on Monad and never see 4663 unless they go looking for it.
+  chains: [monad, robinhood],
   transports: {
     [monad.id]: http(MONAD_RPC_URL, { timeout: 12_000 }),
+    [robinhood.id]: http(robinhood.rpcUrls.default.http[0], { timeout: 12_000 }),
   },
   ssr: true,
 });
