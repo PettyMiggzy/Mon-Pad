@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useAccount, useWalletClient } from 'wagmi';
+import { useAccount, useConnect, useDisconnect, useWalletClient } from 'wagmi';
 import Head from 'next/head';
 import {
   createPublicClient, http, defineChain, keccak256, encodeAbiParameters, concat,
@@ -87,9 +87,75 @@ const S = {
   row: { display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 13, padding: '4px 0' } as const,
 };
 
+/**
+ * Wallet picker that names wallets by EIP-6963 rdns instead of the isMetaMask flag.
+ *
+ * The header uses RainbowKit's modal, and its "MetaMask" button resolves a provider through
+ * getInjectedProvider({ flag: 'isMetaMask' }) — it takes the first injected provider whose
+ * `isMetaMask` property is truthy. Uniswap Wallet sets isMetaMask = true (so do Rabby, Brave and
+ * Phantom) for compatibility with dapps that only check that one boolean. So on a machine where
+ * one of those won the window.ethereum race, RainbowKit's MetaMask button opens THAT wallet, and
+ * RainbowKit will even show MetaMask as "installed" when it isn't.
+ *
+ * EIP-6963 is the fix for exactly this: each extension announces itself with a reverse-DNS id, so
+ * io.metamask and org.uniswap are distinguishable and neither can claim the other's name. wagmi
+ * turns every announcement into its own connector, and this lists them by that id — what you click
+ * is what opens.
+ */
+function WalletPicker() {
+  const { connect, connectors, isPending, error } = useConnect();
+  // rdns ids are dotted ("io.metamask"); the flag-guessing built-ins are not ("metaMask").
+  const detected = connectors.filter((c) => c.id.includes('.'));
+  const list = detected.length > 0 ? detected : connectors;
+  const wc = detected.length > 0 ? connectors.find((c) => c.id === 'walletConnect') : undefined;
+
+  const item = (c: (typeof connectors)[number]) => (
+    <button
+      key={c.uid}
+      onClick={() => connect({ connector: c })}
+      disabled={isPending}
+      style={{ ...S.btn(!isPending), display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left' }}
+    >
+      {c.icon && <img src={c.icon} alt="" width={20} height={20} style={{ borderRadius: 4 }} />}
+      <b style={{ flex: 1 }}>{c.name}</b>
+      <span style={{ ...S.mono, fontSize: 11, opacity: .5 }}>{c.id}</span>
+    </button>
+  );
+
+  return (
+    <div style={S.page}>
+      <Head><title>Lab | Mon-Pad</title><meta key="robots" name="robots" content="noindex,nofollow" /></Head>
+      <h1 style={{ fontSize: 22, marginBottom: 4 }}>RektPad</h1>
+      <div style={{ opacity: .6, fontSize: 13, marginBottom: 20 }}>Robinhood Chain · 4663 · unlisted</div>
+
+      <div style={S.card}>
+        <div style={S.lab}>{detected.length > 0 ? 'Wallets this browser actually has' : 'Connect'}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {list.length > 0 ? list.map(item) : <div style={{ fontSize: 13, opacity: .7 }}>No wallet extension detected.</div>}
+        </div>
+        {wc && <div style={{ marginTop: 12 }}>{item(wc)}</div>}
+      </div>
+
+      <p style={{ fontSize: 12, opacity: .55, maxWidth: '54ch' }}>
+        Use these buttons, not the one in the header. The header&apos;s &ldquo;MetaMask&rdquo; picks whichever
+        extension claims <code style={S.mono}>isMetaMask</code>, and Uniswap Wallet claims it too — which is why
+        clicking MetaMask up there can open Uniswap. The ids above come from each extension&apos;s own EIP-6963
+        announcement, so they can&apos;t be borrowed.
+      </p>
+      {error && <div style={S.warn}>{String(error.message || error).slice(0, 200)}</div>}
+    </div>
+  );
+}
+
 export default function LabPage() {
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, chainId } = useAccount();
   const { data: wallet } = useWalletClient();
+  const { disconnect } = useDisconnect();
+
+  // Connector list is browser-only (EIP-6963 announcements arrive after mount), so the server render
+  // and the first client render would disagree. Hold the first paint rather than hydrate a mismatch.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const [padAddr, setPadAddr] = useState('');
   const [preset, setPreset] = useState<string>('free-best');
@@ -186,7 +252,29 @@ export default function LabPage() {
     } finally { setBusy(false); }
   }, [address, client, padAddr, preview, wallet]);
 
-  if (!isConnected) return <div style={S.page}>Connect a wallet to continue.</div>;
+  /**
+   * 4663 is deliberately absent from lib/wagmi.ts (see header), so useSwitchChain can't reach it —
+   * it only knows configured chains. Go through the wallet client directly: try the switch first,
+   * and fall back to addChain, because a wallet that already has 4663 rejects a duplicate add.
+   */
+  const switchToRobinhood = useCallback(async () => {
+    if (!wallet) return;
+    setStatus('');
+    try {
+      await wallet.switchChain({ id: robinhood.id });
+    } catch {
+      try {
+        await wallet.addChain({ chain: robinhood });
+        await wallet.switchChain({ id: robinhood.id });
+      } catch (e: any) {
+        setStatus('chain switch failed: ' + String(e?.shortMessage || e?.message || e).slice(0, 160));
+      }
+    }
+  }, [wallet]);
+  const onRobinhood = chainId === robinhood.id;
+
+  if (!mounted) return <div style={S.page} />;
+  if (!isConnected) return <WalletPicker />;
   if (!isAdmin(address)) {
     return (
       <div style={S.page}>
@@ -204,6 +292,7 @@ export default function LabPage() {
           Either connect one of those, or add the address above to <code style={S.mono}>ADMIN_WALLETS</code> in
           <code style={S.mono}> lib/constants.ts</code> and redeploy.
         </p>
+        <button style={S.btn(true)} onClick={() => disconnect()}>Disconnect and pick another wallet</button>
       </div>
     );
   }
@@ -221,6 +310,18 @@ export default function LabPage() {
         Real chain, real money. Tokens matching this pattern die in about three minutes — 0 of 330 were
         still trading six hours later. Bots arriving is not the same as the coin going anywhere.
       </div>
+
+      {!onRobinhood && (
+        <div style={{ ...S.warn, borderColor: 'rgba(245,158,11,.5)', background: 'rgba(245,158,11,.12)' }}>
+          <div style={{ marginBottom: 10 }}>
+            Your wallet is on chain <b>{chainId ?? '?'}</b>. This pad is on <b>Robinhood Chain (4663)</b> — the
+            launch won&apos;t sign until you switch. Your wallet may ask to add the network first.
+          </div>
+          <button style={S.btn(!!wallet)} disabled={!wallet} onClick={() => void switchToRobinhood()}>
+            Switch to Robinhood Chain
+          </button>
+        </div>
+      )}
 
       <div style={S.card}>
         <div style={S.lab}>Pad address</div>
@@ -264,7 +365,7 @@ export default function LabPage() {
 
       <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
         <button style={S.btn(padOk && !busy)} disabled={!padOk || busy} onClick={() => void check()}>Check first</button>
-        <button style={S.btn(!!preview && !busy)} disabled={!preview || busy} onClick={() => void launch()}>Launch</button>
+        <button style={S.btn(!!preview && !busy && onRobinhood)} disabled={!preview || busy || !onRobinhood} onClick={() => void launch()}>Launch</button>
         {status && <span style={{ fontSize: 13, opacity: .8 }}>{status}</span>}
       </div>
 
