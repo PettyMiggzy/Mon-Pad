@@ -121,7 +121,7 @@ export default function Home() {
         <meta key="twitter:description" name="twitter:description" content="Monpad on Monad. Every trade burns Monchi. Creators earn fees forever." />
         <link key="canonical" rel="canonical" href={canonical} />
       </Head>
-      {/* Full-bleed hero — brand + one line + CTA + Meshy art */}
+      {/* Full-bleed hero — Monpad brand + Monshi mascot (approved street cutout) */}
       <motion.section
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -133,8 +133,11 @@ export default function Home() {
           flexDirection: 'column',
           justifyContent: 'flex-end',
           overflow: 'hidden',
+          background:
+            'radial-gradient(ellipse 80% 70% at 70% 40%, rgba(124,58,237,0.35) 0%, transparent 55%), linear-gradient(160deg, #1a0f2e 0%, #050308 55%, #0a0614 100%)',
         }}
       >
+        {/* Soft full-bleed atmosphere (not a second competing subject) */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src="/meshy/hero.png"
@@ -146,6 +149,7 @@ export default function Home() {
             height: '100%',
             objectFit: 'cover',
             objectPosition: 'center 35%',
+            opacity: 0.28,
             transform: 'scale(1.04)',
             animation: 'monpadHeroDrift 18s ease-in-out infinite alternate',
           }}
@@ -156,13 +160,38 @@ export default function Home() {
             position: 'absolute',
             inset: 0,
             background:
-              'linear-gradient(180deg, rgba(5,3,8,0.35) 0%, rgba(5,3,8,0.55) 45%, rgba(5,3,8,0.92) 78%, var(--bg, #050308) 100%)',
+              'linear-gradient(90deg, rgba(5,3,8,0.92) 0%, rgba(5,3,8,0.55) 42%, rgba(5,3,8,0.25) 70%, rgba(5,3,8,0.55) 100%), linear-gradient(180deg, transparent 40%, var(--bg, #050308) 100%)',
           }}
         />
+
+        {/* Monshi — pad mascot, dominant visual */}
+        <motion.img
+          src="/meshy/monshi-mascot.png"
+          alt="Monshi — Monpad mascot"
+          initial={{ opacity: 0, x: 36, y: 16 }}
+          animate={{ opacity: 1, x: 0, y: 0 }}
+          transition={{ duration: 0.75, delay: 0.15 }}
+          style={{
+            position: 'absolute',
+            right: 'max(-4vw, calc((100% - 1280px) / 2 - 24px))',
+            bottom: 0,
+            height: 'min(88vh, 780px)',
+            width: 'auto',
+            maxWidth: 'min(56vw, 560px)',
+            objectFit: 'contain',
+            objectPosition: 'bottom right',
+            pointerEvents: 'none',
+            filter: 'drop-shadow(0 24px 60px rgba(124,58,237,0.45))',
+            animation: 'monpadMonchiFloat 6s ease-in-out infinite',
+            zIndex: 1,
+          }}
+          className="monpad-hero-monshi"
+        />
+
         <div
           style={{
             position: 'relative',
-            zIndex: 1,
+            zIndex: 2,
             maxWidth: 1280,
             width: '100%',
             margin: '0 auto',
@@ -173,6 +202,7 @@ export default function Home() {
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.55, delay: 0.12 }}
+            style={{ maxWidth: 480 }}
           >
             <p
               style={{
@@ -197,7 +227,7 @@ export default function Home() {
                 color: 'var(--t2, #DDD7FE)',
               }}
             >
-              Fair launches on Monad. Every trade burns Monchi.
+              Fair launches on Monad. Every trade burns Monshi.
             </p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 22 }}>
               <Link
@@ -207,7 +237,7 @@ export default function Home() {
                   alignItems: 'center',
                   padding: '12px 22px',
                   borderRadius: 10,
-                  background: 'var(--pink, #EC4899)',
+                  background: 'var(--p, #A855F7)',
                   color: '#fff',
                   fontWeight: 700,
                   fontSize: 15,
@@ -237,28 +267,6 @@ export default function Home() {
             </div>
           </motion.div>
         </div>
-        {/* Monchi idol accent — floats in on the right */}
-        <motion.img
-          src="/meshy/monchi.png"
-          alt="Monchi"
-          initial={{ opacity: 0, x: 40, y: 20 }}
-          animate={{ opacity: 0.92, x: 0, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.25 }}
-          style={{
-            position: 'absolute',
-            right: 'max(0px, calc((100% - 1280px) / 2))',
-            bottom: '12%',
-            width: 'min(38vw, 360px)',
-            height: 'auto',
-            objectFit: 'contain',
-            pointerEvents: 'none',
-            filter: 'drop-shadow(0 20px 50px rgba(236,72,153,0.35))',
-            animation: 'monpadMonchiFloat 6s ease-in-out infinite',
-            zIndex: 1,
-            display: 'none',
-          }}
-          className="monpad-hero-monchi"
-        />
       </motion.section>
 
       <style jsx global>{`
@@ -268,10 +276,15 @@ export default function Home() {
         }
         @keyframes monpadMonchiFloat {
           0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-14px); }
+          50% { transform: translateY(-12px); }
         }
-        @media (min-width: 900px) {
-          .monpad-hero-monchi { display: block !important; }
+        @media (max-width: 720px) {
+          .monpad-hero-monshi {
+            max-width: 72vw !important;
+            height: min(52vh, 420px) !important;
+            opacity: 0.95;
+            right: -8vw !important;
+          }
         }
       `}</style>
 
