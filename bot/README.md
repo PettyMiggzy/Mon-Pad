@@ -64,3 +64,20 @@ Set `BOOST_CONTRACT` and `BOOST_MON_PER_HOUR` in `.env`.
 ## State
 `state.json` (git-ignored) holds the last scanned block so restarts resume without
 double-posting. Delete it to re-baseline from `MAX_CATCHUP_BLOCKS` back.
+
+## Games: /meow (milk), /milk, /top, Flash Meow
+`games.mjs` is a separate, dependency-free process (so it never fights the buy bot).
+
+- `/meow` — one milk roll per day (5–1000 ml, 1% golden milk). Streaks and titles.
+- `/milk` — your total, rank, best roll, streak. `/top` — leaderboard.
+- **Flash Meow** — at random gaps (default every 6–14 h) it posts a Monshi picture; the first 3 to type `/meow` within 90 seconds get double milk.
+
+```bash
+cd bot
+GAMES_BOT_TOKEN=123:abc GAMES_CHAT_ID=-100xxxxxxxxxx node games.mjs
+pm2 start games.mjs --name monpad-games --update-env && pm2 save
+```
+Use its own `GAMES_BOT_TOKEN` if the old /meow bot is still running anywhere: two processes polling one
+token steal each other's updates. Add the bot to the group (admin not required for commands; give it
+permission to send photos). State lives in `games-state.json` (git-ignored). Set `FLASH_MIN_HOURS=0` to
+turn Flash Meow off.
