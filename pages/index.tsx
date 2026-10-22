@@ -113,12 +113,12 @@ export default function Home() {
     <>
       <Head>
         <title>Monpad — Fair Launch on Monad · powered by Monchi</title>
-        <meta key="description" name="description" content="Monpad on Monad. Every trade burns Monchi. Creators earn fees forever. Live burn counter." />
+        <meta key="description" name="description" content="Monpad on Monad. Every trade burns Monshi. Creators earn fees forever. Live burn counter." />
         <meta key="og:title" property="og:title" content="Monpad — Fair Launch on Monad" />
-        <meta key="og:description" property="og:description" content="Monpad on Monad. Every trade burns Monchi. Creators earn fees forever." />
+        <meta key="og:description" property="og:description" content="Monpad on Monad. Every trade burns Monshi. Creators earn fees forever." />
         <meta key="og:url" property="og:url" content={canonical} />
         <meta key="twitter:title" name="twitter:title" content="Monpad — Fair Launch on Monad" />
-        <meta key="twitter:description" name="twitter:description" content="Monpad on Monad. Every trade burns Monchi. Creators earn fees forever." />
+        <meta key="twitter:description" name="twitter:description" content="Monpad on Monad. Every trade burns Monshi. Creators earn fees forever." />
         <link key="canonical" rel="canonical" href={canonical} />
       </Head>
       {/* Full-bleed hero — Monpad brand + Monshi mascot (approved street cutout) */}
