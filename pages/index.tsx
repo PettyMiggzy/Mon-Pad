@@ -10,6 +10,7 @@ import { v3Configured } from '@/lib/constants';
 import { fmtMon } from '@/lib/format';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
+import MonshiMark from '@/components/MonshiMark';
 
 type FilterKey = 'all' | 'trending' | 'new' | 'hot';
 
@@ -146,25 +147,23 @@ export default function Home() {
         <meta
           key="description"
           name="description"
-          content="Monpad on Monad. LP fees split 70% creator / 10% platform / 10% burn Monshi / 10% burn your token. Bots welcome."
+          content="Monpad on Monad. LP fees: 80% creator (incl. 10pt token burn) / 10% platform / 10% burn Monshi. Uniswap V3. Bots welcome."
         />
         <meta key="og:title" property="og:title" content="Monpad — burn Monshi on every trade" />
-        <meta key="og:description" property="og:description" content="Busy DEX launchpad. Monshi mascot. 70/10/10/10 LP fees." />
+        <meta key="og:description" property="og:description" content="Busy DEX launchpad. Monshi mascot. 80/10/10 LP fees on Uniswap V3." />
         <meta key="og:url" property="og:url" content={canonical} />
         <link key="canonical" rel="canonical" href={canonical} />
       </Head>
 
-      {/* Brand strip — Monshi + Monpad + create */}
+      {/* Brand strip — 3D Monshi + Monpad + launch */}
       <div className="mp-brand-strip">
         <div className="mp-brand-inner">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/meshy/monshi-mascot.png" alt="Monshi" className="mp-brand-mascot" />
+          <MonshiMark size={88} spin className="mp-brand-mascot-3d" />
           <div className="mp-brand-copy">
-            <h1 className="mp-brand-title">Monpad</h1>
-            <p className="mp-brand-sub">
-              DEX launches · LP fees → <b>70%</b> creator · <b>10%</b> platform · <b>10%</b> burn Monshi · <b>10%</b> burn
-              your token
-            </p>
+            <h1 className="mp-brand-title">
+              Mon<span className="mp-brand-accent">pad</span>
+            </h1>
+            <p className="mp-brand-sub">Fair launches on Monad. Every trade burns Monshi.</p>
           </div>
           <Link href="/create" className="mp-create-btn">
             + Launch
@@ -259,22 +258,8 @@ export default function Home() {
           gap: 14px;
           flex-wrap: wrap;
         }
-        .mp-brand-mascot {
-          width: 64px;
-          height: 64px;
-          object-fit: contain;
+        .mp-brand-mascot-3d {
           flex-shrink: 0;
-          filter: drop-shadow(0 8px 20px rgba(181, 123, 255, 0.45));
-          animation: mpFloat 5.5s ease-in-out infinite;
-        }
-        @keyframes mpFloat {
-          0%,
-          100% {
-            transform: translateY(0);
-          }
-          50% {
-            transform: translateY(-6px);
-          }
         }
         .mp-brand-copy {
           flex: 1;
@@ -282,37 +267,44 @@ export default function Home() {
         }
         .mp-brand-title {
           font-family: var(--font-display);
-          font-size: clamp(26px, 4vw, 34px);
+          font-size: clamp(32px, 5vw, 44px);
           font-weight: 800;
-          letter-spacing: -0.03em;
-          line-height: 1;
+          letter-spacing: -0.04em;
+          line-height: 0.95;
           margin: 0;
           color: #fff;
         }
-        .mp-brand-sub {
-          margin: 6px 0 0;
-          font-size: 12px;
-          line-height: 1.45;
-          color: var(--t3);
-          max-width: 560px;
+        .mp-brand-accent {
+          background: linear-gradient(135deg, var(--p2), var(--pink));
+          -webkit-background-clip: text;
+          background-clip: text;
+          -webkit-text-fill-color: transparent;
         }
-        .mp-brand-sub b {
+        .mp-brand-sub {
+          margin: 8px 0 0;
+          font-size: 14px;
+          line-height: 1.4;
           color: var(--t2);
-          font-weight: 700;
+          max-width: 420px;
         }
         .mp-create-btn {
           display: inline-flex;
           align-items: center;
-          padding: 11px 18px;
-          border-radius: 999px;
+          padding: 12px 20px;
+          border-radius: 12px;
           background: linear-gradient(135deg, var(--p) 0%, var(--pink) 100%);
           color: #fff;
           font-weight: 800;
-          font-size: 13;
+          font-size: 13px;
           letter-spacing: 0.04em;
           text-transform: uppercase;
           text-decoration: none;
           box-shadow: var(--glow-pink);
+          transition: transform 0.15s ease, box-shadow 0.2s ease;
+        }
+        .mp-create-btn:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 0 36px rgba(255, 77, 154, 0.45);
         }
         .mp-shell {
           max-width: var(--max-w);

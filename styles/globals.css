@@ -949,3 +949,64 @@ input[type="range"]::-moz-range-thumb {
 .mytok-card:hover { border-color: var(--bd-glow); transform: translateY(-1px); }
 .mytok-card.graduated { border-color: rgba(252,211,77,0.5); background: linear-gradient(135deg, rgba(252,211,77,0.05), rgba(0,0,0,0.3)); }
 .mytok-earned { margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center; font-size: 11px; }
+
+/* ── Monpad chrome (3D Monshi header) ── */
+.mp-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: rgba(7, 5, 12, 0.78);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  border-bottom: 1px solid var(--bd);
+}
+.mp-topbar-inner {
+  max-width: var(--max-w);
+  margin: 0 auto;
+  padding: 0 14px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.mp-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: #fff;
+}
+.mp-brand-word {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 21px;
+  letter-spacing: -0.035em;
+  line-height: 1;
+}
+.mp-brand-accent {
+  background: linear-gradient(135deg, var(--p2), var(--pink));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.mp-brand-strip {
+  border-bottom: 1px solid var(--bd);
+  background:
+    radial-gradient(ellipse 55% 120% at 8% 50%, rgba(181, 123, 255, 0.22), transparent 60%),
+    radial-gradient(ellipse 40% 100% at 92% 40%, rgba(255, 77, 154, 0.12), transparent 55%),
+    linear-gradient(180deg, rgba(12, 8, 22, 0.95), rgba(7, 5, 12, 0.88));
+}
+.mp-brand-inner {
+  max-width: var(--max-w);
+  margin: 0 auto;
+  padding: 18px 14px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+@media (max-width: 640px) {
+  .mp-brand-word { font-size: 18px; }
+  .mp-topbar-inner { height: 56px; }
+}

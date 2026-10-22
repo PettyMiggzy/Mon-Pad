@@ -5,6 +5,7 @@ import { useAccount, useSwitchChain } from 'wagmi';
 import { Home, Plus, ArrowLeftRight, User, Shield, BookOpen, FileText, Trophy, Bot, Target } from 'lucide-react';
 import { isAdmin, MONAD_CHAIN_ID } from '@/lib/constants';
 import { AddressGuard } from './AddressGuard';
+import MonshiMark from './MonshiMark';
 import type { ReactNode } from 'react';
 
 const PRIMARY_NAV = [
@@ -88,55 +89,15 @@ export function Layout({ children }: { children: ReactNode }) {
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <AddressGuard />
       <WrongChainBar />
-      <header
-        style={{
-          position: 'sticky',
-          top: 0,
-          zIndex: 40,
-          background: 'rgba(20, 16, 42, 0.75)',
-          backdropFilter: 'blur(10px)',
-          WebkitBackdropFilter: 'blur(10px)',
-          borderBottom: '1px solid var(--bd, rgba(139, 92, 246, 0.15))',
-        }}
-      >
-        <div
-          style={{
-            maxWidth: 1280,
-            margin: '0 auto',
-            padding: '0 16px',
-            height: 56,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 16,
-          }}
-        >
-          <Link
-            href="/"
-            className="flex items-center"
-            aria-label="Monpad home"
-            style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 8 }}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/meshy/monshi-mascot.png"
-              alt=""
-              style={{ width: 36, height: 36, objectFit: 'contain' }}
-              draggable={false}
-            />
-            <span
-              style={{
-                fontFamily: 'var(--font-display, Syne, sans-serif)',
-                fontWeight: 800,
-                fontSize: 20,
-                letterSpacing: '-0.03em',
-                color: '#fff',
-              }}
-            >
-              Monpad
+      <header className="mp-topbar">
+        <div className="mp-topbar-inner">
+          <Link href="/" className="mp-brand" aria-label="Monpad home">
+            <MonshiMark size={42} spin />
+            <span className="mp-brand-word">
+              Mon<span className="mp-brand-accent">pad</span>
             </span>
           </Link>
-          <nav className="mp-desktop-nav" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <nav className="mp-desktop-nav" style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             {PRIMARY_NAV.map((n) => (
               <NavLink key={n.href} href={n.href} active={router.pathname === n.href}>
                 {n.label}
