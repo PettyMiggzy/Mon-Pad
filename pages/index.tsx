@@ -180,7 +180,11 @@ export default function Home() {
 
       {!configured && (
         <div className="mp-shell" style={{ paddingBottom: 8 }}>
-          <div className="mp-warn">Contracts not configured — set NEXT_PUBLIC_FACTORY_V3.</div>
+          <div className="mp-warn">
+            Clean slate — no factory on this build. Old test tokens are gone. Deploy a new Factory/Graduator, set{' '}
+            <code>NEXT_PUBLIC_FACTORY_V3</code> + <code>NEXT_PUBLIC_GRADUATOR_V3</code> on Vercel, then redeploy. Token
+            PFPs still use Supabase (<code>/api/v1/storage</code>). See <code>docs/REDEPLOY.md</code>.
+          </div>
         </div>
       )}
 

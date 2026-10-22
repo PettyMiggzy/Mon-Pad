@@ -6,7 +6,7 @@ import { parseEther, decodeEventLog, type Address } from 'viem';
 import { factoryV3Abi } from '@/lib/abis';
 import { api } from '@/lib/api';
 import {
-  FACTORY_V3, V3_CREATION_FEE_MON, V3_GRADUATION_TARGET_MON, V3_CREATOR_REWARD_MON,
+  FACTORY_V3, ZERO_ADDRESS, V3_CREATION_FEE_MON, V3_GRADUATION_TARGET_MON, V3_CREATOR_REWARD_MON,
   V3_MAX_TRADE_TAX_BPS, V3_MAX_DEV_BUY_BPS, factoryIsSuperseded,
 } from '@/lib/constants';
 import Head from 'next/head';
@@ -86,10 +86,17 @@ export default function CreatePage() {
     if (!file) return;
     setUploading(true);
     try {
+      // Same storage as the original bond pad: /api/upload → Supabase `images` bucket
       const res = await api.uploadImage(file);
       setImageUrl(res.url);
-    } catch {
-      setTx({ status: 'error', message: 'image upload failed' });
+      setTx({ status: 'idle' });
+    } catch (err: any) {
+      setTx({
+        status: 'error',
+        message: err?.message?.includes('not configured')
+          ? 'Image storage offline — set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY on Vercel (same as original pad).'
+          : (err?.message || 'image upload failed'),
+      });
     } finally {
       setUploading(false);
     }
@@ -157,24 +164,33 @@ export default function CreatePage() {
         <meta key="description" name="description" content="Launch a fair-launch token on Monad. Pay in MON, set your own tokenomics, graduate to a locked DEX pool." />
         <link key="canonical" rel="canonical" href={canonical} />
       </Head>
-      <h1 style={{ marginBottom: 24 }}>Launch a token</h1>
+      <h1 style={{ marginBottom: 8, fontFamily: 'var(--font-display, Syne, sans-serif)' }}>Launch a token</h1>
+      <p style={{ fontSize: 13, color: '#888', marginBottom: 20, lineHeight: 1.45 }}>
+        Profile pic + socials save to the same Supabase store as the original pad (`images` bucket + `token_meta`).
+      </p>
+      {!FACTORY_V3 || FACTORY_V3 === ZERO_ADDRESS ? (
+        <div style={{ marginBottom: 16, padding: '12px 14px', borderRadius: 8, border: '1px solid rgba(245,158,11,0.5)', background: 'rgba(245,158,11,0.08)', color: '#FBBF24', fontSize: 13, lineHeight: 1.5 }}>
+          Clean slate — no factory set yet. Deploy a new Factory/Graduator, set <code>NEXT_PUBLIC_FACTORY_V3</code> + <code>NEXT_PUBLIC_GRADUATOR_V3</code> on Vercel, redeploy. See <code>docs/REDEPLOY.md</code>.
+        </div>
+      ) : null}
       {factoryRetired && (
         <div style={{ marginBottom: 16, padding: '12px 14px', borderRadius: 8, border: '1px solid var(--err, #F87171)', background: 'rgba(248,113,113,0.08)', color: 'var(--err, #F87171)', fontSize: 13, lineHeight: 1.5 }}>
-          ⚠️ This app is pointed at a <b>retired factory</b> ({FACTORY_V3.slice(0, 6)}…{FACTORY_V3.slice(-4)}).
-          Launching is disabled to protect your MON. Set <code>NEXT_PUBLIC_FACTORY_V3</code> to the
-          current factory and redeploy.
+          This app is pointed at a <b>retired factory</b> ({FACTORY_V3.slice(0, 6)}…{FACTORY_V3.slice(-4)}).
+          Launching is disabled. Set <code>NEXT_PUBLIC_FACTORY_V3</code> to the new factory and redeploy.
         </div>
       )}
       <div style={{ display: 'grid', gap: 16 }}>
         <Field label="Name" value={name} onChange={setName} placeholder="Awesome Coin" maxLength={32} />
         <Field label="Symbol" value={symbol} onChange={(v) => setSymbol(v.toUpperCase())} placeholder="AWESOME" maxLength={10} />
         <div>
-          <label style={{ fontSize: 13, color: '#aaa' }}>Image</label>
-          <input type="file" accept="image/*" onChange={onFileChange} style={{ display: 'block', marginTop: 4, color: '#aaa' }} />
-          {uploading && <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>uploading...</div>}
+          <label style={{ fontSize: 13, color: '#aaa' }}>Token profile picture</label>
+          <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={onFileChange} style={{ display: 'block', marginTop: 4, color: '#aaa' }} />
+          {uploading && <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>Uploading to Supabase…</div>}
           {imageUrl ? (
             <Image src={imageUrl} alt="preview" width={80} height={80} unoptimized style={{ marginTop: 8, borderRadius: 8, objectFit: 'cover' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-          ) : null}
+          ) : (
+            <div style={{ fontSize: 11, color: '#666', marginTop: 4 }}>PNG / JPEG / WebP / GIF · stored on Supabase (same as original pad)</div>
+          )}
         </div>
         <Field label="Description" value={description} onChange={setDescription} placeholder="What’s this token about?" multiline />
         <Field label="Twitter" value={twitter} onChange={setTwitter} placeholder="https://x.com/..." />
@@ -217,24 +233,39 @@ export default function CreatePage() {
       {/* Creator tokenomics */}
       <div style={{ marginTop: 24, padding: 16, background: 'rgba(167,139,250,0.05)', border: '1px solid rgba(167,139,250,0.2)', borderRadius: 8 }}>
         <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Your tokenomics (optional, editable later)</div>
-        <div style={{ fontSize: 11, color: '#888', marginBottom: 10 }}>Route your own creator fee, and/or add a per-trade tax that everyone pays. Both go to buyback-burning your token or its graduation LP — never to anyone else. Independent of the protocol Monchi burn stack.</div>
+        <div style={{ fontSize: 11, color: '#888', marginBottom: 10 }}>
+          Optional extras on top of LP fees (70% creator / 10% platform / 10% burn Monshi / 10% burn your token).
+        </div>
         <PctRow label="Creator fee → buyback &amp; burn" value={cfBurnPct} onChange={setCfBurnPct} max={100} />
-        <PctRow label="Creator fee → liquidity (at graduation)" value={cfLpPct} onChange={setCfLpPct} max={100} />
+        <PctRow label="Creator fee → deepen LP" value={cfLpPct} onChange={setCfLpPct} max={100} />
         <PctRow label="Per-trade tax → buyback &amp; burn" value={taxBurnPct} onChange={setTaxBurnPct} max={V3_MAX_TRADE_TAX_BPS / 100} />
-        <PctRow label="Per-trade tax → liquidity" value={taxLpPct} onChange={setTaxLpPct} max={V3_MAX_TRADE_TAX_BPS / 100} />
+        <PctRow label="Per-trade tax → deepen LP" value={taxLpPct} onChange={setTaxLpPct} max={V3_MAX_TRADE_TAX_BPS / 100} />
       </div>
 
       <div style={{ marginTop: 16, padding: 16, background: 'rgba(255,255,255,0.03)', borderRadius: 8 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Launch params (locked)</div>
+        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Launch params</div>
         <Stat label="Creation fee" value={`${V3_CREATION_FEE_MON} MON`} />
-        <Stat label="Graduation target" value={`${V3_GRADUATION_TARGET_MON.toLocaleString()} MON`} />
-        <Stat label="Creator graduation reward" value={`${V3_CREATOR_REWARD_MON.toLocaleString()} MON`} />
-        <Stat label="Base trade fee" value={`2% buy / 2% sell`} />
+        <Stat label="LP fee split" value="70% creator · 10% platform · 10% Monshi · 10% token burn" />
         <Stat label="Total supply" value="1,000,000,000" />
+        <Stat label="Profile storage" value="Supabase images + token_meta (original pad)" />
       </div>
 
-      <button onClick={launch} disabled={!address || !name || !symbol || tx.status === 'pending' || factoryRetired} style={{ width: '100%', marginTop: 16, padding: 14, background: 'var(--brand, #A78BFA)', color: '#000', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 16, cursor: (!address || !name || !symbol || factoryRetired) ? 'not-allowed' : 'pointer', opacity: (!address || !name || !symbol || factoryRetired) ? 0.5 : 1 }}>
-        {!address ? 'Connect wallet' : factoryRetired ? 'Unavailable (misconfigured factory)' : `Launch (${V3_CREATION_FEE_MON} MON${devBuy && Number(devBuy) > 0 ? ` + ${devBuy} MON dev bot` : ''})`}
+      <button
+        onClick={launch}
+        disabled={!address || !name || !symbol || tx.status === 'pending' || factoryRetired || !FACTORY_V3 || FACTORY_V3 === ZERO_ADDRESS}
+        style={{
+          width: '100%', marginTop: 16, padding: 14,
+          background: 'linear-gradient(135deg, var(--p, #B57BFF), var(--pink, #FF4D9A))',
+          color: '#fff', border: 'none', borderRadius: 8, fontWeight: 800, fontSize: 16,
+          cursor: (!address || !name || !symbol || factoryRetired) ? 'not-allowed' : 'pointer',
+          opacity: (!address || !name || !symbol || factoryRetired || !FACTORY_V3 || FACTORY_V3 === ZERO_ADDRESS) ? 0.5 : 1,
+        }}
+      >
+        {!address
+          ? 'Connect wallet'
+          : factoryRetired || !FACTORY_V3 || FACTORY_V3 === ZERO_ADDRESS
+            ? 'Waiting on new factory deploy'
+            : `Launch (${V3_CREATION_FEE_MON} MON${devBuy && Number(devBuy) > 0 ? ` + ${devBuy} MON dev bot` : ''})`}
       </button>
       <StatusPill state={tx} />
     </div>

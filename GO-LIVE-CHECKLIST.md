@@ -22,12 +22,12 @@ non-official Uniswap NPM (`0xa9f6…`) and predates the exit-liquidity fix. Rede
   amounts) to confirm sells + graduation still pass.
 - [ ] Verify all contracts on the explorer (helps DexScreener + trust).
 
-## 2. Frontend (`lib/constants.ts`)
-- [ ] `FACTORY_V3_DEFAULT` / `GRADUATOR_V3_DEFAULT` → the new production addresses.
-- [ ] Add the current TEST factory (`0x45Fb501E1167FbBfEBf42206A3C9945F13C70aaF`) to
-  `SUPERSEDED_FACTORIES`.
-- [ ] `V3_*` economics constants → 500 / 260_000 / 41_700 / 10_400.
-- [ ] Rebuild + redeploy Vercel.
+## 2. Frontend + storage (PFPs)
+- [ ] Defaults are **zero** until you set env — board stays empty (old TEST `0x45Fb…` already in `SUPERSEDED_FACTORIES`).
+- [ ] Vercel: `NEXT_PUBLIC_FACTORY_V3` + `NEXT_PUBLIC_GRADUATOR_V3` → **new** production addresses (remove any stale test factory env).
+- [ ] Vercel: keep `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (same original bond-pad storage for logos / `token_meta`). Probe: `/api/v1/storage`.
+- [ ] `V3_*` economics constants → 500 / 260_000 / 41_700 / 10_400 when leaving TEST fees.
+- [ ] Rebuild + redeploy Vercel. See `docs/REDEPLOY.md`.
 
 ## 3. Backend `monpad-server` (droplet `/root/monpad-server/.env`)
 Currently on **V2.1** contracts (stale). Decide first: **is it still used?** The frontend
@@ -65,9 +65,9 @@ production V3 addresses; if not, retire the pm2 process.
 - [ ] Confirm treasury addresses: boost treasury `0xece5d15e567c801c835029a49b2e4067b0eb63aa`.
 
 ---
-Reference (current TEST deploy): factory `0x45Fb501E1167FbBfEBf42206A3C9945F13C70aaF`,
-graduator `0xE27E3E0D1AAABDDF26Fa00c6046B842A2F58616b`, MONSHI boost
-`0xE50Ab41eAE60309d06a6aaA699f5E5786D78e4DA`.
+Reference (superseded TEST deploy — do not point env here): factory `0x45Fb…`,
+graduator `0xE27E…`. MONSHI boost `0xE50Ab41eAE60309d06a6aaA699f5E5786D78e4DA`.
+Clean board = new factory deploy + Vercel env update (`docs/REDEPLOY.md`).
 
 ## Monshi Studio + Bounties setup (required before first use)
 - [ ] Vercel env: `VENICE_API_KEY` = the Venice inference key (server-side ONLY — never NEXT_PUBLIC)

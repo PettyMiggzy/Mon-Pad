@@ -113,10 +113,23 @@ Cursor / Claude Desktop:
 
 ---
 
+## Storage (token PFPs — same as original bond pad)
+
+| Path | Backend |
+|---|---|
+| `POST /api/upload` | Supabase Storage bucket **`images`** |
+| `GET/POST /api/token-meta` | Supabase table **`token_meta`** |
+| Probe | `GET /api/v1/storage` |
+
+Needs `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` on Vercel. Schema: `supabase/schema.sql`.
+
+## Clean board (wipe old tokens)
+
+Tokens are **on-chain from the factory**, not Supabase. Deploy a new factory (`hardhat-test/scripts/deployV3.js`), set `NEXT_PUBLIC_FACTORY_V3` + `NEXT_PUBLIC_GRADUATOR_V3`, redeploy frontend. See `docs/REDEPLOY.md`.
+
 ## Safety / mainnet gate
 
-Two clean audit passes + E2E bot tests (buy/sell/burn/buyback/platform/counter) are required before treating new curve fee logic as production-final. Droplet API host: `api.monpad.net` → `:3001` (may be down until redeploy).
-
+Two clean audit passes + E2E bots before calling fee logic production-final.  
 **Never** commit private keys. Meshy key stays in `.env.local` (gitignored).
 
 ---

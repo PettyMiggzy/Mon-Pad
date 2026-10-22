@@ -7,8 +7,10 @@
 // Env (REQUIRED on mainnet — no mocks there):
 //   PLATFORM_WALLET, TREASURY_WALLET, BUYBACK_WALLET   (wallets YOU control)
 //   WMON_ADDRESS   (mainnet 0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A)
-//   NPM_ADDRESS    (mainnet 0xa9f6B6656e32F223d778b01642F32D00F5310526)
+//   NPM_ADDRESS    (mainnet official Uniswap V3 NPM 0x7197e214c0b767cfb76fb734ab638e2c192f4e53)
 //   MONSHI_ADDRESS (mainnet 0xB744F5CDb792d8187640214C4A1c9aCE29af7777, optional — discount perk)
+// After deploy: set NEXT_PUBLIC_FACTORY_V3 + NEXT_PUBLIC_GRADUATOR_V3 on Vercel (see docs/REDEPLOY.md).
+// Token PFPs stay on Supabase (unchanged) — only the on-chain factory list is wiped.
 // Optional economics overrides (wei): CREATION_FEE, GRAD_TARGET, GRAD_CREATOR_REWARD, GRAD_TREASURY_CUT
 // SMOKE=1 runs a create->buy(->graduate on local) sanity pass (test networks only).
 
