@@ -52,45 +52,41 @@ export function contractsConfigured(): boolean {
   return Object.values(CONTRACTS).every((a) => a !== ZERO_ADDRESS);
 }
 
-// --- V3 (native-MON pad, LIVE on Monad mainnet 143) ----------------------
-// ⚠️ TEST MODE: the live site is pointed at a LOW-FEE test deploy (1 MON to create,
-//    20 MON to graduate) for end-to-end testing. Hard-coded so it works with NO
-//    Vercel env vars — the NEXT_PUBLIC_FACTORY_V3 / _GRADUATOR_V3 env vars are
-//    intentionally ignored (see resolveFactory below).
+// --- V3 (native-MON pad, Monad mainnet 143) --------------------------------
+// Clean slate: board tokens come from FACTORY_V3. The old test factory is
+// superseded so its junk launches disappear once you point env at a NEW deploy.
 //
-//    To restore PRODUCTION (full-fee, audited) deploy, set:
-//      FACTORY_V3_DEFAULT   = 0xf82bFD436ea36515DFF5A6933980F86813D4f3Fa
-//      GRADUATOR_V3_DEFAULT = 0x9770b2a62d719b67E4Be206b0B0158b1448eB666
-//    and the V3_* economics below back to 500 / 260_000 / 41_700 / 10_400,
-//    and re-enable the env-aware resolveFactory() (commented inside).
-//    NOTE: the production graduator above ALSO used the non-official Uniswap fork
-//    NPM (0xa9f6…) — before real launch, redeploy it against the official NPM
-//    (0x7197e2…) too, or graduated pools won't be indexed by DexScreener/Monorail.
+// Set on Vercel (Production) after redeploy:
+//   NEXT_PUBLIC_FACTORY_V3=0x…
+//   NEXT_PUBLIC_GRADUATOR_V3=0x…
+// Until those are set, FACTORY resolves to zero → empty board (intentional).
 //
-//    This TEST set (below) graduates into OFFICIAL Uniswap V3 (0x204fAca factory /
-//    0x7197e2 NPM) so graduated tokens are immediately routable + charted.
-export const FACTORY_V3_DEFAULT = '0x45Fb501E1167FbBfEBf42206A3C9945F13C70aaF' as Address;   // TEST factory (official-UniV3 grad + exit-liquidity fix)
-export const GRADUATOR_V3_DEFAULT = '0xE27E3E0D1AAABDDF26Fa00c6046B842A2F58616b' as Address; // TEST graduator → official Uniswap V3
+export const FACTORY_V3_DEFAULT = ZERO_ADDRESS as Address;
+export const GRADUATOR_V3_DEFAULT = ZERO_ADDRESS as Address;
 
-// Retired factories — NEVER transact with these (pre-rebalance curve / compromised
-// treasury / non-indexed-DEX graduator / "no MON liquidity" sell bug). Includes the
-// prior production factory and the earlier test factories.
+// Retired factories — NEVER transact with these.
 export const SUPERSEDED_FACTORIES: ReadonlySet<string> = new Set(
   [
     '0x9007E499EdafBEC87Cc363fbE8Fd2B31142F4C01',
     '0x9ae8376ef5F22e02e217b1A4081686ea9e488E9C',
-    '0x38e4056Db9BB7b3e499A3C6Ec8c5D6C69409458D', // test factory #1 (non-indexed grad + no exit buffer)
-    '0xf19C4BA8Ea9DAAbdd7BCfE4Ea1e42fED880ca928', // test factory #2 (official grad, but pre exit-liquidity fix)
+    '0x38e4056Db9BB7b3e499A3C6Ec8c5D6C69409458D',
+    '0xf19C4BA8Ea9DAAbdd7BCfE4Ea1e42fED880ca928',
+    '0x45Fb501E1167FbBfEBf42206A3C9945F13C70aaF', // prior TEST factory (clear the board)
+    '0xE27E3E0D1AAABDDF26Fa00c6046B842A2F58616b', // its graduator
+    '0xf82bFD436ea36515DFF5A6933980F86813D4f3Fa', // old production factory
+    '0x9770b2a62d719b67E4Be206b0B0158b1448eB666', // old production graduator
   ].map((a) => a.toLowerCase()),
 );
 
-// TEST MODE: hard-code to the test deploy, ignoring env entirely.
-// (Production version was env-aware with a superseded-factory self-heal.)
-function resolveFactory(): Address {
-  return FACTORY_V3_DEFAULT;
+function resolveAddress(envVal: string | undefined, fallback: Address): Address {
+  const v = (envVal || '').trim();
+  if (!v || !/^0x[0-9a-fA-F]{40}$/.test(v)) return fallback;
+  if (SUPERSEDED_FACTORIES.has(v.toLowerCase())) return fallback;
+  return v as Address;
 }
-export const FACTORY_V3 = resolveFactory();
-export const GRADUATOR_V3 = GRADUATOR_V3_DEFAULT;
+
+export const FACTORY_V3 = resolveAddress(process.env.NEXT_PUBLIC_FACTORY_V3, FACTORY_V3_DEFAULT);
+export const GRADUATOR_V3 = resolveAddress(process.env.NEXT_PUBLIC_GRADUATOR_V3, GRADUATOR_V3_DEFAULT);
 export function v3Configured(): boolean { return FACTORY_V3 !== ZERO_ADDRESS; }
 export function factoryIsSuperseded(addr: string = FACTORY_V3): boolean {
   return SUPERSEDED_FACTORIES.has((addr || '').toLowerCase());
