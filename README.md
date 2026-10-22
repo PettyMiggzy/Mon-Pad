@@ -30,20 +30,20 @@ Pump.fun-energy board. Purple streetwear mascot. Protocol that feeds **MONSHI** 
 
 ---
 
-## Protocol fees (tl;dr)
+## LP fees (tl;dr)
 
-On **every buy and sell** (creator tax is separate):
+**Off LP fees** on every buy & sell:
 
-| Slice | BPS | Notes |
+| Slice | Share | Notes |
 |---|---|---|
-| Burn traded token | 1000 | → `dEaD` |
-| Buyback & burn MONSHI | 1000 | Quote (MON) accrued → buyback wallet |
-| Platform | 1000 | Quote only — **never** project tokens on sells |
+| Creator | **70%** | Token creator |
+| Platform | **10%** | MON only on sells — never project tokens |
+| Burn MONSHI | **10%** | Buyback-and-burn Monchi |
+| Burn project token | **10%** | Launched token → `dEaD` |
 
-Platform wallet (Minta carry-over): `0x5899a0576A94327a6316E01190f951edf7645914`  
-MONSHI: `0xB744F5CDb792d8187640214C4A1c9aCE29af7777`
-
-Code: `lib/fees.ts` · curve: `hardhat-test/contracts/v3/MonPadCurveV3.sol`
+No graduation target — liquidity is the DEX/LP.  
+Platform: `0x5899a0576A94327a6316E01190f951edf7645914` · MONSHI: `0xB744F5CDb792d8187640214C4A1c9aCE29af7777`  
+Code: `lib/fees.ts`
 
 ---
 

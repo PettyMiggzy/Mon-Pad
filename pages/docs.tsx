@@ -167,12 +167,12 @@ export default function Docs() {
       <section style={{ marginBottom: 48 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
           {[
-            { label: 'Token burn', value: pct(PROTOCOL_BURN_TOKEN_BPS), sub: 'every buy & sell → dEaD' },
-            { label: 'MONSHI burn', value: pct(PROTOCOL_BURN_MONSHI_BPS), sub: 'quote → buyback & burn' },
-            { label: 'Platform', value: pct(PROTOCOL_PLATFORM_BPS), sub: 'MON only on sells' },
+            { label: 'Creator', value: '70%', sub: 'of LP fees on buys & sells' },
+            { label: 'Platform', value: pct(PROTOCOL_PLATFORM_BPS), sub: 'of LP fees · MON only on sells' },
+            { label: 'Burn MONSHI', value: pct(PROTOCOL_BURN_MONSHI_BPS), sub: 'of LP fees · buyback & burn' },
+            { label: 'Burn token', value: pct(PROTOCOL_BURN_TOKEN_BPS), sub: 'of LP fees · project token → dEaD' },
             { label: 'Dev bot', value: `≤${V3_MAX_DEV_BUY_BPS / 100}%`, sub: 'atomic first buy in create tx' },
-            { label: 'Creation fee', value: `${n(V3_CREATION_FEE_MON)} MON`, sub: 'test economics · MONSHI discount' },
-            { label: 'Grad target', value: `${n(V3_GRADUATION_TARGET_MON)} MON`, sub: 'net raised · then locked LP' },
+            { label: 'Liquidity', value: 'DEX / LP', sub: 'no graduation target — curve is the pool' },
           ].map((c) => (
             <div
               key={c.label}
@@ -269,39 +269,40 @@ curl -s https://www.monpad.net/api/v1/burn | jq .
 
       {/* Fees */}
       <section style={{ marginBottom: 48 }}>
-        <h2 style={{ fontSize: 28, fontWeight: 900, color: '#fff', marginBottom: 8 }}>Protocol fee stack</h2>
+        <h2 style={{ fontSize: 28, fontWeight: 900, color: '#fff', marginBottom: 8 }}>LP fee split</h2>
         <p style={{ color: 'rgba(220,215,240,0.7)', fontSize: 14, marginBottom: 14, lineHeight: 1.5, maxWidth: 640 }}>
-          Applied on <strong style={{ color: '#fff' }}>every buy and sell</strong>. Creator tax is optional and independent (0–{V3_MAX_TRADE_TAX_BPS / 100}%).
-          Platform never takes bags on sells — quote (MON) only.
+          Taken <strong style={{ color: '#fff' }}>off LP fees</strong> on every buy and sell. Platform never takes bags on sells — quote (MON) only.
+          Liquidity lives in the DEX/LP — no graduation target.
         </p>
         <div style={{ overflow: 'hidden', borderRadius: 12, border: '1px solid rgba(168,85,247,0.2)', marginBottom: 12 }}>
           <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'rgba(168,85,247,0.12)', textAlign: 'left', color: 'rgba(255,255,255,0.7)' }}>
-                <th style={{ padding: '12px 14px' }}>Leg</th>
-                <th style={{ padding: '12px 14px' }}>Buy</th>
-                <th style={{ padding: '12px 14px' }}>Sell</th>
+                <th style={{ padding: '12px 14px' }}>Share of LP fees</th>
+                <th style={{ padding: '12px 14px' }}>BPS</th>
+                <th style={{ padding: '12px 14px' }}>Goes to</th>
               </tr>
             </thead>
             <tbody style={{ color: 'rgba(220,215,240,0.85)' }}>
               <tr style={{ borderTop: '1px solid rgba(168,85,247,0.15)' }}>
-                <td style={{ padding: '12px 14px' }}>Burn traded token</td>
-                <td style={{ padding: '12px 14px' }}>{pct(PROTOCOL_BURN_TOKEN_BPS)} of tokens out → dEaD</td>
-                <td style={{ padding: '12px 14px' }}>{pct(PROTOCOL_BURN_TOKEN_BPS)} of tokens in → dEaD</td>
-              </tr>
-              <tr style={{ borderTop: '1px solid rgba(168,85,247,0.15)' }}>
-                <td style={{ padding: '12px 14px' }}>MONSHI buyback &amp; burn</td>
-                <td style={{ padding: '12px 14px' }}>{pct(PROTOCOL_BURN_MONSHI_BPS)} of MON in</td>
-                <td style={{ padding: '12px 14px' }}>{pct(PROTOCOL_BURN_MONSHI_BPS)} of MON out</td>
+                <td style={{ padding: '12px 14px', fontWeight: 800, color: '#fff' }}>Creator</td>
+                <td style={{ padding: '12px 14px' }}>70%</td>
+                <td style={{ padding: '12px 14px' }}>Token creator</td>
               </tr>
               <tr style={{ borderTop: '1px solid rgba(168,85,247,0.15)' }}>
                 <td style={{ padding: '12px 14px' }}>Platform</td>
-                <td style={{ padding: '12px 14px' }}>{pct(PROTOCOL_PLATFORM_BPS)} of MON in</td>
-                <td style={{ padding: '12px 14px' }}>{pct(PROTOCOL_PLATFORM_BPS)} of MON out (never tokens)</td>
+                <td style={{ padding: '12px 14px' }}>{pct(PROTOCOL_PLATFORM_BPS)}</td>
+                <td style={{ padding: '12px 14px' }}>Platform wallet · MON only on sells</td>
               </tr>
-              <tr style={{ borderTop: '1px solid rgba(168,85,247,0.15)', background: 'rgba(236,72,153,0.08)' }}>
-                <td style={{ padding: '12px 14px', fontWeight: 800, color: '#fff' }}>Creator tax</td>
-                <td colSpan={2} style={{ padding: '12px 14px' }}>Independent · creator-set · optional burn/LP routing</td>
+              <tr style={{ borderTop: '1px solid rgba(168,85,247,0.15)' }}>
+                <td style={{ padding: '12px 14px' }}>Burn MONSHI</td>
+                <td style={{ padding: '12px 14px' }}>{pct(PROTOCOL_BURN_MONSHI_BPS)}</td>
+                <td style={{ padding: '12px 14px' }}>Buyback-and-burn Monchi</td>
+              </tr>
+              <tr style={{ borderTop: '1px solid rgba(168,85,247,0.15)' }}>
+                <td style={{ padding: '12px 14px' }}>Burn project token</td>
+                <td style={{ padding: '12px 14px' }}>{pct(PROTOCOL_BURN_TOKEN_BPS)}</td>
+                <td style={{ padding: '12px 14px' }}>Launched token → dEaD</td>
               </tr>
             </tbody>
           </table>
