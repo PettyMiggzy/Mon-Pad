@@ -23,7 +23,9 @@ Pool fee tier: **1%** (`POOL_FEE = 10000` on Uniswap V3).
 | **Platform** | 1000 (10%) | `0x5899…5914` — MON/quote only on sells |
 | **Burn MONSHI** | 1000 (10%) | Buyback-and-burn Monchi |
 
-Display **80 / 10 / 10**. Source of truth: `lib/fees.ts`.
+Display the four slices from `lib/fees.ts` (`LP_FEE_SLICES`): **70% creator payout / 10% platform / 10% burn MONSHI / 10% burn project token**. The on-chain creator headline is 80% because the project-token burn is nested inside it. Do not hardcode the percents in UI.
+
+The home hero is a full-bleed 3D stage (Monshi on the logotype). That is intentional.
 
 Optional **dev bot**: atomic first buy in `createLaunch` (Minta `firstBuy` pattern).
 

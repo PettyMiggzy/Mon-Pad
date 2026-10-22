@@ -22,9 +22,11 @@ type Props = {
   compact?: boolean;
   /** Drop outer shell padding so the counter can sit flush in a parent grid cell. */
   embedded?: boolean;
+  /** Fires when the on-chain burn total increases. */
+  onBurn?: () => void;
 };
 
-export default function MonshiBurnCounter({ compact = false, embedded = false }: Props) {
+export default function MonshiBurnCounter({ compact = false, embedded = false, onBurn }: Props) {
   const [burned, setBurned] = useState(0);
   const [circulating, setCirculating] = useState(0);
   const [displayBurned, setDisplayBurned] = useState(0);
@@ -32,6 +34,8 @@ export default function MonshiBurnCounter({ compact = false, embedded = false }:
   const [ready, setReady] = useState(false);
   const [pulse, setPulse] = useState(false);
   const prevBurned = useRef(0);
+  const onBurnRef = useRef(onBurn);
+  onBurnRef.current = onBurn;
 
   useEffect(() => {
     let cancelled = false;
@@ -44,6 +48,7 @@ export default function MonshiBurnCounter({ compact = false, embedded = false }:
         setReady(true);
         if (prevBurned.current > 0 && s.burnedWhole > prevBurned.current + 1e-6) {
           setPulse(true);
+          onBurnRef.current?.();
           setTimeout(() => setPulse(false), 1200);
         }
         prevBurned.current = s.burnedWhole;

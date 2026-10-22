@@ -491,7 +491,7 @@ export default function SwapPage() {
     <div style={{ maxWidth: 440, margin: '0 auto', padding: 24, color: '#fff' }}>
       <Head>
         <title>Swap | Mon-Pad</title>
-        <meta key="description" name="description" content="Swap tokens on Monad. Mon-Pad routes pre-graduation tokens through the bonding curve and graduated tokens via Monorail aggregator." />
+        <meta key="description" name="description" content="Swap tokens on Monad. MON PAD routes through the Uniswap V3 pool and the Monorail aggregator." />
         <meta key="og:title" property="og:title" content="Swap | Mon-Pad" />
         <meta key="og:description" property="og:description" content="Swap tokens on Monad. Bonding curve + Monorail dual-router." />
         <meta key="og:url" property="og:url" content={canonical} />

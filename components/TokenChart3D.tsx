@@ -1,8 +1,8 @@
 'use client';
 
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { Center, Environment, Float, OrbitControls, useGLTF } from '@react-three/drei';
+import { OrbitControls } from '@react-three/drei';
 import type { Group } from 'three';
 import * as THREE from 'three';
 
@@ -14,9 +14,6 @@ export type ChartCandle = {
   close: number;
   volume?: number;
 };
-
-const CONSOLE_MODEL = '/meshy/chart-console.glb';
-const FALLBACK_IDOL = '/meshy/monchi-idol-preview.glb';
 
 const UP = '#3DFF9A';
 const DOWN = '#FF5C7A';
@@ -141,24 +138,7 @@ function LiveCandles({ data }: { data: ChartCandle[] }) {
   );
 }
 
-function MeshyProp({ url, scale = 0.55, position = [3.6, -0.2, 0.6] as [number, number, number] }: { url: string; scale?: number; position?: [number, number, number] }) {
-  const { scene } = useGLTF(url);
-  const ref = useRef<Group>(null);
-  useFrame((_, dt) => {
-    if (ref.current) ref.current.rotation.y += dt * 0.25;
-  });
-  return (
-    <Float speed={1.1} floatIntensity={0.25} rotationIntensity={0.08}>
-      <Center position={position}>
-        <group ref={ref} scale={scale}>
-          <primitive object={scene.clone()} />
-        </group>
-      </Center>
-    </Float>
-  );
-}
-
-function Scene({ data, consoleReady }: { data: ChartCandle[]; consoleReady: boolean }) {
+function Scene({ data }: { data: ChartCandle[] }) {
   return (
     <>
       <color attach="background" args={['#07050e']} />
@@ -168,14 +148,6 @@ function Scene({ data, consoleReady }: { data: ChartCandle[]; consoleReady: bool
       <directionalLight position={[-3, 2, -2]} intensity={0.55} color="#FF4D9A" />
       <pointLight position={[0, 2.2, 2]} intensity={1.1} color="#B57BFF" distance={10} />
       <LiveCandles data={data} />
-      <Suspense fallback={null}>
-        {/* Meshy holographic console sits behind the live candle field */}
-        {consoleReady ? (
-          <MeshyProp url={CONSOLE_MODEL} scale={1.05} position={[0, -1.55, -2.35]} />
-        ) : null}
-        <MeshyProp url={FALLBACK_IDOL} scale={0.38} position={[4.05, 0.15, 0.55]} />
-        <Environment preset="city" />
-      </Suspense>
       <OrbitControls
         enablePan={false}
         minDistance={4}
@@ -192,11 +164,7 @@ type Props = {
   height?: number;
 };
 
-/**
- * Live 3D price chart (R3F) with optional Meshy-generated holographic console.
- * Meshy builds the prop; candles are driven by on-chain trade candles.
- */
-/** Soft demo series so the Meshy scene still pops before the first on-chain trade. */
+/** Soft series so the chart still reads before the first on-chain trade. */
 function demoCandles(n = 32): ChartCandle[] {
   const now = Math.floor(Date.now() / 1000);
   let px = 0.00042;
@@ -214,19 +182,9 @@ function demoCandles(n = 32): ChartCandle[] {
 }
 
 export default function TokenChart3D({ data, height = 380 }: Props) {
-  const [consoleReady, setConsoleReady] = useState(true);
   const [failed, setFailed] = useState(false);
   const live = data.length > 0;
   const series = live ? data : demoCandles();
-
-  useEffect(() => {
-    try {
-      useGLTF.preload(CONSOLE_MODEL);
-      useGLTF.preload(FALLBACK_IDOL);
-    } catch {
-      setConsoleReady(false);
-    }
-  }, []);
 
   return (
     <div
@@ -254,7 +212,7 @@ export default function TokenChart3D({ data, height = 380 }: Props) {
           pointerEvents: 'none',
         }}
       >
-        {live ? '3D · Meshy + live candles' : '3D · Meshy demo pulse · waiting on first trade'}
+        {live ? 'Live candles' : 'Waiting on the first trade'}
       </div>
       {failed ? (
         <div style={{ height: '100%', display: 'grid', placeItems: 'center', color: '#888', fontSize: 13 }}>
@@ -269,7 +227,7 @@ export default function TokenChart3D({ data, height = 380 }: Props) {
           style={{ width: '100%', height: '100%' }}
         >
           <Suspense fallback={null}>
-            <Scene data={series} consoleReady={consoleReady} />
+            <Scene data={series} />
           </Suspense>
         </Canvas>
       )}

@@ -126,8 +126,6 @@ export default function TokenPage() {
   const creator = (state.data?.[3]?.result as Address) ?? undefined;
   const tradeTax = (state.data?.[4]?.result as bigint) ?? 0n;
   const burnedTokens = (state.data?.[5]?.result as bigint) ?? 0n;
-  const progress = GRAD_TARGET > 0n ? Math.min(1, Number(monRaisedNet) / Number(GRAD_TARGET)) : 0;
-  const remaining = monRaisedNet >= GRAD_TARGET ? 0n : GRAD_TARGET - monRaisedNet;
   const canGrad = monRaisedNet >= GRAD_TARGET && !graduated;
 
   const balanceRead = useReadContract({
@@ -210,7 +208,7 @@ export default function TokenPage() {
             <div className="td-title-row">
               <h1 className="td-name">{name}</h1>
               <span className="td-ticker">${symbol}</span>
-              {graduated && <span className="td-pill td-pill-ok">Live on DEX</span>}
+              <span className="td-pill td-pill-ok">Uniswap V3</span>
             </div>
             <p className="td-drive">
               <span className="td-drive-mark" aria-hidden />
@@ -293,7 +291,7 @@ export default function TokenPage() {
             graduated={graduated}
             symbol={symbol}
           />
-          <LiquidityBar progress={progress} remaining={remaining} graduated={graduated} canGrad={canGrad} curve={curve} onTraded={refreshAfterTrade} />
+          <LiquidityBar graduated={graduated} canGrad={canGrad} curve={curve} onTraded={refreshAfterTrade} />
           <OtherInfo addr={addr} curve={curve} creator={creator} createdAt={tokenMeta?.created_at} />
         </aside>
       </div>
@@ -663,19 +661,9 @@ function OtherInfo({ addr, curve, creator, createdAt }: { addr?: Address; curve?
   );
 }
 
-function LiquidityBar({ progress, remaining, graduated, canGrad, curve, onTraded }: { progress: number; remaining: bigint; graduated: boolean; canGrad: boolean; curve?: Address; onTraded?: () => void }) {
+function LiquidityBar({ graduated, canGrad, curve, onTraded }: { graduated: boolean; canGrad: boolean; curve?: Address; onTraded?: () => void }) {
   const { writeContractAsync } = useWriteContract();
   const [tx, setTx] = useState<TxState>({ status: 'idle' });
-  if (graduated) {
-    return (
-      <div className="td-panel" style={{ borderColor: 'rgba(61,255,154,0.35)' }}>
-        <div className="td-panel-title" style={{ color: 'var(--green)' }}>DEX liquidity live</div>
-        <div style={{ fontSize: 13, color: 'var(--t2)', lineHeight: 1.45 }}>
-          Trading on Uniswap V3 · WMON pair · LP locked.
-        </div>
-      </div>
-    );
-  }
   async function doGrad() {
     if (!curve) return;
     setTx({ status: 'pending' });
@@ -688,16 +676,12 @@ function LiquidityBar({ progress, remaining, graduated, canGrad, curve, onTraded
     }
   }
   return (
-    <div className="td-panel">
-      <div className="td-panel-title">Liquidity</div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#aaa', marginBottom: 6 }}>
-        <span>Depth</span>
-        <span>{Number(formatEther(remaining)).toLocaleString()} MON to unlock DEX LP</span>
+    <div className="td-panel" style={{ borderColor: 'rgba(61,255,154,0.35)' }}>
+      <div className="td-panel-title" style={{ color: 'var(--green)' }}>On the DEX</div>
+      <div style={{ fontSize: 13, color: 'var(--t2)', lineHeight: 1.45 }}>
+        Uniswap V3 · WMON pair · LP locked from the launch block.
       </div>
-      <div style={{ height: 8, background: 'rgba(255,255,255,0.06)', borderRadius: 999, overflow: 'hidden' }}>
-        <div style={{ width: `${(progress * 100).toFixed(1)}%`, height: '100%', background: 'linear-gradient(90deg, var(--p), var(--pink))' }} />
-      </div>
-      {canGrad && (
+      {canGrad && !graduated && (
         <button type="button" onClick={doGrad} style={{ marginTop: 10, width: '100%', padding: 11, background: 'linear-gradient(135deg, var(--green), #16A34A)', color: '#000', border: 'none', borderRadius: 10, fontWeight: 800, cursor: 'pointer' }}>
           Lock Uniswap V3 LP
         </button>
@@ -778,7 +762,7 @@ function TradePanel({ token, curve, symbol, reserves, graduated, tradeTax, balan
       <div className="td-panel" style={{ borderColor: 'rgba(61,255,154,0.35)' }}>
         <div className="td-panel-title" style={{ color: 'var(--green)' }}>Trade on DEX</div>
         <p style={{ fontSize: 13, color: 'var(--t2)', lineHeight: 1.5, margin: '0 0 12px' }}>
-          This token graduated. Liquidity is locked on Uniswap V3.
+          Liquidity is locked in the Uniswap V3 pool.
         </p>
         <Link href={`/swap?from=0x0000000000000000000000000000000000000000&to=${token}`} className="mp-create-btn" style={{ width: '100%', justifyContent: 'center' }}>
           Open swap

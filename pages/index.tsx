@@ -1,22 +1,22 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
-import Link from 'next/link';
+import { useState, useEffect, useMemo } from 'react';
 import LiveTicker from '@/components/LiveTicker';
-import MonshiBurnCounter from '@/components/MonshiBurnCounter';
-import TokenGrid from '@/components/TokenGrid';
 import HomeRail from '@/components/HomeRail';
+import { Hero } from '@/components/hero3d/Hero';
+import { WhyRow } from '@/components/home/WhyRow';
+import { MostWanted } from '@/components/home/MostWanted';
+import { TokenSkeleton, TokenTile } from '@/components/home/TokenTile';
+import { FeeSplit } from '@/components/launch/FeeSplit';
 import { type TokenSummary } from '@/lib/api';
 import { listV3Tokens, getV3CardStats } from '@/lib/chainV3';
 import { MOCK_MODE, v3Configured } from '@/lib/constants';
 import { mockTokens } from '@/lib/mocks';
 import { DEMO_BOARD, pickCrown } from '@/lib/demo';
-import { fmtMon } from '@/lib/format';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 
-type FilterKey = 'all' | 'trending' | 'new' | 'hot';
+type FilterKey = 'trending' | 'new' | 'hot';
 
 const FILTERS: { key: FilterKey; label: string }[] = [
-  { key: 'all', label: 'For you' },
   { key: 'trending', label: 'Trending' },
   { key: 'new', label: 'New' },
   { key: 'hot', label: 'Hottest' },
@@ -25,13 +25,17 @@ const FILTERS: { key: FilterKey; label: string }[] = [
 export default function Home() {
   const router = useRouter();
   const canonical = `https://www.monpad.net${router.asPath.split('?')[0]}`;
-  const [filter, setFilter] = useState<FilterKey>('all');
-  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState<FilterKey>('trending');
+  const qParam = typeof router.query.q === 'string' ? router.query.q : '';
+  const [query, setQuery] = useState(qParam);
   const [tokens, setTokens] = useState<TokenSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [demo, setDemo] = useState(DEMO_BOARD || MOCK_MODE);
-  const gridRef = useRef<HTMLDivElement | null>(null);
   const configured = v3Configured();
+
+  useEffect(() => {
+    setQuery(qParam);
+  }, [qParam]);
 
   useEffect(() => {
     let cancelled = false;
@@ -40,7 +44,7 @@ export default function Home() {
     (async () => {
       try {
         if (DEMO_BOARD || MOCK_MODE) {
-          const mapped = await mockTokens(filter === 'all' ? undefined : filter);
+          const mapped = await mockTokens(filter);
           if (cancelled) return;
           setDemo(true);
           setTokens(mapped);
@@ -53,7 +57,7 @@ export default function Home() {
 
         // Factory live but empty → still show demo so UI isn't blank during cutover.
         if (!list.length) {
-          const mapped = await mockTokens(filter === 'all' ? undefined : filter);
+          const mapped = await mockTokens(filter);
           if (cancelled) return;
           setDemo(true);
           setTokens(mapped);
@@ -152,110 +156,54 @@ export default function Home() {
 
   const crown = useMemo(() => pickCrown(tokens), [tokens]);
 
+  const symbols = useMemo(() => visible.slice(0, 3).map((t) => t.symbol), [visible]);
+
   return (
     <>
       <Head>
-        <title>Monpad — fair launches on Monad</title>
+        <title>MON PAD — launches on Monad</title>
         <meta
           key="description"
           name="description"
-          content="Monpad: fair token launches on Monad. Every trade burns Monshi."
+          content="MON PAD: fair token launches on Monad. Uniswap V3 from block one. Every trade burns Monshi."
         />
-        <meta key="og:title" property="og:title" content="Monpad" />
-        <meta key="og:description" property="og:description" content="Fair launches on Monad. Every trade burns Monshi." />
+        <meta key="og:title" property="og:title" content="MON PAD" />
+        <meta key="og:description" property="og:description" content="Fair launches on Monad. DEX from block one. Every trade burns Monshi." />
         <meta key="og:url" property="og:url" content={canonical} />
-        <meta key="og:image" property="og:image" content="https://www.monpad.net/meshy/monshi-mascot.png" />
+        <meta key="og:image" property="og:image" content="https://www.monpad.net/api/og" />
         <link key="canonical" rel="canonical" href={canonical} />
+        <link rel="preload" as="image" href="/meshy/monshi-mascot.webp" fetchPriority="high" />
       </Head>
 
-      <section className="pad-stage" aria-label="Monpad">
-        <img className="pad-stage-monshi" src="/meshy/monshi-mascot.png" alt="Monshi" />
-        <div className="pad-stage-copy">
-          <h1>
-            You&apos;re smart.
-            <br />
-            Drive.
-          </h1>
-          <p>Fair launches on Monad. Every trade burns Monshi.</p>
-          <div className="pad-stage-actions">
-            <Link href="/create" className="mp-create-btn">
-              Launch a token
-            </Link>
-            {crown ? (
-              <Link href={`/token/${crown.address}`} className="pad-crown-chip">
-                Crown ${crown.symbol}
-              </Link>
-            ) : null}
-          </div>
-        </div>
-      </section>
+      <LiveTicker maxItems={24} />
+      <Hero symbols={symbols} />
 
-      <LiveTicker maxItems={28} />
+      <div className="pad-wrap">
+        <WhyRow />
+        <FeeSplit />
+        <MostWanted token={crown} />
 
-      <div className="pad-rail-wrap">
-        <div className="pad-rail" aria-label="Tokens">
-          {visible.slice(0, 12).map((t) => (
-            <Link key={t.address} href={`/token/${t.address}`} className="pad-rail-card">
-              <span
-                className="pad-rail-av"
-                style={t.imageUrl ? { backgroundImage: `url(${t.imageUrl})` } : undefined}
-              >
-                {t.imageUrl ? null : t.symbol.slice(0, 1)}
-              </span>
-              <span className="pad-rail-sym">${t.symbol}</span>
-              <span className="pad-rail-name">{t.name}</span>
-              <span className="pad-rail-stat">{fmtMon(t.volume24hMon || t.monRaisedNet)} MON</span>
-            </Link>
+        {!configured && !demo && <div className="pad-empty">Board is empty until the factory is live.</div>}
+
+        <div id="board" className="pad-tabs">
+          {FILTERS.map((f) => (
+            <button key={f.key} type="button" className={f.key === filter ? 'on' : ''} onClick={() => setFilter(f.key)}>
+              {f.label}
+            </button>
           ))}
+          <span className="pad-count">{loading ? '…' : visible.length}</span>
         </div>
-      </div>
 
-      <div className="mp-shell mp-strip-row">
-        <MonshiBurnCounter compact />
-      </div>
-
-      {!configured && !demo && (
-        <div className="mp-shell" style={{ paddingBottom: 8 }}>
-          <div className="mp-warn">Board is empty until the next factory goes live.</div>
-        </div>
-      )}
-
-      <div ref={gridRef} id="board" className="mp-filters">
-        <div className="mp-filters-inner">
-          <div className="mp-filter-tabs">
-            {FILTERS.map((f) => {
-              const active = f.key === filter;
-              return (
-                <button
-                  key={f.key}
-                  type="button"
-                  className={active ? 'mp-chip mp-chip-on' : 'mp-chip'}
-                  onClick={() => setFilter(f.key)}
-                >
-                  {f.label}
-                </button>
-              );
-            })}
+        <div className="pad-layout">
+          <div className="pad-grid">
+            {loading && visible.length === 0
+              ? Array.from({ length: 6 }).map((_, i) => <TokenSkeleton key={i} />)
+              : visible.map((token) => <TokenTile key={token.address} token={token} />)}
+            {!loading && visible.length === 0 && <div className="pad-empty">Nothing matches that search.</div>}
           </div>
-          <input
-            type="search"
-            className="mp-search"
-            placeholder="Search name / ticker / CA…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-          <span className="mp-count">{loading ? '…' : `${visible.length}`}</span>
-        </div>
-      </div>
-
-      <div className="mp-shell mp-board-wrap">
-        <div className="mp-board">
-          <main>
-            <TokenGrid tokens={visible} loading={loading} dense />
-          </main>
-          <aside className="mp-aside">
-            <HomeRail variant="hottest-24h" limit={10} />
-            <HomeRail variant="top-earners" limit={8} />
+          <aside className="pad-rail">
+            <HomeRail variant="hottest-24h" limit={8} />
+            <HomeRail variant="top-earners" limit={6} />
           </aside>
         </div>
       </div>

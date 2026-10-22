@@ -24,7 +24,7 @@ type RailConfig = {
 
 const CONFIG: Record<HomeRailVariant, RailConfig> = {
   'top-earners': { title: 'Most Raised', Icon: Trophy },
-  'top-graduated': { title: 'Graduated', Icon: GraduationCap },
+  'top-graduated': { title: 'On the DEX', Icon: GraduationCap },
   'hottest-24h': { title: 'Hottest', Icon: Flame },
 };
 

@@ -28,11 +28,11 @@ const pct = (bps: number) => `${bps / 100}%`;
 
 const CONTRACTS = [
   { name: 'Factory V3', addr: FACTORY_V3, purpose: 'Deploys token + curve per launch, holds economics, emits Launch' },
-  { name: 'Graduator V3', addr: GRADUATOR_V3, purpose: 'Migrates liquidity to Uniswap V3 at graduation and locks LP' },
+  { name: 'Graduator V3', addr: GRADUATOR_V3, purpose: 'Seeds the Uniswap V3 pool and locks LP' },
   { name: 'Curve (implementation)', addr: CURVE_IMPL, purpose: 'Bonding curve + protocol burn stack, EIP-1167 clone per token' },
   { name: 'Token (implementation)', addr: TOKEN_IMPL, purpose: 'ERC-20, cloned per token (1B fixed supply)' },
-  { name: 'WMON', addr: WMON, purpose: 'Wrapped MON — quote for graduation DEX pool' },
-  { name: 'Uniswap V3 NPM', addr: UNISWAP_V3_NPM, purpose: 'Position manager for graduation LP' },
+  { name: 'WMON', addr: WMON, purpose: 'Wrapped MON — quote asset in the DEX pool' },
+  { name: 'Uniswap V3 NPM', addr: UNISWAP_V3_NPM, purpose: 'Position manager for the DEX LP' },
   { name: 'MONSHI', addr: MONSHI_TOKEN, purpose: 'Creation-fee discount perk + buyback-and-burn target' },
   { name: 'Platform', addr: MONPAD_PLATFORM_WALLET, purpose: 'Protocol platform fee receiver (MON / quote only)' },
   { name: 'Dead', addr: DEAD_ADDRESS, purpose: 'Protocol token burns + MONSHI burn sink' },
@@ -125,7 +125,7 @@ export default function Docs() {
                 Built for traders.<br />Owned by agents.
               </h1>
               <p style={{ marginTop: 10, maxWidth: 520, fontSize: 14, color: 'rgba(220,215,240,0.75)', lineHeight: 1.5 }}>
-                Protocol burns, live Monshi FOMO, public API / SDK / MCP. <strong style={{ color: '#fff' }}>No anti-sniper.</strong> Bots welcome.
+                Protocol burns, live Monshi FOMO, public API / SDK / MCP. Bots and agents are welcome.
               </p>
             </div>
           </div>
@@ -172,7 +172,7 @@ export default function Docs() {
             { label: 'Burn MONSHI', value: pct(PROTOCOL_BURN_MONSHI_BPS), sub: 'of LP fees · buyback & burn' },
             { label: 'Burn token', value: pct(PROTOCOL_BURN_TOKEN_BPS), sub: 'of LP fees · project token → dEaD' },
             { label: 'Dev bot', value: `≤${V3_MAX_DEV_BUY_BPS / 100}%`, sub: 'atomic first buy in create tx' },
-            { label: 'Liquidity', value: 'DEX / LP', sub: 'no graduation target — curve is the pool' },
+            { label: 'Liquidity', value: 'DEX / LP', sub: 'Uniswap V3 from block one' },
           ].map((c) => (
             <div
               key={c.label}
@@ -192,7 +192,7 @@ export default function Docs() {
       </section>
 
       {/* Agents */}
-      <section style={{ marginBottom: 48 }}>
+      <section id="agents" style={{ marginBottom: 48 }}>
         <h2 style={{ fontSize: 28, fontWeight: 900, color: '#fff', marginBottom: 8 }}>For AI agents &amp; bots</h2>
         <p style={{ color: 'rgba(220,215,240,0.7)', fontSize: 14, marginBottom: 16, maxWidth: 640, lineHeight: 1.5 }}>
           Three identical policy surfaces. Start with JSON spec — never invent factory addresses from memory.
@@ -272,7 +272,7 @@ curl -s https://www.monpad.net/api/v1/burn | jq .
         <h2 style={{ fontSize: 28, fontWeight: 900, color: '#fff', marginBottom: 8 }}>LP fee split</h2>
         <p style={{ color: 'rgba(220,215,240,0.7)', fontSize: 14, marginBottom: 14, lineHeight: 1.5, maxWidth: 640 }}>
           Taken <strong style={{ color: '#fff' }}>off LP fees</strong> on every buy and sell. Platform never takes bags on sells — quote (MON) only.
-          Liquidity lives in the DEX/LP — no graduation target.
+          Liquidity lives in the Uniswap V3 pool from the launch block.
         </p>
         <div style={{ overflow: 'hidden', borderRadius: 12, border: '1px solid rgba(168,85,247,0.2)', marginBottom: 12 }}>
           <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
@@ -319,7 +319,7 @@ curl -s https://www.monpad.net/api/v1/burn | jq .
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
           {[
             { icon: Coins, t: 'Trade fees forever', d: 'Creator slice on buys/sells — pull-claim anytime.' },
-            { icon: Rocket, t: `${n(V3_CREATOR_REWARD_MON)} MON at graduation`, d: 'Paid when the token bonds (test economics on current factory).' },
+            { icon: Rocket, t: `${n(V3_CREATOR_REWARD_MON)} MON creator reward`, d: 'Claimable from the token page once the pool is live (test economics on the current factory).' },
             { icon: Flame, t: 'Dev bot on deploy', d: `Atomic first buy up to ${V3_MAX_DEV_BUY_BPS / 100}% supply in the create tx.` },
             { icon: Droplets, t: 'Your tax, your rules', d: 'Route creator tax to project burn and/or LP — independent of protocol stack.' },
           ].map((c) => (
@@ -394,10 +394,10 @@ curl -s https://www.monpad.net/api/v1/burn | jq .
         <h2 style={{ fontSize: 28, fontWeight: 900, color: '#fff', marginBottom: 16 }}>Security notes</h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
           {[
-            { icon: Lock, t: 'Locked LP', d: 'Graduation LP NFT is burned — creators cannot rug the pool.' },
+            { icon: Lock, t: 'Locked LP', d: 'The Uniswap V3 LP NFT is burned. Creators cannot pull the pool.' },
             { icon: Shield, t: 'Timelock + 2-step ownership', d: 'Economic changes delayed; ownership propose → accept.' },
             { icon: FileCode, t: 'Audits before mainnet cutover', d: 'Two clean passes + E2E bots required for the new fee stack.' },
-            { icon: Sparkles, t: 'Snipers welcome', d: 'No protocol anti-sniper. Creators use optional atomic dev buy instead.' },
+            { icon: Sparkles, t: 'Bots welcome', d: 'Agents, bots, and traders share the same pool. Creators can take an optional atomic first buy.' },
           ].map((c) => (
             <div key={c.t} style={{ padding: 16, borderRadius: 12, border: '1px solid rgba(168,85,247,0.18)', background: 'rgba(20,16,42,0.7)' }}>
               <c.icon size={20} style={{ color: 'var(--p)', marginBottom: 8 }} />

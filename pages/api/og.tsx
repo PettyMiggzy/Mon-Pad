@@ -14,7 +14,6 @@ export const config = {
   },
 };
 
-const GRAD_TARGET_MON = 425000;
 const BRAND_DEEP = '#1a0b2e';
 const BRAND_PURPLE = '#7c3aed';
 const BRAND_LIGHT = '#a78bfa';
@@ -55,8 +54,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const addr = typeof req.query.addr === 'string' ? req.query.addr : '';
 
   if (!addr) {
-    res.status(400).send('Missing addr');
-    return;
+    const image = new ImageResponse(
+      (
+        <div
+          style={{
+            width: '100%',
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'flex-end',
+            background: 'linear-gradient(160deg, #07050c 0%, #4c1d95 55%, #ff4d9a 140%)',
+            color: '#fff',
+            padding: 72,
+            fontFamily: 'system-ui, sans-serif',
+          }}
+        >
+          <div style={{ display: 'flex', fontSize: 28, letterSpacing: 6, color: '#ff4d9a' }}>MONAD</div>
+          <div style={{ display: 'flex', fontSize: 108, fontWeight: 800, letterSpacing: -2 }}>MON PAD</div>
+          <div style={{ display: 'flex', fontSize: 32, color: 'rgba(255,255,255,0.8)' }}>You&apos;re smart. Drive.</div>
+        </div>
+      ),
+      { width: 1200, height: 630 },
+    );
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    return res.status(200).send(image);
   }
 
   // Fetch token data — gracefully degrade if it fails
@@ -72,12 +93,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const imageUrl = token?.imageUrl;
   const mcap = token?.marketCapMon ?? '0';
   const volume = token?.volume24hMon ?? '0';
-  const monRaised = token?.monRaisedNet ?? '0';
-  const graduated = token?.graduated ?? false;
   const createdAt = token?.createdAt ?? 0;
-
-  const monRaisedNum = Number(monRaised) || 0;
-  const gradPct = graduated ? 100 : Math.min(100, (monRaisedNum / GRAD_TARGET_MON) * 100);
   const volumeNum = Number(volume) || 0;
   const showVolume = volumeNum > 0;
 
@@ -220,7 +236,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             )}
           </div>
 
-          {/* Bottom: graduation progress or graduated badge */}
+          {/* Pair line */}
           <div
             style={{
               display: 'flex',
@@ -240,68 +256,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 background: 'rgba(255,255,255,0.15)',
               }}
             />
-            {graduated ? (
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  fontSize: 28,
-                  fontWeight: 700,
-                  color: OK_GREEN,
-                  marginTop: 16,
-                }}
-              >
-                <span style={{ fontSize: 32, marginRight: 14 }}>{'\u2713'}</span>
-                GRADUATED &nbsp;
-                <span style={{ color: TEXT_MUTED, fontWeight: 500 }}>
-                  Trading on Uniswap V3
-                </span>
-              </div>
-            ) : (
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 10,
-                  marginTop: 16,
-                }}
-              >
-                <div
-                  style={{
-                    display: 'flex',
-                    fontSize: 24,
-                    fontWeight: 600,
-                  }}
-                >
-                  <span style={{ color: TEXT_PRIMARY }}>
-                    {gradPct.toFixed(1)}% to graduation
-                  </span>
-                  <span style={{ color: TEXT_MUTED, marginLeft: 'auto' }}>
-                    {fmtMon(monRaised)} / {fmtMon(String(GRAD_TARGET_MON))} MON
-                  </span>
-                </div>
-                <div
-                  style={{
-                    display: 'flex',
-                    width: '100%',
-                    height: 14,
-                    background: 'rgba(255,255,255,0.12)',
-                    borderRadius: 7,
-                    overflow: 'hidden',
-                  }}
-                >
-                  <div
-                    style={{
-                      display: 'flex',
-                      width: `${gradPct}%`,
-                      height: '100%',
-                      background: `linear-gradient(90deg, ${BRAND_LIGHT} 0%, ${OK_GREEN} 100%)`,
-                      borderRadius: 7,
-                    }}
-                  />
-                </div>
-              </div>
-            )}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                fontSize: 28,
+                fontWeight: 700,
+                color: OK_GREEN,
+                marginTop: 16,
+              }}
+            >
+              <span style={{ fontSize: 32, marginRight: 14 }}>{'\u2713'}</span>
+              ON UNISWAP V3
+              <span style={{ color: TEXT_MUTED, fontWeight: 500, marginLeft: 14 }}>
+                from block one
+              </span>
+            </div>
           </div>
         </div>
       ),
