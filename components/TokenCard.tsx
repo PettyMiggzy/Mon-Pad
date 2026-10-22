@@ -14,6 +14,8 @@ type Props = {
   token: TokenSummary;
   /** Index in the parent grid, used for stagger timing. Defaults to 0. */
   index?: number;
+  /** Compact pump.fun-style card */
+  dense?: boolean;
 };
 
 function Sparkline({ points }: { points: number[] }) {
@@ -63,7 +65,7 @@ function Sparkline({ points }: { points: number[] }) {
   );
 }
 
-export default function TokenCard({ token, index = 0 }: Props) {
+export default function TokenCard({ token, index = 0, dense = false }: Props) {
   // Bonding-curve progress 0..1, against the live V3 graduation target.
   const raisedWei = (() => { try { return BigInt(token.monRaisedNet); } catch { return 0n; } })();
   const progressRaw = GRAD_TARGET_WEI > 0n ? Number((raisedWei * 10000n) / GRAD_TARGET_WEI) / 10000 : 0;
@@ -81,9 +83,9 @@ export default function TokenCard({ token, index = 0 }: Props) {
       style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
     >
       <motion.div
-        initial={{ opacity: 0, y: 12 }}
+        initial={{ opacity: 0, y: dense ? 6 : 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, delay: Math.min(index * 0.04, 0.4), ease: 'easeOut' }}
+        transition={{ duration: dense ? 0.2 : 0.35, delay: Math.min(index * (dense ? 0.015 : 0.04), dense ? 0.25 : 0.4), ease: 'easeOut' }}
         whileHover={{
           y: -2,
           boxShadow: '0 0 24px rgba(168, 85, 247, 0.5)',
@@ -93,9 +95,9 @@ export default function TokenCard({ token, index = 0 }: Props) {
           position: 'relative',
           display: 'flex',
           flexDirection: 'column',
-          minWidth: 180,
-          padding: 12,
-          borderRadius: 12,
+          minWidth: dense ? 0 : 180,
+          padding: dense ? 8 : 12,
+          borderRadius: dense ? 10 : 12,
           background: 'var(--bg-card, rgba(28, 24, 56, 0.6))',
           border: '1px solid var(--bd, rgba(139, 92, 246, 0.15))',
           cursor: 'pointer',
@@ -110,7 +112,7 @@ export default function TokenCard({ token, index = 0 }: Props) {
             aspectRatio: '1 / 1',
             borderRadius: 8,
             overflow: 'hidden',
-            marginBottom: 10,
+            marginBottom: dense ? 6 : 10,
             background: 'var(--brand, #8B5CF6)',
             display: 'flex',
             alignItems: 'center',
@@ -122,13 +124,13 @@ export default function TokenCard({ token, index = 0 }: Props) {
               src={token.imageUrl}
               alt={token.symbol}
               fill
-              sizes="(max-width: 640px) 45vw, 180px"
+              sizes={dense ? '(max-width: 640px) 45vw, 140px' : '(max-width: 640px) 45vw, 180px'}
               style={{ objectFit: 'cover' }}
             />
           ) : (
             <span
               style={{
-                fontSize: 48,
+                fontSize: dense ? 32 : 48,
                 fontWeight: 800,
                 color: '#fff',
                 lineHeight: 1,
@@ -162,13 +164,13 @@ export default function TokenCard({ token, index = 0 }: Props) {
         </div>
 
         {/* Name + symbol badge */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: dense ? 4 : 8 }}>
           <div
             style={{
               flex: 1,
               minWidth: 0,
-              fontSize: 14,
-              fontWeight: 600,
+              fontSize: dense ? 12 : 14,
+              fontWeight: 700,
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
@@ -193,8 +195,8 @@ export default function TokenCard({ token, index = 0 }: Props) {
           </div>
         </div>
 
-        {/* Creator */}
-        {token.creator && (
+        {/* Creator — hide in dense mode to keep the board packed */}
+        {!dense && token.creator && (
           <div
             style={{
               fontSize: 10,
@@ -210,15 +212,15 @@ export default function TokenCard({ token, index = 0 }: Props) {
           </div>
         )}
 
-        <Sparkline points={token.sparkline ?? []} />
+        {!dense && <Sparkline points={token.sparkline ?? []} />}
       {/* Market cap + 24h volume */}
         <div
           style={{
             display: 'flex',
             justifyContent: 'space-between',
-            fontSize: 11,
+            fontSize: dense ? 10 : 11,
             color: 'var(--fg-muted, rgba(255,255,255,0.6))',
-            marginBottom: 4,
+            marginBottom: 2,
           }}
         >
           <span>MC</span>
@@ -230,12 +232,12 @@ export default function TokenCard({ token, index = 0 }: Props) {
           style={{
             display: 'flex',
             justifyContent: 'space-between',
-            fontSize: 11,
+            fontSize: dense ? 10 : 11,
             color: 'var(--fg-muted, rgba(255,255,255,0.6))',
-            marginBottom: 8,
+            marginBottom: dense ? 6 : 8,
           }}
         >
-          <span>Volume</span>
+          <span>Vol</span>
           <span style={{ color: 'var(--fg, #fff)', fontWeight: 500 }}>
             {fmtMon(token.volume24hMon)} MON
           </span>

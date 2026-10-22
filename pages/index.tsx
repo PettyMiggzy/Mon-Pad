@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import LiveTicker from '@/components/LiveTicker';
@@ -9,22 +9,25 @@ import HomeRail from '@/components/HomeRail';
 import { type TokenSummary } from '@/lib/api';
 import { listV3Tokens, getV3CardStats } from '@/lib/chainV3';
 import { v3Configured } from '@/lib/constants';
+import { fmtMon } from '@/lib/format';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 
-type FilterKey = 'all' | 'trending' | 'near-graduation' | 'graduated';
+type FilterKey = 'all' | 'trending' | 'new' | 'near-graduation' | 'graduated';
 
-const FILTERS: { key: FilterKey; label: string; apiValue: string | undefined }[] = [
-  { key: 'all', label: 'All', apiValue: undefined },
-  { key: 'trending', label: 'Trending', apiValue: 'trending' },
-  { key: 'near-graduation', label: 'Near Graduation', apiValue: 'near-graduation' },
-  { key: 'graduated', label: 'Graduated', apiValue: 'graduated' },
+const FILTERS: { key: FilterKey; label: string }[] = [
+  { key: 'all', label: 'For you' },
+  { key: 'trending', label: 'Trending' },
+  { key: 'new', label: 'New' },
+  { key: 'near-graduation', label: 'About to graduate' },
+  { key: 'graduated', label: 'Graduated' },
 ];
 
 export default function Home() {
   const router = useRouter();
   const canonical = `https://www.monpad.net${router.asPath.split('?')[0]}`;
   const [filter, setFilter] = useState<FilterKey>('all');
+  const [query, setQuery] = useState('');
   const [tokens, setTokens] = useState<TokenSummary[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const gridRef = useRef<HTMLDivElement | null>(null);
@@ -36,12 +39,17 @@ export default function Home() {
 
     (async () => {
       try {
-        const list = await listV3Tokens(60);
+        const list = await listV3Tokens(120);
         if (cancelled) return;
         let rows = list;
         if (filter === 'graduated') rows = list.filter((t) => t.graduated);
-        else if (filter === 'near-graduation') rows = list.filter((t) => !t.graduated).sort((a, b) => b.progress - a.progress);
-        else if (filter === 'trending') rows = [...list].sort((a, b) => b.progress - a.progress);
+        else if (filter === 'near-graduation') {
+          rows = list.filter((t) => !t.graduated).sort((a, b) => b.progress - a.progress);
+        } else if (filter === 'trending') {
+          rows = [...list].sort((a, b) => b.progress - a.progress);
+        } else if (filter === 'new') {
+          rows = [...list]; // chain order ≈ newest first from factory
+        }
         const mapped: TokenSummary[] = rows.map((t) => ({
           address: t.token,
           name: t.name,
@@ -58,7 +66,6 @@ export default function Home() {
         setTokens(mapped);
         setLoading(false);
 
-        // Enrich cards with off-chain logos (same-origin Supabase-backed route; best-effort).
         try {
           const addrs = mapped.map((t) => t.address).join(',');
           if (addrs) {
@@ -70,15 +77,13 @@ export default function Home() {
               if (byAddr.size) setTokens((prev) => prev.map((t) => ({ ...t, imageUrl: byAddr.get(t.address.toLowerCase()) || t.imageUrl })));
             }
           }
-        } catch { /* logos are optional */ }
+        } catch { /* logos optional */ }
 
-        // Enrich cards with volume + price sparkline (per-token recent trades; throttled + capped).
         try {
           const curveByAddr = new Map(rows.map((t) => [t.token.toLowerCase(), t.curve]));
-          const top = mapped.slice(0, 12); // cap so we don't hammer the RPC (getLogs is 100-block-capped)
-          // 3 cards at a time — each card's scan fans out its own concurrent chunk batch.
-          for (let i = 0; i < top.length && !cancelled; i += 3) {
-            const batch = top.slice(i, i + 3);
+          const top = mapped.slice(0, 24);
+          for (let i = 0; i < top.length && !cancelled; i += 4) {
+            const batch = top.slice(i, i + 4);
             const results = await Promise.all(batch.map(async (t) => {
               const curve = curveByAddr.get(t.address.toLowerCase());
               if (!curve) return null;
@@ -105,14 +110,35 @@ export default function Home() {
     return () => { cancelled = true; };
   }, [filter]);
 
-  const scrollToGrid = () => {
-    gridRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return tokens;
+    return tokens.filter(
+      (t) =>
+        t.name.toLowerCase().includes(q) ||
+        t.symbol.toLowerCase().includes(q) ||
+        t.address.toLowerCase().includes(q),
+    );
+  }, [tokens, query]);
+
+  const king = useMemo(() => {
+    const live = tokens.filter((t) => !t.graduated);
+    if (!live.length) return null;
+    return [...live].sort((a, b) => {
+      try {
+        const A = BigInt(a.monRaisedNet || '0');
+        const B = BigInt(b.monRaisedNet || '0');
+        return A > B ? -1 : A < B ? 1 : 0;
+      } catch {
+        return 0;
+      }
+    })[0];
+  }, [tokens]);
 
   return (
     <>
       <Head>
-        <title>Monpad — Fair Launch on Monad · powered by Monchi</title>
+        <title>Monpad — Fair Launch on Monad · powered by Monshi</title>
         <meta key="description" name="description" content="Monpad on Monad. Every trade burns Monshi. Creators earn fees forever. Live burn counter." />
         <meta key="og:title" property="og:title" content="Monpad — Fair Launch on Monad" />
         <meta key="og:description" property="og:description" content="Monpad on Monad. Every trade burns Monshi. Creators earn fees forever." />
@@ -121,289 +147,247 @@ export default function Home() {
         <meta key="twitter:description" name="twitter:description" content="Monpad on Monad. Every trade burns Monshi. Creators earn fees forever." />
         <link key="canonical" rel="canonical" href={canonical} />
       </Head>
-      {/* Full-bleed hero — Monpad brand + Monshi mascot (approved street cutout) */}
-      <motion.section
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.6 }}
+
+      {/* Slim busy strip — pump.fun energy, Monshi stays the brand face */}
+      <div
         style={{
-          position: 'relative',
-          minHeight: 'min(92vh, 860px)',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'flex-end',
-          overflow: 'hidden',
+          borderBottom: '1px solid var(--bd)',
           background:
-            'radial-gradient(ellipse 80% 70% at 70% 40%, rgba(124,58,237,0.35) 0%, transparent 55%), linear-gradient(160deg, #1a0f2e 0%, #050308 55%, #0a0614 100%)',
+            'linear-gradient(90deg, rgba(124,58,237,0.18) 0%, rgba(5,3,8,0.95) 40%, rgba(236,72,153,0.12) 100%)',
         }}
       >
-        {/* Soft full-bleed atmosphere (not a second competing subject) */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/meshy/hero.png"
-          alt=""
-          style={{
-            position: 'absolute',
-            inset: 0,
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover',
-            objectPosition: 'center 35%',
-            opacity: 0.28,
-            transform: 'scale(1.04)',
-            animation: 'monpadHeroDrift 18s ease-in-out infinite alternate',
-          }}
-        />
-        <div
-          aria-hidden
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background:
-              'linear-gradient(90deg, rgba(5,3,8,0.92) 0%, rgba(5,3,8,0.55) 42%, rgba(5,3,8,0.25) 70%, rgba(5,3,8,0.55) 100%), linear-gradient(180deg, transparent 40%, var(--bg, #050308) 100%)',
-          }}
-        />
-
-        {/* Monshi — pad mascot, dominant visual */}
-        <motion.img
-          src="/meshy/monshi-mascot.png"
-          alt="Monshi — Monpad mascot"
-          initial={{ opacity: 0, x: 36, y: 16 }}
-          animate={{ opacity: 1, x: 0, y: 0 }}
-          transition={{ duration: 0.75, delay: 0.15 }}
-          style={{
-            position: 'absolute',
-            right: 'max(-4vw, calc((100% - 1280px) / 2 - 24px))',
-            bottom: 0,
-            height: 'min(88vh, 780px)',
-            width: 'auto',
-            maxWidth: 'min(56vw, 560px)',
-            objectFit: 'contain',
-            objectPosition: 'bottom right',
-            pointerEvents: 'none',
-            filter: 'drop-shadow(0 24px 60px rgba(124,58,237,0.45))',
-            animation: 'monpadMonchiFloat 6s ease-in-out infinite',
-            zIndex: 1,
-          }}
-          className="monpad-hero-monshi"
-        />
-
         <div
           style={{
-            position: 'relative',
-            zIndex: 2,
-            maxWidth: 1280,
-            width: '100%',
+            maxWidth: 1440,
             margin: '0 auto',
-            padding: 'clamp(24px, 6vh, 56px) 16px 28px',
+            padding: '10px 12px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            flexWrap: 'wrap',
           }}
         >
-          <motion.div
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.55, delay: 0.12 }}
-            style={{ maxWidth: 480 }}
-          >
-            <p
-              style={{
-                fontFamily: 'var(--font)',
-                fontSize: 'clamp(42px, 9vw, 88px)',
-                fontWeight: 800,
-                letterSpacing: '-0.04em',
-                lineHeight: 0.95,
-                color: '#fff',
-                margin: 0,
-                textShadow: '0 8px 40px rgba(0,0,0,0.45)',
-              }}
-            >
-              Monpad
-            </p>
-            <p
-              style={{
-                marginTop: 14,
-                maxWidth: 420,
-                fontSize: 'clamp(15px, 2.4vw, 18px)',
-                lineHeight: 1.45,
-                color: 'var(--t2, #DDD7FE)',
-              }}
-            >
-              Fair launches on Monad. Every trade burns Monshi.
-            </p>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 22 }}>
-              <Link
-                href="/create"
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/meshy/monshi-mascot.png"
+            alt="Monshi"
+            style={{
+              width: 56,
+              height: 56,
+              objectFit: 'contain',
+              flexShrink: 0,
+              filter: 'drop-shadow(0 6px 16px rgba(124,58,237,0.5))',
+            }}
+          />
+          <div style={{ flex: 1, minWidth: 140 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+              <span
                 style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  padding: '12px 22px',
-                  borderRadius: 10,
-                  background: 'var(--p, #A855F7)',
+                  fontSize: 22,
+                  fontWeight: 800,
+                  letterSpacing: '-0.03em',
                   color: '#fff',
-                  fontWeight: 700,
-                  fontSize: 15,
-                  textDecoration: 'none',
+                  lineHeight: 1,
                 }}
               >
-                Launch a coin
-              </Link>
-              <button
-                type="button"
-                onClick={scrollToGrid}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  padding: '12px 20px',
-                  borderRadius: 10,
-                  background: 'transparent',
-                  color: '#fff',
-                  fontWeight: 700,
-                  fontSize: 15,
-                  border: '1px solid rgba(255,255,255,0.28)',
-                  cursor: 'pointer',
-                }}
-              >
-                Explore launches
-              </button>
+                Monpad
+              </span>
+              <span style={{ fontSize: 12, color: 'var(--t3)', fontWeight: 600 }}>
+                live board · every trade burns Monshi
+              </span>
             </div>
-          </motion.div>
+          </div>
+          <Link
+            href="/create"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              padding: '10px 16px',
+              borderRadius: 8,
+              background: 'var(--p, #A855F7)',
+              color: '#fff',
+              fontWeight: 800,
+              fontSize: 13,
+              textDecoration: 'none',
+              letterSpacing: '0.02em',
+              textTransform: 'uppercase',
+            }}
+          >
+            + Create coin
+          </Link>
         </div>
-      </motion.section>
+      </div>
 
-      <style jsx global>{`
-        @keyframes monpadHeroDrift {
-          from { transform: scale(1.04) translate3d(0, 0, 0); }
-          to { transform: scale(1.08) translate3d(-1.5%, -1%, 0); }
-        }
-        @keyframes monpadMonchiFloat {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-12px); }
-        }
-        @media (max-width: 720px) {
-          .monpad-hero-monshi {
-            max-width: 72vw !important;
-            height: min(52vh, 420px) !important;
-            opacity: 0.95;
-            right: -8vw !important;
-          }
-        }
-      `}</style>
-
-      <LiveTicker />
+      <LiveTicker maxItems={28} />
 
       <div style={{ paddingTop: 8 }}>
-        <MonshiBurnCounter />
+        <MonshiBurnCounter compact />
       </div>
 
       {!configured && (
-        <div style={{ maxWidth: 1280, margin: '0 auto', padding: '0 16px 12px' }}>
+        <div style={{ maxWidth: 1440, margin: '0 auto', padding: '0 12px 8px' }}>
           <div style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--bd)', background: 'var(--bg-card)', color: 'var(--t3)', fontSize: 12 }}>
             Contracts not configured — set NEXT_PUBLIC_FACTORY_V3 / NEXT_PUBLIC_GRADUATOR_V3.
           </div>
         </div>
       )}
 
-      <div className="max-w-7xl mx-auto px-4">
+      <div style={{ maxWidth: 1440, margin: '0 auto', padding: '0 12px' }}>
         <PromoBanner />
       </div>
 
-      {/* Sticky filter tabs */}
+      {/* King of the hill */}
+      {king && (
+        <div style={{ maxWidth: 1440, margin: '0 auto', padding: '8px 12px 0' }}>
+          <Link
+            href={`/token/${king.address}`}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              padding: '10px 12px',
+              borderRadius: 10,
+              border: '1px solid rgba(252, 211, 77, 0.35)',
+              background: 'linear-gradient(90deg, rgba(252,211,77,0.12), rgba(20,16,42,0.7))',
+              textDecoration: 'none',
+              color: 'inherit',
+            }}
+          >
+            <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', color: '#FCD34D', textTransform: 'uppercase' }}>
+              ★ King of the hill
+            </span>
+            <span style={{ fontWeight: 800, color: '#fff', fontSize: 14 }}>{king.name}</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--p)', background: 'rgba(168,85,247,0.15)', padding: '2px 6px', borderRadius: 4 }}>
+              ${king.symbol}
+            </span>
+            <span style={{ marginLeft: 'auto', fontSize: 12, color: '#4ADE80', fontWeight: 700 }}>
+              {fmtMon(king.monRaisedNet)} MON raised
+            </span>
+          </Link>
+        </div>
+      )}
+
+      {/* Sticky filters + search — pump.fun board chrome */}
       <div
         ref={gridRef}
         style={{
           position: 'sticky',
           top: 56,
           zIndex: 10,
-          background: 'var(--bg-strip, rgba(20, 16, 42, 0.85))',
-          backdropFilter: 'blur(8px)',
-          WebkitBackdropFilter: 'blur(8px)',
-          borderBottom: '1px solid var(--bd, rgba(139, 92, 246, 0.15))',
+          background: 'rgba(5, 3, 8, 0.92)',
+          backdropFilter: 'blur(10px)',
+          WebkitBackdropFilter: 'blur(10px)',
+          borderBottom: '1px solid var(--bd)',
+          marginTop: 8,
         }}
       >
         <div
           style={{
-            maxWidth: 1280,
+            maxWidth: 1440,
             margin: '0 auto',
-            padding: '0 16px',
+            padding: '8px 12px',
             display: 'flex',
-            gap: 24,
-            overflowX: 'auto',
+            alignItems: 'center',
+            gap: 10,
+            flexWrap: 'wrap',
           }}
         >
-          {FILTERS.map((f) => {
-            const isActive = f.key === filter;
-            return (
-              <button
-                key={f.key}
-                type="button"
-                onClick={() => setFilter(f.key)}
-                style={{
-                  position: 'relative',
-                  padding: '14px 4px',
-                  background: 'transparent',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontSize: 14,
-                  fontWeight: isActive ? 700 : 500,
-                  color: isActive
-                    ? 'var(--brand, #8B5CF6)'
-                    : 'var(--p2, rgba(220, 215, 240, 0.7))',
-                  whiteSpace: 'nowrap',
-                  transition: 'color 120ms ease',
-                }}
-                onMouseEnter={(e) => {
-                  if (!isActive) {
-                    (e.currentTarget as HTMLElement).style.color =
-                      'var(--p1, #ECE9F8)';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isActive) {
-                    (e.currentTarget as HTMLElement).style.color =
-                      'var(--p2, rgba(220, 215, 240, 0.7))';
-                  }
-                }}
-              >
-                {f.label}
-                {isActive && (
-                  <span
-                    style={{
-                      position: 'absolute',
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      height: 2,
-                      background: 'var(--brand, #8B5CF6)',
-                      borderRadius: 2,
-                    }}
-                  />
-                )}
-              </button>
-            );
-          })}
+          <div style={{ display: 'flex', gap: 4, overflowX: 'auto', flex: 1, minWidth: 0 }}>
+            {FILTERS.map((f) => {
+              const isActive = f.key === filter;
+              return (
+                <button
+                  key={f.key}
+                  type="button"
+                  onClick={() => setFilter(f.key)}
+                  style={{
+                    padding: '7px 12px',
+                    borderRadius: 999,
+                    border: isActive ? '1px solid rgba(168,85,247,0.55)' : '1px solid transparent',
+                    background: isActive ? 'rgba(168,85,247,0.2)' : 'transparent',
+                    color: isActive ? '#fff' : 'var(--t3)',
+                    fontWeight: isActive ? 800 : 600,
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {f.label}
+                </button>
+              );
+            })}
+          </div>
+          <input
+            type="search"
+            placeholder="Search by name / ticker / CA…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            style={{
+              width: 'min(280px, 100%)',
+              padding: '8px 12px',
+              borderRadius: 8,
+              border: '1px solid var(--bd)',
+              background: 'rgba(20,16,42,0.8)',
+              color: '#fff',
+              fontSize: 13,
+              outline: 'none',
+            }}
+          />
+          <span style={{ fontSize: 11, color: 'var(--t4)', fontWeight: 600, whiteSpace: 'nowrap' }}>
+            {loading ? 'loading…' : `${visible.length} coins`}
+          </span>
         </div>
       </div>
 
-      {/* Main content: grid + rails */}
+      {/* Busy board: dense grid + slim rails */}
       <div
         style={{
-          maxWidth: 1280,
+          maxWidth: 1440,
           margin: '0 auto',
-          padding: '24px 16px 0',
+          padding: '12px 12px 48px',
         }}
       >
         <div
-          className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0, 1fr) 280px',
+            gap: 12,
+            alignItems: 'start',
+          }}
+          className="monpad-board"
         >
-          <main className="lg:col-span-2">
-            <TokenGrid tokens={tokens} loading={loading} />
+          <main>
+            <TokenGrid tokens={visible} loading={loading} dense />
           </main>
-          <aside style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <HomeRail variant="hottest-24h" />
-            <HomeRail variant="top-graduated" />
-            <HomeRail variant="top-earners" />
+          <aside
+            style={{ display: 'flex', flexDirection: 'column', gap: 10 }}
+            className="monpad-board-aside"
+          >
+            <HomeRail variant="hottest-24h" limit={10} />
+            <HomeRail variant="top-graduated" limit={8} />
+            <HomeRail variant="top-earners" limit={8} />
           </aside>
         </div>
       </div>
+
+      <style jsx global>{`
+        @media (max-width: 1024px) {
+          .monpad-board {
+            grid-template-columns: 1fr !important;
+          }
+          .monpad-board-aside {
+            order: -1;
+            display: grid !important;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+          }
+        }
+        @media (max-width: 720px) {
+          .monpad-board-aside {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
     </>
   );
 }

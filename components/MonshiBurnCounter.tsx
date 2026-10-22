@@ -18,7 +18,9 @@ function fmtBurn(n: number): string {
  * Circulating supply ticks down as more MONSHI lands in the dead address;
  * total burned ticks up beside it. Polls on-chain every ~10s.
  */
-export default function MonshiBurnCounter() {
+type Props = { compact?: boolean };
+
+export default function MonshiBurnCounter({ compact = false }: Props) {
   const [burned, setBurned] = useState(0);
   const [circulating, setCirculating] = useState(0);
   const [displayBurned, setDisplayBurned] = useState(0);
@@ -80,46 +82,45 @@ export default function MonshiBurnCounter() {
       transition={{ duration: 0.4 }}
       aria-live="polite"
       style={{
-        maxWidth: 1280,
+        maxWidth: compact ? 1440 : 1280,
         margin: '0 auto',
-        padding: '0 16px 14px',
+        padding: compact ? '0 12px 8px' : '0 16px 14px',
       }}
     >
       <div
         style={{
           position: 'relative',
           overflow: 'hidden',
-          borderRadius: 14,
+          borderRadius: compact ? 10 : 14,
           border: '1px solid rgba(236, 72, 153, 0.35)',
           background:
             'linear-gradient(120deg, rgba(236,72,153,0.12) 0%, rgba(20,16,42,0.85) 45%, rgba(124,58,237,0.18) 100%)',
-          padding: '14px 18px',
+          padding: compact ? '8px 12px' : '14px 18px',
           display: 'flex',
           flexWrap: 'wrap',
           alignItems: 'center',
           justifyContent: 'space-between',
-          gap: 12,
+          gap: compact ? 8 : 12,
           boxShadow: pulse ? '0 0 28px rgba(236,72,153,0.45)' : '0 0 18px rgba(236,72,153,0.15)',
           transition: 'box-shadow 0.4s ease',
         }}
       >
-        <div style={{ minWidth: 0 }}>
+        <div style={{ minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
           <div
             style={{
-              fontSize: 11,
+              fontSize: compact ? 10 : 11,
               fontWeight: 700,
               letterSpacing: '0.12em',
               textTransform: 'uppercase',
               color: 'var(--pink, #EC4899)',
             }}
           >
-            Monchi burn · live
+            Monshi burn · live
           </div>
           <div
             style={{
-              marginTop: 4,
               fontFamily: 'var(--mono, ui-monospace, monospace)',
-              fontSize: 'clamp(22px, 4vw, 34px)',
+              fontSize: compact ? 18 : 'clamp(22px, 4vw, 34px)',
               fontWeight: 800,
               color: '#fff',
               lineHeight: 1.1,
@@ -131,9 +132,11 @@ export default function MonshiBurnCounter() {
               MONSHI burned
             </span>
           </div>
-          <div style={{ marginTop: 4, fontSize: 12, color: 'var(--t3, #A1A1AA)' }}>
-            Circulating ticks down as fees buy &amp; burn Monchi on every trade.
-          </div>
+          {!compact && (
+            <div style={{ marginTop: 4, fontSize: 12, color: 'var(--t3, #A1A1AA)', width: '100%' }}>
+              Circulating ticks down as fees buy &amp; burn Monshi on every trade.
+            </div>
+          )}
         </div>
         <div style={{ textAlign: 'right' }}>
           <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--t4, #71717A)' }}>
@@ -142,7 +145,7 @@ export default function MonshiBurnCounter() {
           <div
             style={{
               fontFamily: 'var(--mono, ui-monospace, monospace)',
-              fontSize: 20,
+              fontSize: compact ? 16 : 20,
               fontWeight: 700,
               color: pulse ? 'var(--pink, #EC4899)' : 'var(--t2, #DDD7FE)',
               fontVariantNumeric: 'tabular-nums',

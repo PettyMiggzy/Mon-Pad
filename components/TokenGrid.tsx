@@ -7,6 +7,8 @@ type Props = {
   tokens: TokenSummary[];
   loading?: boolean;
   emptyMessage?: string;
+  /** pump.fun-style denser board */
+  dense?: boolean;
 };
 
 /**
@@ -19,12 +21,16 @@ type Props = {
  *   has tokens             -> grid of <TokenCard>, keyed by address
  *   loading + has tokens   -> render existing tokens (no flash)
  */
-export default function TokenGrid({ tokens, loading = false, emptyMessage }: Props) {
+export default function TokenGrid({ tokens, loading = false, emptyMessage, dense = false }: Props) {
+  const gridClass = dense
+    ? 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2'
+    : 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4';
+
   // Loading initial fetch: show skeletons only when we have nothing yet.
   if (loading && tokens.length === 0) {
     return (
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
-        {Array.from({ length: 8 }).map((_, i) => (
+      <div className={gridClass}>
+        {Array.from({ length: dense ? 18 : 8 }).map((_, i) => (
           <SkeletonCard key={i} />
         ))}
       </div>
@@ -70,9 +76,9 @@ export default function TokenGrid({ tokens, loading = false, emptyMessage }: Pro
   // Has tokens: render grid. Refetch-loading is intentionally ignored to avoid
   // flashing skeletons over real data.
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
+    <div className={gridClass}>
       {tokens.map((t, i) => (
-        <TokenCard key={t.address} token={t} index={i} />
+        <TokenCard key={t.address} token={t} index={i} dense={dense} />
       ))}
     </div>
   );
