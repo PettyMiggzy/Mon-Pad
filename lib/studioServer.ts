@@ -9,6 +9,7 @@
 import { createPublicClient, http, recoverMessageAddress, formatUnits, type Address } from 'viem';
 import { MONAD_CHAIN_ID, MONSHI_TOKEN } from './constants';
 import { tokenAbi } from './abis';
+import { monadRpcUrl } from './rpcUpstream';
 
 const VENICE = 'https://api.venice.ai/api/v1';
 
@@ -78,7 +79,7 @@ export function stripCodeFromChat(reply: string): string {
 }
 
 // ── Chain reads / payment verification ──────────────────────────────────────
-const rpc = () => process.env.RPC_URL || 'https://rpc.monad.xyz';
+const rpc = () => monadRpcUrl();
 export function chainClient() {
   return createPublicClient({
     chain: { id: MONAD_CHAIN_ID, name: 'Monad', nativeCurrency: { name: 'MON', symbol: 'MON', decimals: 18 }, rpcUrls: { default: { http: [rpc()] } } } as any,

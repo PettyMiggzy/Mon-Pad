@@ -1,17 +1,17 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { fetchMonadRpc } from '@/lib/rpcUpstream';
 
 // Same-origin JSON-RPC proxy. The browser talks to /api/rpc; this serverless
-// function forwards to the real RPC endpoint, which lives ONLY in the server-side
-// RPC_URL env var and never ships to the client. A same-origin check stops the
-// proxy from being used as a free public RPC by other sites.
+// function forwards to the real RPC endpoint(s), which live ONLY in server-side
+// env and never ship to the client. A same-origin check stops the proxy from
+// being used as a free public RPC by other sites.
 //
 // Vercel env (server-side, NOT NEXT_PUBLIC):
-//   RPC_URL = https://<your-quicknode-endpoint>/...
+//   RPC_URL          = primary (default https://rpc.monad.xyz)
+//   RPC_URL_FALLBACK = backup (e.g. Alchemy) — tried when primary fails
 // Also remove NEXT_PUBLIC_RPC_URL / _FALLBACK / _WSS so nothing leaks client-side.
 
 export const config = { api: { bodyParser: { sizeLimit: '4mb' } } };
-
-const RPC_URL = process.env.RPC_URL || 'https://rpc.monad.xyz';
 
 // JSON-RPC method allowlist. The app only ever needs read methods + raw-tx relay,
 // so anything outside this set is rejected — an extra guard against the proxy being
@@ -54,11 +54,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!methodAllowed(req.body)) return res.status(403).json({ error: 'method not allowed' });
 
   try {
-    const upstream = await fetch(RPC_URL, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(req.body ?? {}),
-    });
+    const upstream = await fetchMonadRpc(req.body ?? {});
     const text = await upstream.text();
     res.status(upstream.status);
     res.setHeader('content-type', 'application/json');

@@ -3,6 +3,7 @@ import { createPublicClient, http, recoverMessageAddress, type Address } from 'v
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { FACTORY_V3, MONAD_CHAIN_ID } from '@/lib/constants';
 import { factoryV3Abi } from '@/lib/abis';
+import { monadRpcUrl } from '@/lib/rpcUpstream';
 
 // Off-chain token metadata (logo + socials + description), keyed by the token
 // contract address. Read is public. Write is bound to the token's ON-CHAIN creator:
@@ -35,7 +36,7 @@ export const metaSignMessage = (address: string) => `Mon-Pad: set metadata for t
 // Read the token's on-chain creator from the factory. Returns lowercased address,
 // or null if it's not a Mon-Pad token / the RPC read fails.
 async function onchainCreator(address: string): Promise<string | null> {
-  const rpc = process.env.RPC_URL || 'https://rpc.monad.xyz';
+  const rpc = monadRpcUrl();
   try {
     const client = createPublicClient({
       chain: { id: MONAD_CHAIN_ID, name: 'Monad', nativeCurrency: { name: 'MON', symbol: 'MON', decimals: 18 }, rpcUrls: { default: { http: [rpc] } } } as any,

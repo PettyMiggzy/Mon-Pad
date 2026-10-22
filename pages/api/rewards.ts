@@ -3,6 +3,7 @@ import { createPublicClient, http, recoverMessageAddress, formatUnits, type Addr
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { MONSHI_TOKEN, MONAD_CHAIN_ID } from '@/lib/constants';
 import { tokenAbi } from '@/lib/abis';
+import { monadRpcUrl } from '@/lib/rpcUpstream';
 
 // Monshi Rewards — points / daily streaks / referrals. Holding MONSHI multiplies
 // your earn-rate (tiered). Points are non-transferable and off-chain; a future
@@ -26,7 +27,7 @@ function tierOf(bal: number): { name: string; mult: number } {
 }
 
 async function monshiBalance(wallet: string): Promise<number> {
-  const rpc = process.env.RPC_URL || 'https://rpc.monad.xyz';
+  const rpc = monadRpcUrl();
   try {
     const client = createPublicClient({
       chain: { id: MONAD_CHAIN_ID, name: 'Monad', nativeCurrency: { name: 'MON', symbol: 'MON', decimals: 18 }, rpcUrls: { default: { http: [rpc] } } } as any,
