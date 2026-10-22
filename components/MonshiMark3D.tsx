@@ -117,7 +117,6 @@ export default function MonshiMark3D({ size = 44, spin = true, className }: Prop
           gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
           style={{ position: 'absolute', inset: 0 }}
           onCreated={() => setFailed(false)}
-          onError={() => setFailed(true)}
         >
           <ambientLight intensity={0.55} />
           <directionalLight position={[3, 4, 2]} intensity={1.3} color="#F0E6FF" />

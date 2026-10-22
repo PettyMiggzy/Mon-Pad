@@ -234,7 +234,7 @@ export default function CreatePage() {
       <div style={{ marginTop: 24, padding: 16, background: 'rgba(167,139,250,0.05)', border: '1px solid rgba(167,139,250,0.2)', borderRadius: 8 }}>
         <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Your tokenomics (optional, editable later)</div>
         <div style={{ fontSize: 11, color: '#888', marginBottom: 10 }}>
-          Optional extras on top of LP fees (70% creator / 10% platform / 10% burn Monshi / 10% burn your token).
+          Optional extras on top of LP fees (80% creator incl. 10pt token burn / 10% platform / 10% burn Monshi).
         </div>
         <PctRow label="Creator fee → buyback &amp; burn" value={cfBurnPct} onChange={setCfBurnPct} max={100} />
         <PctRow label="Creator fee → deepen LP" value={cfLpPct} onChange={setCfLpPct} max={100} />
@@ -245,7 +245,8 @@ export default function CreatePage() {
       <div style={{ marginTop: 16, padding: 16, background: 'rgba(255,255,255,0.03)', borderRadius: 8 }}>
         <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Launch params</div>
         <Stat label="Creation fee" value={`${V3_CREATION_FEE_MON} MON`} />
-        <Stat label="LP fee split" value="70% creator · 10% platform · 10% Monshi · 10% token burn" />
+        <Stat label="DEX" value="Uniswap V3 · 1% pool fee" />
+        <Stat label="LP fee split" value="80% creator (incl. 10pt burn) · 10% platform · 10% Monshi" />
         <Stat label="Total supply" value="1,000,000,000" />
         <Stat label="Profile storage" value="Supabase images + token_meta (original pad)" />
       </div>

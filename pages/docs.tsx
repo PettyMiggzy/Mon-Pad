@@ -114,7 +114,6 @@ export default function Docs() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/meshy/monshi-mascot.png"
-              /* brand cutout — same purple street Monshi */
               alt="Monshi"
               style={{ width: 96, height: 96, objectFit: 'contain', filter: 'drop-shadow(0 12px 28px rgba(124,58,237,0.55))' }}
             />

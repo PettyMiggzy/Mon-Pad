@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { ConnectButton, useConnectModal } from '@rainbow-me/rainbowkit';
 import { useAccount, useSwitchChain } from 'wagmi';
-import { Home, Plus, ArrowLeftRight, User, Shield, BookOpen, FileText, Trophy, Bot, Target } from 'lucide-react';
+import { Home, Plus, ArrowLeftRight, User, Shield, FileText, Trophy, Bot } from 'lucide-react';
 import { isAdmin, MONAD_CHAIN_ID } from '@/lib/constants';
 import { AddressGuard } from './AddressGuard';
 import MonshiMark from './MonshiMark';
@@ -14,8 +14,6 @@ const PRIMARY_NAV = [
   { href: '/swap', label: 'Swap', icon: ArrowLeftRight, desktopOnly: false },
   { href: '/studio', label: 'Studio', icon: Bot, desktopOnly: false },
   { href: '/rewards', label: 'Rewards', icon: Trophy, desktopOnly: false },
-  { href: '/bounties', label: 'Bounties', icon: Target, desktopOnly: true },
-  { href: '/how-it-works', label: 'How it works', icon: BookOpen, desktopOnly: true },
   { href: '/docs', label: 'Docs', icon: FileText, desktopOnly: true },
 ] as const;
 
@@ -29,21 +27,7 @@ function NavLink({
   children: ReactNode;
 }) {
   return (
-    <Link
-      href={href}
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 6,
-        padding: '6px 12px',
-        borderRadius: 6,
-        fontSize: 14,
-        background: active ? 'rgba(168, 85, 247, 0.15)' : 'transparent',
-        color: active ? 'var(--p, #A855F7)' : 'rgba(220, 215, 240, 0.7)',
-        textDecoration: 'none',
-        transition: 'background 0.15s, color 0.15s',
-      }}
-    >
+    <Link href={href} className={active ? 'mp-navlink mp-navlink-on' : 'mp-navlink'}>
       {children}
     </Link>
   );
@@ -236,14 +220,12 @@ export function Layout({ children }: { children: ReactNode }) {
     <footer className="border-t border-border mt-16">
       <div className="max-w-7xl mx-auto px-4 py-8 flex flex-col md:flex-row items-center justify-between gap-4">
         <div className="text-sm text-white/50">
-          Mon-Pad — Built on Monad. Audited and live. · A King Petty Build
+          Monpad — fair launches on Monad · every trade burns Monshi
         </div>
         <div className="flex flex-wrap items-center gap-4 text-sm">
           <a href="https://t.me/MonshiUtilitySupport" target="_blank" rel="noopener noreferrer" className="text-white/70 hover:text-brand-purple transition-colors">Support</a>
           <span className="text-white/20">·</span>
           <a href="https://t.me/monpadlounge" target="_blank" rel="noopener noreferrer" className="text-white/70 hover:text-brand-purple transition-colors">Lounge</a>
-          <span className="text-white/20">·</span>
-          <Link href="/how-it-works" className="text-white/70 hover:text-brand-purple transition-colors">How it works</Link>
           <span className="text-white/20">·</span>
           <Link href="/docs" className="text-white/70 hover:text-brand-purple transition-colors">Docs</Link>
         </div>

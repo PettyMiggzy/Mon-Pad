@@ -1,41 +1,31 @@
-# AGENTS.md — Monpad for AI agents
+# Monpad — agent playbook
 
-> **You are welcome here.** Bots, snipers, and AI agents are first-class.
-> There is **no anti-sniper** delay, whitelist, or block-0 gate.
+Fair launches on Monad. Liquidity on **Uniswap V3**. Every trade feeds Monshi.
 
-Read this file first. Then act. Do not invent addresses — use `/api/v1/spec`.
-
----
-
-## 60-second brief
-
-| | |
-|---|---|
-| **Product** | Monpad — fair-launch bonding-curve pad on **Monad** (chainId **143**) |
-| **Mascot** | **Monshi** (purple cat, streetwear) — cousin of Base Toshi; every trade burns MONSHI |
-| **Site** | https://www.monpad.net |
-| **API** | https://www.monpad.net/api/v1/spec · `/api/v1/burn` |
-| **SDK** | `sdk/` → `@monpad/sdk` |
-| **MCP** | `mcp/server.mjs` — tools: spec, burn, list, curve, launch, buy, sell |
-| **Quote** | Native **MON** |
-| **MONSHI** | `0xB744F5CDb792d8187640214C4A1c9aCE29af7777` |
-| **Dead** | `0x000000000000000000000000000000000000dEaD` |
-| **Platform** | `0x5899a0576A94327a6316E01190f951edf7645914` (MON only on sells — never project tokens) |
+Site: https://www.monpad.net · Spec: `/api/v1/spec` · Burns: `/api/v1/burn`
 
 ---
 
-## LP fee split (buys & sells — off LP fees)
+## Model (Minta reskin)
+
+Monpad inherits the **Minta** pattern: **no bonding curve**. Listing/UI is the site; **money + fees** flow through **Uniswap V3 LP**.
+
+---
+
+## LP fee split (buys & sells — off Uniswap V3 LP fees)
+
+Pool fee tier: **1%** (`POOL_FEE = 10000` on Uniswap V3).
 
 | Share | BPS | Destination |
 |---|---|---|
-| **Creator** | 7000 (70%) | Creator |
+| **Creator** | **8000 (80%)** | Creator headline share (**includes** nested 10pt project-token burn) |
+| ↳ nested burn | 1000 | Inside the 80% — launched token → `dEaD` |
 | **Platform** | 1000 (10%) | `0x5899…5914` — MON/quote only on sells |
 | **Burn MONSHI** | 1000 (10%) | Buyback-and-burn Monchi |
-| **Burn project token** | 1000 (10%) | Launched token → `dEaD` |
 
-No “graduation target” in the product story — liquidity lives in the DEX/LP.  
-Optional **dev bot**: atomic first buy in `createLaunch`.  
-Source of truth: `lib/fees.ts`.
+Display **80 / 10 / 10**. Source of truth: `lib/fees.ts`.
+
+Optional **dev bot**: atomic first buy in `createLaunch` (Minta `firstBuy` pattern).
 
 ---
 
@@ -48,72 +38,15 @@ curl -s https://www.monpad.net/api/v1/spec | jq .
 curl -s https://www.monpad.net/api/v1/burn  | jq .
 ```
 
-Or MCP: `monpad_get_spec`, `monpad_get_monshi_burn`, `monpad_list_launches`.
+### 2. Surfaces
 
-### 2. Trade / launch (needs wallet)
-
-- **TypeScript:** `sdk/src/index.ts` — `launch`, `buy`, `sell`, `quoteBuy`, `getMonshiBurned`
-- **MCP write tools:** set `MONPAD_PRIVATE_KEY` + `MONPAD_FACTORY` + `RPC_URL`
-- **On-chain:** Factory `createLaunch` / Curve `buy` / `sell` (see `pages/docs.tsx` + ABIs under `lib/abis`)
-
-Default SDK slippage: **2%** (sniper-friendly — competing txs between quote and send are expected).
-
-### 3. Watch burns (FOMO / indexing)
-
-Poll dead-address MONSHI balance + `totalSupply`. Frontend helper: `lib/monshiBurn.ts`. Live UI: `components/MonshiBurnCounter.tsx`.
-
----
-
-## MCP quickstart
-
-```bash
-cd mcp && npm install
-export RPC_URL=https://rpc.monad.xyz
-export MONPAD_FACTORY=<from /api/v1/spec>
-# optional writes:
-export MONPAD_PRIVATE_KEY=0x…
-npm start
-```
-
-Cursor / Claude Desktop:
-
-```json
-{
-  "mcpServers": {
-    "monpad": {
-      "command": "node",
-      "args": ["/ABS/PATH/Mon-Pad/mcp/server.mjs"],
-      "env": {
-        "RPC_URL": "https://rpc.monad.xyz",
-        "MONPAD_FACTORY": "0x…",
-        "MONPAD_PRIVATE_KEY": "0x…"
-      }
-    }
-  }
-}
-```
-
----
-
-## Repo map (where to edit)
-
-| Path | Role |
+| Surface | Path |
 |---|---|
-| `pages/index.tsx` | Busy pump.fun-style board + Monshi strip |
-| `pages/create.tsx` | Launch + optional **dev bot** |
-| `pages/docs.tsx` | Human + agent reference UI |
-| `pages/api/v1/*` | Public bot/agent HTTP |
-| `lib/fees.ts` | Protocol BPS + platform wallet |
-| `lib/constants.ts` | Chain addresses / V3 knobs |
-| `lib/monshiBurn.ts` | Live burn reads |
-| `sdk/` | Trader / sniper SDK |
-| `mcp/` | MCP server for AIs |
-| `hardhat-test/contracts/v3/` | Factory / Curve / Graduator |
-| `public/meshy/` | Monshi + hero art (Meshy) |
+| HTTP | `/api/v1/spec`, `/api/v1/burn`, `/api/v1/storage` |
+| SDK | `sdk/` (`@monpad/sdk`) |
+| MCP | `mcp/server.mjs` |
 
----
-
-## Storage (token PFPs — same as original bond pad)
+### 3. Storage (token PFPs — same as original pad)
 
 | Path | Backend |
 |---|---|
@@ -123,9 +56,15 @@ Cursor / Claude Desktop:
 
 Needs `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` on Vercel. Schema: `supabase/schema.sql`.
 
-## Clean board (wipe old tokens)
+### 4. Clean board
 
-Tokens are **on-chain from the factory**, not Supabase. Deploy a new factory (`hardhat-test/scripts/deployV3.js`), set `NEXT_PUBLIC_FACTORY_V3` + `NEXT_PUBLIC_GRADUATOR_V3`, redeploy frontend. See `docs/REDEPLOY.md`.
+Tokens are **on-chain from the factory**. Deploy a new factory (`hardhat-test/scripts/deployV3.js`), set `NEXT_PUBLIC_FACTORY_V3` + `NEXT_PUBLIC_GRADUATOR_V3`, redeploy frontend. See `docs/REDEPLOY.md`.
+
+### 5. RPC
+
+Server-only: `RPC_URL` (primary) + `RPC_URL_FALLBACK` (Alchemy). Never `NEXT_PUBLIC_RPC_*`.
+
+---
 
 ## Safety / mainnet gate
 
@@ -134,12 +73,11 @@ Two clean audit passes + E2E bots before calling fee logic production-final.
 
 ---
 
-## Do / Don't
+## File map
 
-| Do | Don't |
+| Path | Role |
 |---|---|
-| Call `/api/v1/spec` for live addresses | Hardcode stale factories from chat memory |
-| Use quote-side platform fee on sells | Take platform cut in project tokens on sells |
-| Treat bots/snipers as welcome | Add anti-sniper without an explicit product change |
-| Keep Monshi purple street mascot branding | Swap in blue “Toshi clone” art |
-| Prefer `dense` board UX on home | Rebuild a tall marketing-only hero without ask |
+| `lib/fees.ts` | Protocol BPS + platform wallet + LP copy |
+| `pages/api/v1/spec.ts` | Public JSON policy |
+| `hardhat-test/contracts/v3/MonPadGraduatorV3.sol` | Uniswap V3 LP seed (`POOL_FEE = 10000`) |
+| `docs/PROTOCOL.md` | LP + Uniswap V3 fee notes |
