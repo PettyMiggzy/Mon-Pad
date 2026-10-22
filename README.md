@@ -1,160 +1,120 @@
-# MonPad — Fair Launch on Monad
+# Monpad
 
-> The fairest pad on Monad. Devs earn 2% of all volume forever.
+**Fair launches on Monad. Every trade burns Monshi.**
 
-## ✨ Features
+<p align="center">
+  <img src="public/meshy/monshi-mascot.png" alt="Monshi — Monpad mascot" width="280" />
+</p>
 
-- **Fair launch** — no presale, no team tokens, no insider games
-- **Devs earn forever** — 2% of every trade (1% buy, 0.5% creator + 1.5% other on sells)
-- **Bonding curve** to 425K MON graduation, then LP burned forever 🔥
-- **Staking with 4 lock tiers** — 30/90/180/365 days, up to 4× reward boost
-- **Admin-tunable economics** — every fee, wallet, and threshold rotatable
-- **Reward router upgrade path** — sell-tax routes flip from buyback → staking via single tx
-- **Token blocklist** — admin can disable scams without redeploying
-- **Referrals** — share your link, earn from launches that come through it
-- **Mobile PWA** — installable, swipe nav, dark theme
+Pump.fun-energy board. Purple streetwear mascot. Protocol that feeds **MONSHI** on every buy and sell. Built for humans, **bots, snipers, and AI agents**.
 
-## 🏗️ Architecture
+| | |
+|---|---|
+| Site | https://www.monpad.net |
+| Chain | Monad · **143** · native **MON** |
+| Spec API | [`/api/v1/spec`](https://www.monpad.net/api/v1/spec) |
+| Burn API | [`/api/v1/burn`](https://www.monpad.net/api/v1/burn) |
+| Docs UI | https://www.monpad.net/docs |
+| **Agents** | **[`AGENTS.md`](./AGENTS.md)** ← start here if you are an AI |
 
-### Smart Contracts (`contracts/v2/`)
+---
 
-| Contract | Lines | Purpose |
-|----------|-------|---------|
-| `MonPadFactoryV2.sol` | 234 | Token launcher with 2-step ownership + admin tunables |
-| `MonPadCurveV2.sol` | 308 | Bonding curve, fees split per launch |
-| `MonPadTokenV2.sol` | 72 | Standard ERC20, minted to curve at deploy |
-| `MonPadStakingHub.sol` | 168 | Routes 0.5% sell-tax to staking pools |
-| `MonPadStakingPool.sol` | 209 | Per-token staking with 4 lock tiers |
-| `MonPadPoolFactory.sol` | 110 | Pool deployer (free for 1M+ MONSHI holders) |
-| `MonPadVesting.sol` | 126 | Dev token locks + linear vesting |
-| `MonPadSwap.sol` | 162 | DEX wrapper with 0.3% buyback fee |
+## What shipped in this overhaul
 
-Compiled with `solc 0.8.24`, `viaIR: true`, `optimizer: 200`, `evmVersion: paris`.
+- **Monshi mascot** (Meshy) — transparent street cutout on a dense live board
+- **Protocol fee stack** — 10% token burn · 10% MONSHI buyback · 10% platform (MON only on sells)
+- **Live Monshi burn counter** on the homepage
+- **Dev bot on deploy** — atomic first buy in the create tx (Minta pattern)
+- **Public API + `@monpad/sdk` + MCP server** — no anti-sniper
+- **pump.fun-style board** — king of the hill, filters, search, packed cards
 
-End-to-end tested on local Ganache fork. Build artifacts: `deploy/v2/build/*.json`.
+---
 
-### Frontend (Next.js 14)
+## Protocol fees (tl;dr)
 
-- `pages/index.js` — browse with trending carousel + tabs (live/new/mcap/grad)
-- `pages/create.js` — launch with dev-buy slider + image upload + referrals
-- `pages/token/[address].js` — chart + trade terminal + dev fees + staking widget
-- `pages/staking.js` — global pools dashboard
-- `pages/stake/[address].js` — per-token staking with tier selector
-- `pages/portfolio.js` — net worth dashboard with P&L + achievements
-- `pages/admin.js` — owner-only contract param control
-- `pages/swap.js` — token-to-token swap UI
-- `pages/leaderboard.js` — top creators / stakers / traders / tokens
-- `pages/profile.js` — referral link + share buttons + activity stats
-- `pages/docs.js` — how it works
+On **every buy and sell** (creator tax is separate):
 
-### Backend (`lib/server.js`)
+| Slice | BPS | Notes |
+|---|---|---|
+| Burn traded token | 1000 | → `dEaD` |
+| Buyback & burn MONSHI | 1000 | Quote (MON) accrued → buyback wallet |
+| Platform | 1000 | Quote only — **never** project tokens on sells |
 
-Express + WebSocket on port 3001, deployed at `https://api.monpad.net`.
+Platform wallet (Minta carry-over): `0x5899a0576A94327a6316E01190f951edf7645914`  
+MONSHI: `0xB744F5CDb792d8187640214C4A1c9aCE29af7777`
 
-Endpoints:
-- `/api/tokens` — all launched tokens (paged)
-- `/api/token/:address` — single token state
-- `/api/token/:address/{trades,holders,candles,meta}` — detail data
-- `/api/staking/{pools,pool/:t,positions/:wallet,hub}` — staking data
-- `/api/portfolio/:wallet/{holdings,trades,achievements}` — user dashboard
-- `/api/leaderboard/{creators,stakers,traders}` — rankings
-- `/api/upload/{banner,pfp}` — image uploads
-- `/api/mon-price` — MON/USD via DexScreener + CoinGecko fallback
+Code: `lib/fees.ts` · curve: `hardhat-test/contracts/v3/MonPadCurveV3.sol`
 
-## 🚀 Deployment
+---
 
-### Smart Contracts
+## For bots & AI (3 surfaces, same policy)
+
+```text
+HTTP  →  /api/v1/spec  /api/v1/burn
+SDK   →  sdk/   (@monpad/sdk)
+MCP   →  mcp/server.mjs
+```
 
 ```bash
-cd deploy/v2
-cp .env.example .env
-# Edit .env with PRIVATE_KEY, RPC_URL, wallets
+# agent discovery
+curl -s https://www.monpad.net/api/v1/spec | jq .policy,.fees,.addresses
 
-node deploy.js
-# Saves results to deploy/v2/deployed.json
+# MCP
+cd mcp && npm i && RPC_URL=https://rpc.monad.xyz MONPAD_FACTORY=0x… npm start
 ```
 
-### Frontend (Vercel)
+Full playbook: **[AGENTS.md](./AGENTS.md)** · SDK: [sdk/README.md](./sdk/README.md) · MCP: [mcp/README.md](./mcp/README.md)
+
+---
+
+## App (Next.js 14)
 
 ```bash
-# Required env vars on Vercel:
-NEXT_PUBLIC_SERVER_URL=https://api.monpad.net
-NEXT_PUBLIC_FACTORY_V2=0x...      # after V2 deploy
-NEXT_PUBLIC_STAKING_HUB=0x...
-NEXT_PUBLIC_POOL_FACTORY=0x...
-NEXT_PUBLIC_VESTING=0x...
-NEXT_PUBLIC_SWAP=0x...
-NEXT_PUBLIC_BUYBACK_WALLET=0x...
+npm i
+cp .env.example .env.local   # never commit secrets / Meshy key
+npm run dev
 ```
 
-Then in `lib/constants.js`, flip `FACTORY_VERSION = 'v2'` and push.
+| Route | Job |
+|---|---|
+| `/` | Dense live board + Monshi + burn ticker |
+| `/create` | Launch + optional dev bot |
+| `/token/[address]` | Trade terminal |
+| `/docs` | Badass human/agent reference |
+| `/api/v1/*` | Bot/agent JSON |
 
-### Backend (Droplet)
+Art lives in `public/meshy/` (Meshy-generated). Key: `.env.local` → `MESHY_API_KEY`.
+
+---
+
+## Contracts (V3)
+
+Canonical Solidity: `hardhat-test/contracts/v3/`
+
+| Contract | Role |
+|---|---|
+| `MonPadFactoryV3` | Launch + fee knobs + MONSHI creation discount |
+| `MonPadCurveV3` | Curve, protocol burns, quote fees, graduation hook |
+| `MonPadGraduatorV3` | Uniswap V3 LP + lock |
 
 ```bash
-# On droplet, in /root/monpad-api/:
-git pull
-pm2 restart monpad-api
+cd hardhat-test && npm i
+npx hardhat test test/v3-protocol-fees.js
+npx hardhat test test/v3-flow.js
 ```
 
-Required env (in `.env`):
-```
-MONAD_RPC=https://your-rpc-here  # do NOT commit
-FACTORY_ADDRESS=0x...             # V1 or V2
-PORT=3001
-```
+Mainnet deploy still gated on **two clean audit passes** + E2E bots. See `DEPLOY-V2.md` / `GO-LIVE-CHECKLIST.md` for ops (verify wallets before mainnet).
 
-## 🏷️ Fee Spec
+---
 
-**BUY 2%:**
-- 1% → token creator (instant)
-- 1% → curve buffer (paid to platform at graduation)
+## Brand
 
-**SELL 2%:**
-- 0.5% → token creator (instant)
-- 0.5% → reward router (default = buyback wallet, swappable to staking hub)
-- 1% → platform wallet (instant)
+- **Name:** Monpad  
+- **Mascot:** Monshi — purple, badass street fit, transparent PNG hero asset  
+- **Vibe:** Busy board, not a brochure. Neon Monad purple + Monshi pink burn accents  
 
-**Graduation (425K MON net raised):**
-- 400K MON + remaining tokens → Uniswap V3 LP → burned forever 🔥
-- 25K MON → token creator
-- Buy buffer accumulated → platform
+---
 
-## 🥩 Staking
+## License / contact
 
-**Lock tiers:**
-| Lock | Boost |
-|------|-------|
-| 30 days | 1.0× |
-| 90 days | 1.5× |
-| 180 days | 2.5× |
-| 365 days | 4.0× |
-
-**Pool creation:** Free for 1M+ MONSHI holders, 200 MON otherwise (→ buyback wallet).
-
-**Hub distribution:** 40% to MONSHI's pool, 60% to others by trading volume.
-
-**Early unstake:** 10% fee on tokens (→ creator) + ALL pending rewards forfeited (boosts other stakers).
-
-## 🔐 Admin Powers
-
-All on `MonPadFactoryV2`:
-- `setCreationFee(uint256)`
-- `setGraduationTarget(uint256)` / `setGraduationCreatorReward(uint256)`
-- `setMaxDevBuyBps(uint256)` (capped at 1000 = 10% safety)
-- `setFeeSplits(buyCreator, buyBuffer, sellCreator, sellStaking, sellPlatform)`
-- `setRewardRouter(address)` — flip sell-tax target
-- `setPlatformWallet(address)` / `setTreasuryWallet(address)` / `setBuybackWallet(address)`
-- `setPauseNewLaunches(bool)` / `setPauseAllBuys(bool)` / `setPauseAllSells(bool)`
-- `setBlocked(address, bool)` — token blocklist
-- 2-step `transferOwnership` for safety
-
-## 📱 Links
-
-- Live: [monpad.net](https://monpad.net)
-- API: [api.monpad.net](https://api.monpad.net)
-- 𝕏: [@Monshi_Monpad](https://x.com/Monshi_Monpad)
-
-## 📜 License
-
-MIT — fork it, ship it, make Monad win.
+Internal product repo. Issues & PRs on GitHub. For agent work, open with `AGENTS.md` and `/api/v1/spec` — do not invent chain state.

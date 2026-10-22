@@ -1,11 +1,13 @@
 import Link from 'next/link';
-import { ExternalLink, FileCode, Shield, MessageCircle, Sparkles, Wallet, Flame, Droplets, TrendingUp, Lock, Coins, Rocket } from 'lucide-react';
+import { ExternalLink, FileCode, Shield, MessageCircle, Sparkles, Wallet, Flame, Droplets, TrendingUp, Lock, Coins, Rocket, Bot, Code2 } from 'lucide-react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import {
   FACTORY_V3, GRADUATOR_V3, WMON, MONSHI_TOKEN, UNISWAP_V3_NPM,
   V3_CREATION_FEE_MON, V3_GRADUATION_TARGET_MON, V3_CREATOR_REWARD_MON, V3_TREASURY_CUT_MON,
   V3_MAX_TRADE_TAX_BPS, V3_MAX_DEV_BUY_BPS,
+  MONPAD_PLATFORM_WALLET, PROTOCOL_BURN_TOKEN_BPS, PROTOCOL_BURN_MONSHI_BPS, PROTOCOL_PLATFORM_BPS,
+  DEAD_ADDRESS,
 } from '@/lib/constants';
 
 const CURVE_IMPL = '0xf5184f2255797f5AD5fa92Ca273FdBb07EbaB623';
@@ -22,22 +24,26 @@ const CHAIN_PARAMS = {
 
 const scan = (addr: string) => `${CHAIN_PARAMS.explorerUrl}/address/${addr}`;
 const n = (v: bigint | number) => Number(v).toLocaleString();
+const pct = (bps: number) => `${bps / 100}%`;
 
 const CONTRACTS = [
-  { name: 'Factory V3', addr: FACTORY_V3, purpose: 'Deploys a token + curve per launch, holds economics, emits Launch' },
-  { name: 'Graduator V3', addr: GRADUATOR_V3, purpose: 'Migrates liquidity to a Uniswap V3 pool at graduation and burns the LP NFT' },
-  { name: 'Curve (implementation)', addr: CURVE_IMPL, purpose: 'Bonding-curve logic, cloned (EIP-1167) per token, emits Trade' },
+  { name: 'Factory V3', addr: FACTORY_V3, purpose: 'Deploys token + curve per launch, holds economics, emits Launch' },
+  { name: 'Graduator V3', addr: GRADUATOR_V3, purpose: 'Migrates liquidity to Uniswap V3 at graduation and locks LP' },
+  { name: 'Curve (implementation)', addr: CURVE_IMPL, purpose: 'Bonding curve + protocol burn stack, EIP-1167 clone per token' },
   { name: 'Token (implementation)', addr: TOKEN_IMPL, purpose: 'ERC-20, cloned per token (1B fixed supply)' },
-  { name: 'WMON', addr: WMON, purpose: 'Wrapped MON — quote token for the graduation DEX pool' },
-  { name: 'Uniswap V3 NPM', addr: UNISWAP_V3_NPM, purpose: 'Position manager used to seed + lock graduation liquidity' },
-  { name: 'MONSHI', addr: MONSHI_TOKEN, purpose: 'Holder discount on creation fee + buyback-and-burn target' },
+  { name: 'WMON', addr: WMON, purpose: 'Wrapped MON — quote for graduation DEX pool' },
+  { name: 'Uniswap V3 NPM', addr: UNISWAP_V3_NPM, purpose: 'Position manager for graduation LP' },
+  { name: 'MONSHI', addr: MONSHI_TOKEN, purpose: 'Creation-fee discount perk + buyback-and-burn target' },
+  { name: 'Platform', addr: MONPAD_PLATFORM_WALLET, purpose: 'Protocol platform fee receiver (MON / quote only)' },
+  { name: 'Dead', addr: DEAD_ADDRESS, purpose: 'Protocol token burns + MONSHI burn sink' },
 ];
 
 const EVENTS = [
   { sig: 'Launch(token, curve, creator, name, symbol, quoteToken, totalSupply, virtualMonReserve, virtualTokenReserve, createdAt)', from: 'Factory', use: 'Discover each new token + its curve clone' },
-  { sig: 'Trade(token, trader, isBuy, monAmount, tokenAmount, virtualMonReserve, virtualTokenReserve, realMonReserve, realTokenReserve, priceX18, tradedAt)', from: 'Curve', use: 'Every buy/sell — price + volume fully derivable on-chain' },
-  { sig: 'Graduated(lpMon, creatorReward, treasuryCut)', from: 'Curve', use: 'Token bonded — liquidity migrated to the DEX pool' },
-  { sig: 'BuybackBurn(monIn, tokensBurned)', from: 'Curve', use: 'Buyback-and-burn of the project token executed' },
+  { sig: 'Trade(token, trader, isBuy, monAmount, tokenAmount, virtualMonReserve, virtualTokenReserve, realMonReserve, realTokenReserve, priceX18, tradedAt)', from: 'Curve', use: 'Every buy/sell — price + volume on-chain' },
+  { sig: 'Graduated(lpMon, creatorReward, treasuryCut)', from: 'Curve', use: 'Token bonded — liquidity on DEX' },
+  { sig: 'FeeCollected(label, to, amount)', from: 'Curve', use: 'Platform / MONSHI / token-burn legs' },
+  { sig: 'BuybackBurn(monIn, tokensBurned)', from: 'Curve', use: 'Project-token buyback-burn from creator fee/tax routing' },
 ];
 
 export default function Docs() {
@@ -65,233 +71,291 @@ export default function Docs() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-12">
+    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 16px 64px' }}>
       <Head>
-        <title>Docs | Mon-Pad</title>
-        <meta key="description" name="description" content="Mon-Pad documentation: full tokenomics, fees, bonding-curve math, graduation, buyback/burn, deployed contracts, and on-chain integration on Monad." />
-        <meta key="og:title" property="og:title" content="Docs | Mon-Pad" />
-        <meta key="og:description" property="og:description" content="Full Mon-Pad reference: economics, fees, curve math, graduation, contracts." />
+        <title>Docs | Monpad — agents, bots, fees, contracts</title>
+        <meta key="description" name="description" content="Monpad docs: protocol burns, MONSHI, API, SDK, MCP for AI agents. Bots and snipers welcome." />
+        <meta key="og:title" property="og:title" content="Docs | Monpad" />
+        <meta key="og:description" property="og:description" content="Badass Monpad reference — fees, burns, agents, contracts." />
+        <meta key="og:image" property="og:image" content="https://www.monpad.net/meshy/docs-banner.png" />
         <meta key="og:url" property="og:url" content={canonical} />
-        <meta key="twitter:title" name="twitter:title" content="Docs | Mon-Pad" />
-        <meta key="twitter:description" name="twitter:description" content="Full Mon-Pad reference." />
+        <meta key="twitter:title" name="twitter:title" content="Docs | Monpad" />
+        <meta key="twitter:description" name="twitter:description" content="Protocol, API, SDK, MCP — built for agents." />
         <link key="canonical" rel="canonical" href={canonical} />
       </Head>
 
-      {/* Hero */}
-      <header className="text-center mb-12">
-        <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">Mon-Pad Documentation</h1>
-        <p className="text-base md:text-lg text-white/70 max-w-2xl mx-auto leading-relaxed">
-          The complete reference: economics, fees, the bonding curve, graduation, buyback &amp; burn,
-          deployed contracts, and on-chain integration. Native <span className="text-white">MON</span> on
-          Monad mainnet (chainId 143).
-        </p>
-        <p className="text-xs text-white/40 mt-3">USD figures are approximate (shown at ~$0.02/MON) and move with the MON price.</p>
+      {/* Meshy hero */}
+      <header
+        style={{
+          position: 'relative',
+          margin: '0 -16px 28px',
+          minHeight: 280,
+          overflow: 'hidden',
+          borderBottom: '1px solid rgba(168,85,247,0.35)',
+        }}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/meshy/docs-banner.png"
+          alt=""
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 30%' }}
+        />
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background:
+              'linear-gradient(90deg, rgba(5,3,8,0.92) 0%, rgba(5,3,8,0.55) 50%, rgba(5,3,8,0.75) 100%), linear-gradient(180deg, transparent 40%, #050308 100%)',
+          }}
+        />
+        <div style={{ position: 'relative', zIndex: 1, padding: '48px 16px 36px', maxWidth: 1100, margin: '0 auto' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/meshy/monshi-mascot.png"
+              alt="Monshi"
+              style={{ width: 96, height: 96, objectFit: 'contain', filter: 'drop-shadow(0 12px 28px rgba(124,58,237,0.55))' }}
+            />
+            <div style={{ flex: 1, minWidth: 220 }}>
+              <p style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--pink, #EC4899)', margin: 0 }}>
+                Monpad · docs
+              </p>
+              <h1 style={{ fontSize: 'clamp(28px, 5vw, 44px)', fontWeight: 900, letterSpacing: '-0.03em', color: '#fff', margin: '6px 0 0', lineHeight: 1.05 }}>
+                Built for traders.<br />Owned by agents.
+              </h1>
+              <p style={{ marginTop: 10, maxWidth: 520, fontSize: 14, color: 'rgba(220,215,240,0.75)', lineHeight: 1.5 }}>
+                Protocol burns, live Monshi FOMO, public API / SDK / MCP. <strong style={{ color: '#fff' }}>No anti-sniper.</strong> Bots welcome.
+              </p>
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 18 }}>
+            {[
+              { href: '/api/v1/spec', label: 'GET /api/v1/spec' },
+              { href: '/api/v1/burn', label: 'GET /api/v1/burn' },
+              { href: 'https://github.com/PettyMiggzy/Mon-Pad/blob/main/AGENTS.md', label: 'AGENTS.md' },
+            ].map((a) => (
+              <a
+                key={a.href}
+                href={a.href}
+                target={a.href.startsWith('http') ? '_blank' : undefined}
+                rel={a.href.startsWith('http') ? 'noopener noreferrer' : undefined}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '8px 12px',
+                  borderRadius: 8,
+                  border: '1px solid rgba(168,85,247,0.4)',
+                  background: 'rgba(168,85,247,0.15)',
+                  color: '#fff',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  fontFamily: 'var(--mono, ui-monospace, monospace)',
+                  textDecoration: 'none',
+                }}
+              >
+                {a.label}
+                {a.href.startsWith('http') && <ExternalLink size={12} />}
+              </a>
+            ))}
+          </div>
+        </div>
       </header>
 
       {/* At a glance */}
-      <section className="mb-16">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <section style={{ marginBottom: 48 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
           {[
-            { label: 'Creation fee', value: `${n(V3_CREATION_FEE_MON)} MON`, sub: '≈ $10 · 50% off for MONSHI holders' },
-            { label: 'Graduation target', value: `${n(V3_GRADUATION_TARGET_MON)} MON`, sub: '≈ $5,000 raised (net of fees)' },
-            { label: 'Creator reward', value: `${n(V3_CREATOR_REWARD_MON)} MON`, sub: '≈ $800 paid at graduation' },
-            { label: 'Total supply', value: '1,000,000,000', sub: 'Fixed at mint · 18 decimals' },
+            { label: 'Token burn', value: pct(PROTOCOL_BURN_TOKEN_BPS), sub: 'every buy & sell → dEaD' },
+            { label: 'MONSHI burn', value: pct(PROTOCOL_BURN_MONSHI_BPS), sub: 'quote → buyback & burn' },
+            { label: 'Platform', value: pct(PROTOCOL_PLATFORM_BPS), sub: 'MON only on sells' },
+            { label: 'Dev bot', value: `≤${V3_MAX_DEV_BUY_BPS / 100}%`, sub: 'atomic first buy in create tx' },
+            { label: 'Creation fee', value: `${n(V3_CREATION_FEE_MON)} MON`, sub: 'test economics · MONSHI discount' },
+            { label: 'Grad target', value: `${n(V3_GRADUATION_TARGET_MON)} MON`, sub: 'net raised · then locked LP' },
           ].map((c) => (
-            <div key={c.label} className="bg-card border border-border rounded-2xl p-4">
-              <div className="text-[11px] text-white/50 uppercase tracking-wide mb-1">{c.label}</div>
-              <div className="text-lg md:text-xl font-bold text-white leading-tight">{c.value}</div>
-              <div className="text-[11px] text-white/50 mt-1 leading-snug">{c.sub}</div>
+            <div
+              key={c.label}
+              style={{
+                padding: 14,
+                borderRadius: 12,
+                border: '1px solid rgba(168,85,247,0.2)',
+                background: 'rgba(20,16,42,0.75)',
+              }}
+            >
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)' }}>{c.label}</div>
+              <div style={{ fontSize: 22, fontWeight: 900, color: '#fff', marginTop: 4 }}>{c.value}</div>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 4, lineHeight: 1.35 }}>{c.sub}</div>
             </div>
           ))}
         </div>
+      </section>
+
+      {/* Agents */}
+      <section style={{ marginBottom: 48 }}>
+        <h2 style={{ fontSize: 28, fontWeight: 900, color: '#fff', marginBottom: 8 }}>For AI agents &amp; bots</h2>
+        <p style={{ color: 'rgba(220,215,240,0.7)', fontSize: 14, marginBottom: 16, maxWidth: 640, lineHeight: 1.5 }}>
+          Three identical policy surfaces. Start with JSON spec — never invent factory addresses from memory.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
+          {[
+            { icon: Code2, t: 'HTTP', d: 'GET /api/v1/spec · /api/v1/burn — CORS open, cacheable.', href: '/api/v1/spec' },
+            { icon: Bot, t: 'MCP', d: 'mcp/server.mjs — monpad_launch_token, buy, sell, burn, list.', href: 'https://github.com/PettyMiggzy/Mon-Pad/blob/main/mcp/README.md' },
+            { icon: Rocket, t: 'SDK', d: '@monpad/sdk — launch(+devBuy), quoteBuy, buy, sell, getMonshiBurned.', href: 'https://github.com/PettyMiggzy/Mon-Pad/blob/main/sdk/README.md' },
+          ].map((c) => (
+            <a
+              key={c.t}
+              href={c.href}
+              target={c.href.startsWith('http') ? '_blank' : undefined}
+              rel={c.href.startsWith('http') ? 'noopener noreferrer' : undefined}
+              style={{
+                display: 'block',
+                padding: 16,
+                borderRadius: 12,
+                border: '1px solid rgba(236,72,153,0.3)',
+                background: 'linear-gradient(145deg, rgba(236,72,153,0.1), rgba(20,16,42,0.9))',
+                textDecoration: 'none',
+                color: 'inherit',
+              }}
+            >
+              <c.icon size={22} style={{ color: 'var(--pink, #EC4899)', marginBottom: 8 }} />
+              <div style={{ fontWeight: 800, color: '#fff', fontSize: 16 }}>{c.t}</div>
+              <div style={{ fontSize: 13, color: 'rgba(220,215,240,0.65)', marginTop: 6, lineHeight: 1.4 }}>{c.d}</div>
+            </a>
+          ))}
+        </div>
+        <pre
+          style={{
+            marginTop: 14,
+            padding: 16,
+            borderRadius: 12,
+            border: '1px solid rgba(168,85,247,0.25)',
+            background: 'rgba(10,8,20,0.95)',
+            color: 'rgba(220,215,240,0.85)',
+            fontSize: 12,
+            overflow: 'auto',
+            fontFamily: 'var(--mono, ui-monospace, monospace)',
+          }}
+        >
+{`# agent bootstrap
+curl -s https://www.monpad.net/api/v1/spec | jq .fees,.addresses,.policy
+curl -s https://www.monpad.net/api/v1/burn | jq .
+
+# repo playbook
+# → AGENTS.md  ·  docs/PROTOCOL.md`}
+        </pre>
       </section>
 
       {/* Lifecycle */}
-      <section className="mb-16">
-        <h2 className="text-3xl font-bold text-white mb-6">How a launch works</h2>
-        <div className="space-y-3">
+      <section style={{ marginBottom: 48 }}>
+        <h2 style={{ fontSize: 28, fontWeight: 900, color: '#fff', marginBottom: 16 }}>How a launch works</h2>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {[
-            { icon: Rocket, t: '1 · Create', d: `Pay ${n(V3_CREATION_FEE_MON)} MON (MONSHI holders pay half). 100 MON is seeded straight into your curve as real exit-liquidity buffer; the rest accrues to the treasury. A fresh ERC-20 + bonding-curve clone are deployed and a Launch event fires.` },
-            { icon: TrendingUp, t: '2 · Trade on the curve', d: 'Anyone buys/sells against the constant-product curve in native MON. Price rises as supply sells. No listing, no LP to seed — the curve is the market until graduation.' },
-            { icon: Coins, t: '3 · Graduate', d: `Once ~${n(V3_GRADUATION_TARGET_MON)} MON (net) has been raised, the token bonds: the creator is paid ${n(V3_CREATOR_REWARD_MON)} MON (≈$800), the treasury takes ${n(V3_TREASURY_CUT_MON)} MON (≈$200).` },
-            { icon: Lock, t: '4 · DEX + locked liquidity', d: 'All remaining raised MON + every unsold token seed a Uniswap V3 WMON/token pool, and the LP NFT is burned — liquidity is locked forever. The curve closes; trading continues on the DEX.' },
+            { icon: Rocket, t: '1 · Create (+ optional dev bot)', d: `Pay ${n(V3_CREATION_FEE_MON)} MON (MONSHI holders discounted). Optionally include native MON for an atomic first buy in the same tx — you don't get sniped.` },
+            { icon: TrendingUp, t: '2 · Trade on the curve', d: 'Buys/sells in native MON. Every trade burns project tokens, accrues MONSHI buyback, and pays platform in MON.' },
+            { icon: Coins, t: '3 · Graduate', d: `At ~${n(V3_GRADUATION_TARGET_MON)} MON net raised: creator reward ${n(V3_CREATOR_REWARD_MON)} MON, treasury cut ${n(V3_TREASURY_CUT_MON)} MON.` },
+            { icon: Lock, t: '4 · Locked DEX LP', d: 'Remaining MON + unsold tokens seed Uniswap V3 WMON/token. LP locks. Curve closes; trading continues on DEX.' },
           ].map((s) => (
-            <div key={s.t} className="bg-card border border-border rounded-2xl p-5 flex items-start gap-4">
-              <s.icon className="text-brand-purple flex-shrink-0 mt-0.5" size={24} />
+            <div key={s.t} style={{ display: 'flex', gap: 14, padding: 16, borderRadius: 12, border: '1px solid rgba(168,85,247,0.18)', background: 'rgba(20,16,42,0.7)' }}>
+              <s.icon size={22} style={{ color: 'var(--p, #A855F7)', flexShrink: 0, marginTop: 2 }} />
               <div>
-                <h3 className="text-base font-semibold text-white mb-1">{s.t}</h3>
-                <p className="text-sm text-white/70 leading-relaxed">{s.d}</p>
+                <div style={{ fontWeight: 800, color: '#fff', marginBottom: 4 }}>{s.t}</div>
+                <div style={{ fontSize: 13, color: 'rgba(220,215,240,0.7)', lineHeight: 1.5 }}>{s.d}</div>
               </div>
             </div>
           ))}
-        </div>
-      </section>
-
-      {/* Tokenomics */}
-      <section className="mb-16">
-        <h2 className="text-3xl font-bold text-white mb-6">Supply &amp; distribution</h2>
-        <p className="text-base text-white/70 leading-relaxed mb-6">
-          The <strong className="text-white">entire 1,000,000,000 supply sits on the bonding curve</strong> — there is no
-          pre-mine or team allocation. Tokens sell along the curve until the graduation target is hit; whatever is still
-          unsold at that moment (plus all raised MON) becomes the locked DEX liquidity. The split isn&apos;t a fixed
-          percentage — it falls out of the curve math, landing at roughly <strong className="text-white">~74% sold / ~26% to LP</strong>,
-          so the DEX opens at about the curve&apos;s final price (no graduation pump-and-dump gap).
-        </p>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-card border border-border rounded-2xl p-5">
-            <div className="text-xs text-white/50 uppercase tracking-wide mb-1">On the curve</div>
-            <div className="text-2xl font-bold text-white">100%</div>
-            <div className="text-xs text-white/50 mt-1">All 1B starts on the curve, sold for native MON</div>
-          </div>
-          <div className="bg-card border border-border rounded-2xl p-5">
-            <div className="text-xs text-white/50 uppercase tracking-wide mb-1">Sold by graduation</div>
-            <div className="text-2xl font-bold text-white">~74.5%</div>
-            <div className="text-xs text-white/50 mt-1">~745M tokens bought along the way</div>
-          </div>
-          <div className="bg-card border border-border rounded-2xl p-5">
-            <div className="text-xs text-white/50 uppercase tracking-wide mb-1">Into locked LP</div>
-            <div className="text-2xl font-bold text-white">~25.5%</div>
-            <div className="text-xs text-white/50 mt-1">~255M unsold tokens seed the DEX pool, LP burned</div>
-          </div>
         </div>
       </section>
 
       {/* Fees */}
-      <section className="mb-16">
-        <h2 className="text-3xl font-bold text-white mb-6">Fees &amp; taxes</h2>
-        <p className="text-base text-white/70 leading-relaxed mb-6">
-          Every trade pays a fixed <strong className="text-white">2% base fee</strong>. On top of that, a creator can add an
-          optional per-trade <strong className="text-white">tax (0–{V3_MAX_TRADE_TAX_BPS / 100}%)</strong> that funds their own
-          token&apos;s buyback/burn and LP. The tax stacks on the base fee — it is not part of it.
+      <section style={{ marginBottom: 48 }}>
+        <h2 style={{ fontSize: 28, fontWeight: 900, color: '#fff', marginBottom: 8 }}>Protocol fee stack</h2>
+        <p style={{ color: 'rgba(220,215,240,0.7)', fontSize: 14, marginBottom: 14, lineHeight: 1.5, maxWidth: 640 }}>
+          Applied on <strong style={{ color: '#fff' }}>every buy and sell</strong>. Creator tax is optional and independent (0–{V3_MAX_TRADE_TAX_BPS / 100}%).
+          Platform never takes bags on sells — quote (MON) only.
         </p>
-        <div className="bg-card border border-border rounded-2xl overflow-hidden mb-4">
-          <table className="w-full text-sm">
-            <thead className="bg-white/5">
-              <tr className="text-left text-white/70">
-                <th className="px-4 py-3 font-semibold">Base fee (always)</th>
-                <th className="px-4 py-3 font-semibold">Buy</th>
-                <th className="px-4 py-3 font-semibold">Sell</th>
+        <div style={{ overflow: 'hidden', borderRadius: 12, border: '1px solid rgba(168,85,247,0.2)', marginBottom: 12 }}>
+          <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: 'rgba(168,85,247,0.12)', textAlign: 'left', color: 'rgba(255,255,255,0.7)' }}>
+                <th style={{ padding: '12px 14px' }}>Leg</th>
+                <th style={{ padding: '12px 14px' }}>Buy</th>
+                <th style={{ padding: '12px 14px' }}>Sell</th>
               </tr>
             </thead>
-            <tbody className="text-white/80">
-              <tr className="border-t border-border"><td className="px-4 py-3">Creator</td><td className="px-4 py-3">1%</td><td className="px-4 py-3">0.5%</td></tr>
-              <tr className="border-t border-border"><td className="px-4 py-3">Platform</td><td className="px-4 py-3">1% (buffer)</td><td className="px-4 py-3">1%</td></tr>
-              <tr className="border-t border-border"><td className="px-4 py-3">MONSHI buyback &amp; burn</td><td className="px-4 py-3">—</td><td className="px-4 py-3">0.5%</td></tr>
-              <tr className="border-t border-border bg-white/5"><td className="px-4 py-3 font-semibold text-white">Total base</td><td className="px-4 py-3 font-semibold text-white">2%</td><td className="px-4 py-3 font-semibold text-white">2%</td></tr>
+            <tbody style={{ color: 'rgba(220,215,240,0.85)' }}>
+              <tr style={{ borderTop: '1px solid rgba(168,85,247,0.15)' }}>
+                <td style={{ padding: '12px 14px' }}>Burn traded token</td>
+                <td style={{ padding: '12px 14px' }}>{pct(PROTOCOL_BURN_TOKEN_BPS)} of tokens out → dEaD</td>
+                <td style={{ padding: '12px 14px' }}>{pct(PROTOCOL_BURN_TOKEN_BPS)} of tokens in → dEaD</td>
+              </tr>
+              <tr style={{ borderTop: '1px solid rgba(168,85,247,0.15)' }}>
+                <td style={{ padding: '12px 14px' }}>MONSHI buyback &amp; burn</td>
+                <td style={{ padding: '12px 14px' }}>{pct(PROTOCOL_BURN_MONSHI_BPS)} of MON in</td>
+                <td style={{ padding: '12px 14px' }}>{pct(PROTOCOL_BURN_MONSHI_BPS)} of MON out</td>
+              </tr>
+              <tr style={{ borderTop: '1px solid rgba(168,85,247,0.15)' }}>
+                <td style={{ padding: '12px 14px' }}>Platform</td>
+                <td style={{ padding: '12px 14px' }}>{pct(PROTOCOL_PLATFORM_BPS)} of MON in</td>
+                <td style={{ padding: '12px 14px' }}>{pct(PROTOCOL_PLATFORM_BPS)} of MON out (never tokens)</td>
+              </tr>
+              <tr style={{ borderTop: '1px solid rgba(168,85,247,0.15)', background: 'rgba(236,72,153,0.08)' }}>
+                <td style={{ padding: '12px 14px', fontWeight: 800, color: '#fff' }}>Creator tax</td>
+                <td colSpan={2} style={{ padding: '12px 14px' }}>Independent · creator-set · optional burn/LP routing</td>
+              </tr>
             </tbody>
           </table>
         </div>
-        <div className="bg-card border border-border rounded-2xl p-5">
-          <h3 className="text-base font-semibold text-white mb-2">Optional creator tax (0–{V3_MAX_TRADE_TAX_BPS / 100}%)</h3>
-          <p className="text-sm text-white/70 leading-relaxed">
-            Charged on top of the 2% base, on both buys and sells, and routed to your token&apos;s
-            <strong className="text-white"> buyback &amp; burn</strong> and/or <strong className="text-white">graduation LP</strong>.
-            The first 2% of tax is yours in full; on any tax <strong className="text-white">above 2%</strong>, 25% of that excess
-            is skimmed to <strong className="text-white">buy &amp; burn MONSHI</strong>. Example — a 5% tax (3% burn / 2% LP) on a
-            100 MON buy: 2 MON base + 5 MON tax (93 MON buys tokens); of the 5 MON tax, 0.75 → MONSHI, ~2.55 → buyback-burn,
-            ~1.70 → LP. Total cost to the trader: 7%.
-          </p>
+        <div style={{ padding: 14, borderRadius: 12, border: '1px solid rgba(236,72,153,0.3)', background: 'rgba(236,72,153,0.08)', fontSize: 13, color: 'rgba(220,215,240,0.75)', lineHeight: 1.5 }}>
+          <Flame size={16} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 6, color: 'var(--pink)' }} />
+          Live Monshi burned = MONSHI balance at <code style={{ color: 'var(--pink)' }}>{DEAD_ADDRESS}</code>. Homepage counter + <code style={{ color: 'var(--pink)' }}>/api/v1/burn</code>.
         </div>
       </section>
 
-      {/* Creator earnings */}
-      <section className="mb-16">
-        <h2 className="text-3xl font-bold text-white mb-6">What the creator earns</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-card border border-border rounded-2xl p-5">
-            <Coins className="text-brand-purple mb-2" size={24} />
-            <h3 className="text-base font-semibold text-white mb-1">Trade fees, forever</h3>
-            <p className="text-sm text-white/70 leading-relaxed">You earn the creator slice of every buy (1%) and sell (0.5%) — on the curve and after graduation. Claimable any time (pull-pattern, so a non-receiving wallet can never brick trading).</p>
-          </div>
-          <div className="bg-card border border-border rounded-2xl p-5">
-            <Rocket className="text-brand-purple mb-2" size={24} />
-            <h3 className="text-base font-semibold text-white mb-1">{n(V3_CREATOR_REWARD_MON)} MON at graduation</h3>
-            <p className="text-sm text-white/70 leading-relaxed">≈ $800 paid straight to you the moment your token bonds — on top of the fees you&apos;ve already collected.</p>
-          </div>
-          <div className="bg-card border border-border rounded-2xl p-5">
-            <Flame className="text-brand-purple mb-2" size={24} />
-            <h3 className="text-base font-semibold text-white mb-1">Buyback &amp; burn</h3>
-            <p className="text-sm text-white/70 leading-relaxed">Route your dev fee and/or per-trade tax to automatically buy your token off its own curve and send it to the dead address — permanent, on-chain supply reduction (tracked as <code className="text-brand-purple">totalBurnedTokens</code>).</p>
-          </div>
-          <div className="bg-card border border-border rounded-2xl p-5">
-            <Droplets className="text-brand-purple mb-2" size={24} />
-            <h3 className="text-base font-semibold text-white mb-1">Add to LP</h3>
-            <p className="text-sm text-white/70 leading-relaxed">Reserve part of your fee/tax to deepen the graduation liquidity pool — stronger floor, more trust.</p>
-          </div>
-        </div>
-        <p className="text-sm text-white/60 leading-relaxed mt-4">
-          <strong className="text-white">Dev buy (optional):</strong> at launch you can buy up to {V3_MAX_DEV_BUY_BPS / 100}% of
-          supply <em>fee-free</em> to seed your own position. All of these are editable by the creator after launch.
-        </p>
-      </section>
-
-      {/* Curve math */}
-      <section className="mb-16">
-        <h2 className="text-3xl font-bold text-white mb-6">Bonding-curve math</h2>
-        <p className="text-base text-white/70 leading-relaxed mb-4">
-          Constant-product (x·y=k) with virtual reserves, calibrated nad.fun-style so early buyers can&apos;t scoop the
-          supply at near-zero cost:
-        </p>
-        <pre className="bg-card border border-border rounded-2xl p-5 text-sm text-white/80 overflow-x-auto font-mono">
-{`k = (virtualMON + realMON) · effectiveTokenReserve
-
-buy(ΔMON):  tokensOut = effTok − k / (virtualMON + realMON + ΔMON_net)
-sell(ΔTOK): monOut    = (virtualMON + realMON) − k / (effTok + ΔTOK)
-
-virtualMON          = ${n(V3_GRADUATION_TARGET_MON)} · 9/13 = 180,000 MON
-virtualToken        = 1,260,000,000
-totalSupply         = 1,000,000,000      (entire supply on the curve)
-realMON (at launch) = 100 MON            (creation-fee buffer = instant exit liquidity)
-graduationTarget    = ${n(V3_GRADUATION_TARGET_MON)} MON net of fees`}
-        </pre>
-        <p className="text-sm text-white/60 leading-relaxed mt-4">
-          <code className="text-brand-purple">priceX18</code> and post-trade reserves are emitted on every <code className="text-brand-purple">Trade</code>,
-          so price/marketcap are 100% on-chain derivable with no oracle. The flat 180,000 MON virtual reserve keeps the first
-          ~$100 of buys to a small share of supply and opens the DEX at ≈ the curve&apos;s final price.
-        </p>
-      </section>
-
-      {/* MONSHI */}
-      <section className="mb-16">
-        <h2 className="text-3xl font-bold text-white mb-6">MONSHI integration</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-card border border-border rounded-2xl p-5">
-            <h3 className="text-base font-semibold text-white mb-1">Holder discount</h3>
-            <p className="text-sm text-white/70 leading-relaxed">Hold ≥ 1,000,000 MONSHI and your creation fee is cut 50% (250 MON instead of 500). Read live on-chain via <code className="text-brand-purple">creationFeeFor(address)</code>.</p>
-          </div>
-          <div className="bg-card border border-border rounded-2xl p-5">
-            <h3 className="text-base font-semibold text-white mb-1">Buyback &amp; burn</h3>
-            <p className="text-sm text-white/70 leading-relaxed">0.5% of every sell, plus 25% of any creator tax above 2%, accrues to buy &amp; burn MONSHI — every launch on the pad feeds the MONSHI ecosystem.</p>
-          </div>
+      {/* Creator */}
+      <section style={{ marginBottom: 48 }}>
+        <h2 style={{ fontSize: 28, fontWeight: 900, color: '#fff', marginBottom: 16 }}>What the creator earns</h2>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
+          {[
+            { icon: Coins, t: 'Trade fees forever', d: 'Creator slice on buys/sells — pull-claim anytime.' },
+            { icon: Rocket, t: `${n(V3_CREATOR_REWARD_MON)} MON at graduation`, d: 'Paid when the token bonds (test economics on current factory).' },
+            { icon: Flame, t: 'Dev bot on deploy', d: `Atomic first buy up to ${V3_MAX_DEV_BUY_BPS / 100}% supply in the create tx.` },
+            { icon: Droplets, t: 'Your tax, your rules', d: 'Route creator tax to project burn and/or LP — independent of protocol stack.' },
+          ].map((c) => (
+            <div key={c.t} style={{ padding: 16, borderRadius: 12, border: '1px solid rgba(168,85,247,0.18)', background: 'rgba(20,16,42,0.7)' }}>
+              <c.icon size={20} style={{ color: 'var(--p)', marginBottom: 8 }} />
+              <div style={{ fontWeight: 800, color: '#fff', marginBottom: 4 }}>{c.t}</div>
+              <div style={{ fontSize: 13, color: 'rgba(220,215,240,0.65)', lineHeight: 1.4 }}>{c.d}</div>
+            </div>
+          ))}
         </div>
       </section>
 
-      {/* Deployed contracts */}
-      <section className="mb-16">
-        <h2 className="text-3xl font-bold text-white mb-6">Deployed contracts</h2>
-        <p className="text-base text-white/70 leading-relaxed mb-6">
-          Live on Monad mainnet (chainId 143), source-verified. Per-token curve + token contracts are EIP-1167 minimal-proxy
-          clones of the implementations below.
+      {/* Contracts */}
+      <section style={{ marginBottom: 48 }}>
+        <h2 style={{ fontSize: 28, fontWeight: 900, color: '#fff', marginBottom: 8 }}>Contracts</h2>
+        <p style={{ color: 'rgba(220,215,240,0.65)', fontSize: 13, marginBottom: 12 }}>
+          Prefer live values from <code style={{ color: 'var(--p)' }}>/api/v1/spec</code>. Current app defaults below (test factory may be active).
         </p>
-        <div className="bg-card border border-border rounded-2xl overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-white/5">
-              <tr className="text-left text-white/70">
-                <th className="px-4 py-3 font-semibold">Contract</th>
-                <th className="px-4 py-3 font-semibold">Address</th>
-                <th className="px-4 py-3 font-semibold">Purpose</th>
+        <div style={{ overflow: 'auto', borderRadius: 12, border: '1px solid rgba(168,85,247,0.2)' }}>
+          <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse', minWidth: 640 }}>
+            <thead>
+              <tr style={{ background: 'rgba(168,85,247,0.12)', textAlign: 'left', color: 'rgba(255,255,255,0.7)' }}>
+                <th style={{ padding: '12px 14px' }}>Contract</th>
+                <th style={{ padding: '12px 14px' }}>Address</th>
+                <th style={{ padding: '12px 14px' }}>Purpose</th>
               </tr>
             </thead>
-            <tbody className="text-white/80">
+            <tbody>
               {CONTRACTS.map((c) => (
-                <tr key={c.name} className="border-t border-border align-top">
-                  <td className="px-4 py-3 font-medium whitespace-nowrap">{c.name}</td>
-                  <td className="px-4 py-3">
-                    <a href={scan(c.addr)} target="_blank" rel="noopener noreferrer" className="font-mono text-xs text-brand-purple inline-flex items-center gap-1 break-all">
+                <tr key={c.name} style={{ borderTop: '1px solid rgba(168,85,247,0.12)', color: 'rgba(220,215,240,0.85)' }}>
+                  <td style={{ padding: '12px 14px', fontWeight: 700, whiteSpace: 'nowrap' }}>{c.name}</td>
+                  <td style={{ padding: '12px 14px' }}>
+                    <a href={scan(c.addr)} target="_blank" rel="noopener noreferrer" style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--p)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                       {c.addr.slice(0, 10)}…{c.addr.slice(-8)} <ExternalLink size={11} />
                     </a>
                   </td>
-                  <td className="px-4 py-3 text-white/70">{c.purpose}</td>
+                  <td style={{ padding: '12px 14px', color: 'rgba(220,215,240,0.6)' }}>{c.purpose}</td>
                 </tr>
               ))}
             </tbody>
@@ -299,158 +363,105 @@ graduationTarget    = ${n(V3_GRADUATION_TARGET_MON)} MON net of fees`}
         </div>
       </section>
 
-      {/* On-chain integration */}
-      <section className="mb-16">
-        <h2 className="text-3xl font-bold text-white mb-6">On-chain integration</h2>
-        <p className="text-base text-white/70 leading-relaxed mb-6">
-          There is <strong className="text-white">no required indexer or API</strong> — the app reads everything directly from
-          chain. For your own tooling (bots, scanners, DexScreener-style charts), watch these events:
-        </p>
-        <div className="bg-card border border-border rounded-2xl overflow-hidden mb-6">
-          <table className="w-full text-sm">
-            <thead className="bg-white/5">
-              <tr className="text-left text-white/70">
-                <th className="px-4 py-3 font-semibold">Event</th>
-                <th className="px-4 py-3 font-semibold">From</th>
-                <th className="px-4 py-3 font-semibold">Use</th>
+      {/* Events */}
+      <section style={{ marginBottom: 48 }}>
+        <h2 style={{ fontSize: 28, fontWeight: 900, color: '#fff', marginBottom: 12 }}>On-chain events</h2>
+        <div style={{ overflow: 'auto', borderRadius: 12, border: '1px solid rgba(168,85,247,0.2)' }}>
+          <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse', minWidth: 720 }}>
+            <thead>
+              <tr style={{ background: 'rgba(168,85,247,0.12)', textAlign: 'left', color: 'rgba(255,255,255,0.7)' }}>
+                <th style={{ padding: '12px 14px' }}>Event</th>
+                <th style={{ padding: '12px 14px' }}>From</th>
+                <th style={{ padding: '12px 14px' }}>Use</th>
               </tr>
             </thead>
-            <tbody className="text-white/80">
+            <tbody>
               {EVENTS.map((e) => (
-                <tr key={e.sig} className="border-t border-border align-top">
-                  <td className="px-4 py-3 font-mono text-[11px] leading-relaxed break-all">{e.sig}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">{e.from}</td>
-                  <td className="px-4 py-3 text-white/70">{e.use}</td>
+                <tr key={e.sig} style={{ borderTop: '1px solid rgba(168,85,247,0.12)', color: 'rgba(220,215,240,0.85)', verticalAlign: 'top' }}>
+                  <td style={{ padding: '12px 14px', fontFamily: 'var(--mono)', fontSize: 11, wordBreak: 'break-all' }}>{e.sig}</td>
+                  <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>{e.from}</td>
+                  <td style={{ padding: '12px 14px', color: 'rgba(220,215,240,0.6)' }}>{e.use}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <p className="text-base text-white/70 leading-relaxed mb-3">Reading live curve state (wagmi/viem + the ABIs in <code className="px-2 py-1 rounded bg-card border border-border font-mono text-xs text-brand-purple">lib/abis/</code>):</p>
-        <pre className="bg-card border border-border rounded-2xl p-5 text-sm text-white/80 overflow-x-auto font-mono">
-{`import { listV3Tokens, getV3Trades } from '@/lib/chainV3';
-
-// All launches (newest first) straight from the factory
-const tokens = await listV3Tokens(60);
-
-// A token's trade history from its curve's Trade logs (no indexer)
-const trades = await getV3Trades(curveAddress);
-
-// Curve reserves / price for a token (read on the curve clone)
-//   getCurveReserves() -> (virtualMon, virtualToken, realMon, realToken)
-//   priceWeiPerToken(), progressBps(), creationFeeFor(address)`}
-        </pre>
       </section>
 
-      {/* Security & governance */}
-      <section className="mb-16">
-        <h2 className="text-3xl font-bold text-white mb-6">Security &amp; governance</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-card border border-border rounded-2xl p-6">
-            <div className="flex items-start gap-4">
-              <Lock className="text-brand-purple flex-shrink-0" size={26} />
-              <div>
-                <h3 className="text-lg font-semibold text-white mb-1">Locked liquidity</h3>
-                <p className="text-sm text-white/60 leading-relaxed">At graduation the LP NFT is burned — creators can never withdraw the pool. They only ever earn trading fees.</p>
-              </div>
+      {/* Security */}
+      <section style={{ marginBottom: 48 }}>
+        <h2 style={{ fontSize: 28, fontWeight: 900, color: '#fff', marginBottom: 16 }}>Security notes</h2>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
+          {[
+            { icon: Lock, t: 'Locked LP', d: 'Graduation LP NFT is burned — creators cannot rug the pool.' },
+            { icon: Shield, t: 'Timelock + 2-step ownership', d: 'Economic changes delayed; ownership propose → accept.' },
+            { icon: FileCode, t: 'Audits before mainnet cutover', d: 'Two clean passes + E2E bots required for the new fee stack.' },
+            { icon: Sparkles, t: 'Snipers welcome', d: 'No protocol anti-sniper. Creators use optional atomic dev buy instead.' },
+          ].map((c) => (
+            <div key={c.t} style={{ padding: 16, borderRadius: 12, border: '1px solid rgba(168,85,247,0.18)', background: 'rgba(20,16,42,0.7)' }}>
+              <c.icon size={20} style={{ color: 'var(--p)', marginBottom: 8 }} />
+              <div style={{ fontWeight: 800, color: '#fff', marginBottom: 4 }}>{c.t}</div>
+              <div style={{ fontSize: 13, color: 'rgba(220,215,240,0.65)', lineHeight: 1.4 }}>{c.d}</div>
             </div>
-          </div>
-          <div className="bg-card border border-border rounded-2xl p-6">
-            <div className="flex items-start gap-4">
-              <Shield className="text-brand-purple flex-shrink-0" size={26} />
-              <div>
-                <h3 className="text-lg font-semibold text-white mb-1">Timelock + 2-step ownership</h3>
-                <p className="text-sm text-white/60 leading-relaxed">Economic parameters change only through a 24h timelock; ownership transfers are 2-step (propose → accept). Pull-pattern payouts and reentrancy guards throughout.</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-card border border-border rounded-2xl p-6">
-            <div className="flex items-start gap-4">
-              <FileCode className="text-brand-purple flex-shrink-0" size={26} />
-              <div>
-                <h3 className="text-lg font-semibold text-white mb-1">Verified source</h3>
-                <p className="text-sm text-white/60 leading-relaxed">All contracts are source-verified on the Monad explorer — read every line from the address table above.</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-card border border-border rounded-2xl p-6">
-            <div className="flex items-start gap-4">
-              <Sparkles className="text-brand-purple flex-shrink-0" size={26} />
-              <div>
-                <h3 className="text-lg font-semibold text-white mb-1">Anti-snipe curve</h3>
-                <p className="text-sm text-white/60 leading-relaxed">The 180,000 MON virtual reserve flattens the early curve so the first buyers can&apos;t corner supply cheaply — fairer launches.</p>
-              </div>
-            </div>
-          </div>
+          ))}
         </div>
       </section>
 
-      {/* Wallet setup */}
-      <section className="mb-16">
-        <h2 className="text-3xl font-bold text-white mb-6">Wallet setup</h2>
-        <p className="text-base text-white/70 leading-relaxed mb-6">
-          Add Monad Mainnet to your wallet with the params below, or one-click via your installed provider.
-        </p>
-        <div className="bg-card border border-border rounded-2xl p-6 space-y-3">
-          <div className="flex justify-between gap-4 border-b border-border pb-3">
-            <span className="text-white/60 text-sm">Chain ID</span>
-            <span className="font-mono text-sm text-white">{CHAIN_PARAMS.chainIdDecimal} ({CHAIN_PARAMS.chainId})</span>
-          </div>
-          <div className="flex justify-between gap-4 border-b border-border pb-3">
-            <span className="text-white/60 text-sm">Network name</span>
-            <span className="font-mono text-sm text-white">{CHAIN_PARAMS.chainName}</span>
-          </div>
-          <div className="flex justify-between gap-4 border-b border-border pb-3">
-            <span className="text-white/60 text-sm">RPC URL</span>
-            <span className="font-mono text-sm text-white break-all">{CHAIN_PARAMS.rpcUrl}</span>
-          </div>
-          <div className="flex justify-between gap-4 border-b border-border pb-3">
-            <span className="text-white/60 text-sm">Block explorer</span>
-            <span className="font-mono text-sm text-white break-all">{CHAIN_PARAMS.explorerUrl}</span>
-          </div>
-          <div className="flex justify-between gap-4">
-            <span className="text-white/60 text-sm">Currency</span>
-            <span className="font-mono text-sm text-white">{CHAIN_PARAMS.currency.symbol} ({CHAIN_PARAMS.currency.decimals} decimals)</span>
-          </div>
+      {/* Wallet */}
+      <section style={{ marginBottom: 48 }}>
+        <h2 style={{ fontSize: 28, fontWeight: 900, color: '#fff', marginBottom: 12 }}>Wallet setup</h2>
+        <div style={{ padding: 16, borderRadius: 12, border: '1px solid rgba(168,85,247,0.2)', background: 'rgba(20,16,42,0.75)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {[
+            ['Chain ID', `${CHAIN_PARAMS.chainIdDecimal} (${CHAIN_PARAMS.chainId})`],
+            ['Network', CHAIN_PARAMS.chainName],
+            ['RPC', CHAIN_PARAMS.rpcUrl],
+            ['Explorer', CHAIN_PARAMS.explorerUrl],
+            ['Currency', `${CHAIN_PARAMS.currency.symbol} · ${CHAIN_PARAMS.currency.decimals} decimals`],
+          ].map(([k, v]) => (
+            <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', borderBottom: '1px solid rgba(168,85,247,0.12)', paddingBottom: 8 }}>
+              <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13 }}>{k}</span>
+              <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: '#fff', wordBreak: 'break-all' }}>{v}</span>
+            </div>
+          ))}
         </div>
-        <div className="mt-4">
-          <button
-            type="button"
-            onClick={addMonadToWallet}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-brand-purple hover:bg-brand-purple/90 text-white font-semibold transition-colors"
-          >
-            <Wallet size={18} /> Add Monad to wallet
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={addMonadToWallet}
+          style={{
+            marginTop: 12,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '10px 18px',
+            borderRadius: 999,
+            border: 'none',
+            background: 'var(--p, #A855F7)',
+            color: '#fff',
+            fontWeight: 800,
+            cursor: 'pointer',
+          }}
+        >
+          <Wallet size={18} /> Add Monad to wallet
+        </button>
       </section>
 
-      {/* Support & community */}
-      <section className="mb-8">
-        <h2 className="text-3xl font-bold text-white mb-6">Support &amp; community</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <a href="https://t.me/MonshiUtilitySupport" target="_blank" rel="noopener noreferrer" className="bg-card border border-border hover:border-brand-purple/50 rounded-2xl p-6 transition-colors group">
-            <div className="flex items-start gap-4">
-              <MessageCircle className="text-brand-purple flex-shrink-0" size={28} />
-              <div>
-                <h3 className="text-lg font-semibold text-white mb-1 group-hover:text-brand-purple transition-colors">Support</h3>
-                <p className="text-sm text-white/60 leading-relaxed">Technical questions, integration help, contract questions.</p>
-                <div className="text-xs text-brand-purple mt-2 inline-flex items-center gap-1">t.me/MonshiUtilitySupport <ExternalLink size={12} /></div>
-              </div>
-            </div>
+      {/* Community */}
+      <section>
+        <h2 style={{ fontSize: 28, fontWeight: 900, color: '#fff', marginBottom: 16 }}>Support</h2>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
+          <a href="https://t.me/MonshiUtilitySupport" target="_blank" rel="noopener noreferrer" style={{ padding: 18, borderRadius: 12, border: '1px solid rgba(168,85,247,0.25)', background: 'rgba(20,16,42,0.75)', textDecoration: 'none', color: 'inherit' }}>
+            <MessageCircle size={22} style={{ color: 'var(--p)', marginBottom: 8 }} />
+            <div style={{ fontWeight: 800, color: '#fff' }}>Support</div>
+            <div style={{ fontSize: 13, color: 'rgba(220,215,240,0.6)', marginTop: 4 }}>Integration &amp; contract questions</div>
           </a>
-          <a href="https://t.me/monpadlounge" target="_blank" rel="noopener noreferrer" className="bg-card border border-border hover:border-brand-purple/50 rounded-2xl p-6 transition-colors group">
-            <div className="flex items-start gap-4">
-              <Sparkles className="text-brand-purple flex-shrink-0" size={28} />
-              <div>
-                <h3 className="text-lg font-semibold text-white mb-1 group-hover:text-brand-purple transition-colors">Lounge</h3>
-                <p className="text-sm text-white/60 leading-relaxed">Community chat, launch discussion, general talk.</p>
-                <div className="text-xs text-brand-purple mt-2 inline-flex items-center gap-1">t.me/monpadlounge <ExternalLink size={12} /></div>
-              </div>
-            </div>
+          <a href="https://t.me/monpadlounge" target="_blank" rel="noopener noreferrer" style={{ padding: 18, borderRadius: 12, border: '1px solid rgba(168,85,247,0.25)', background: 'rgba(20,16,42,0.75)', textDecoration: 'none', color: 'inherit' }}>
+            <Sparkles size={22} style={{ color: 'var(--p)', marginBottom: 8 }} />
+            <div style={{ fontWeight: 800, color: '#fff' }}>Lounge</div>
+            <div style={{ fontSize: 13, color: 'rgba(220,215,240,0.6)', marginTop: 4 }}>Community &amp; launches</div>
           </a>
         </div>
-        <div className="mt-6 text-center">
-          <Link href="/how-it-works" className="text-sm text-white/60 hover:text-brand-purple transition-colors">← Back to How it works</Link>
+        <div style={{ marginTop: 20, textAlign: 'center' }}>
+          <Link href="/" style={{ fontSize: 13, color: 'rgba(220,215,240,0.55)', textDecoration: 'none' }}>← Back to the board</Link>
         </div>
       </section>
     </div>
