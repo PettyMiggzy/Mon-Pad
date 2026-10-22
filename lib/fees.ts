@@ -1,11 +1,11 @@
-// Monpad protocol fee spec (Minta port → Monad).
-// Creator-set taxes stay independent of these protocol skims.
+// Monpad LP fee split — buys & sells, off LP fees:
 //
-// On every buy & sell (quote notional = MON in / MON out):
-//   • 10% burn traded token   (buys: burn from token out; sells: burn from tokens in)
-//   • 10% buyback-and-burn Monchi (MONSHI) — quote accrued → keeper/buyback burns
-//   • 10% platform            — always in quote (MON); never as project tokens on sells
-// Creator share of the launch/sale fee layer (when routed as such): 80% to creator.
+//   70% → creator
+//   10% → platform           (MON / quote only — never project tokens on sells)
+//   10% → burn MONSHI        (buyback-and-burn Monchi)
+//   10% → burn project token (the token they launched)
+//
+// Liquidity lives in the DEX/LP (no “graduation target” product story).
 // Platform wallet is the Minta treasury carried over to Monpad.
 
 import type { Address } from 'viem';
@@ -14,11 +14,22 @@ import type { Address } from 'viem';
 export const MONPAD_PLATFORM_WALLET =
   '0x5899a0576A94327a6316E01190f951edf7645914' as Address;
 
-export const PROTOCOL_BURN_TOKEN_BPS = 1000;   // 10% — burn traded token
-export const PROTOCOL_BURN_MONSHI_BPS = 1000;  // 10% — buyback & burn MONSHI
-export const PROTOCOL_PLATFORM_BPS = 1000;     // 10% — platform (quote only)
-export const CREATOR_SALE_SHARE_BPS = 8000;    // 80% — creator share of sale/fee layer
+/** 10% of LP fees — burn the launched project token */
+export const PROTOCOL_BURN_TOKEN_BPS = 1000;
 
-/** Combined protocol skim on trade notional (excludes creator tax). */
+/** 10% of LP fees — buyback-and-burn MONSHI (Monchi) */
+export const PROTOCOL_BURN_MONSHI_BPS = 1000;
+
+/** 10% of LP fees — platform (quote / MON only on sells) */
+export const PROTOCOL_PLATFORM_BPS = 1000;
+
+/** 70% of LP fees — creator */
+export const CREATOR_SALE_SHARE_BPS = 7000;
+
+/** Burn legs combined (token + MONSHI) = 20% of LP fees */
+export const PROTOCOL_BURN_MECHANISM_BPS =
+  PROTOCOL_BURN_TOKEN_BPS + PROTOCOL_BURN_MONSHI_BPS;
+
+/** Non-creator share of LP fees = 30% */
 export const PROTOCOL_TRADE_SKIM_BPS =
   PROTOCOL_BURN_TOKEN_BPS + PROTOCOL_BURN_MONSHI_BPS + PROTOCOL_PLATFORM_BPS;

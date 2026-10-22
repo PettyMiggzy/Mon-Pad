@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import LiveTicker from '@/components/LiveTicker';
-import PromoBanner from '@/components/PromoBanner';
 import MonshiBurnCounter from '@/components/MonshiBurnCounter';
 import TokenGrid from '@/components/TokenGrid';
 import HomeRail from '@/components/HomeRail';
@@ -12,14 +11,13 @@ import { fmtMon } from '@/lib/format';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 
-type FilterKey = 'all' | 'trending' | 'new' | 'near-graduation' | 'graduated';
+type FilterKey = 'all' | 'trending' | 'new' | 'hot';
 
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'all', label: 'For you' },
   { key: 'trending', label: 'Trending' },
   { key: 'new', label: 'New' },
-  { key: 'near-graduation', label: 'About to graduate' },
-  { key: 'graduated', label: 'Graduated' },
+  { key: 'hot', label: 'Hottest' },
 ];
 
 export default function Home() {
@@ -28,7 +26,7 @@ export default function Home() {
   const [filter, setFilter] = useState<FilterKey>('all');
   const [query, setQuery] = useState('');
   const [tokens, setTokens] = useState<TokenSummary[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
   const gridRef = useRef<HTMLDivElement | null>(null);
   const configured = v3Configured();
 
@@ -40,15 +38,11 @@ export default function Home() {
       try {
         const list = await listV3Tokens(120);
         if (cancelled) return;
-        let rows = list;
-        if (filter === 'graduated') rows = list.filter((t) => t.graduated);
-        else if (filter === 'near-graduation') {
-          rows = list.filter((t) => !t.graduated).sort((a, b) => b.progress - a.progress);
-        } else if (filter === 'trending') {
-          rows = [...list].sort((a, b) => b.progress - a.progress);
-        } else if (filter === 'new') {
-          rows = [...list]; // chain order ≈ newest first from factory
+        let rows = [...list];
+        if (filter === 'trending' || filter === 'hot') {
+          rows.sort((a, b) => b.progress - a.progress);
         }
+        // "new" / "all" keep factory order (newest-first)
         const mapped: TokenSummary[] = rows.map((t) => ({
           address: t.token,
           name: t.name,
@@ -73,40 +67,51 @@ export default function Home() {
               const byAddr = new Map<string, string>(
                 metas.filter((m: any) => m?.image_url).map((m: any) => [String(m.address).toLowerCase(), m.image_url as string]),
               );
-              if (byAddr.size) setTokens((prev) => prev.map((t) => ({ ...t, imageUrl: byAddr.get(t.address.toLowerCase()) || t.imageUrl })));
+              if (byAddr.size) {
+                setTokens((prev) => prev.map((t) => ({ ...t, imageUrl: byAddr.get(t.address.toLowerCase()) || t.imageUrl })));
+              }
             }
           }
-        } catch { /* logos optional */ }
+        } catch { /* optional */ }
 
         try {
           const curveByAddr = new Map(rows.map((t) => [t.token.toLowerCase(), t.curve]));
           const top = mapped.slice(0, 24);
           for (let i = 0; i < top.length && !cancelled; i += 4) {
             const batch = top.slice(i, i + 4);
-            const results = await Promise.all(batch.map(async (t) => {
-              const curve = curveByAddr.get(t.address.toLowerCase());
-              if (!curve) return null;
-              const s = await getV3CardStats(curve as any).catch(() => null);
-              return s ? { address: t.address.toLowerCase(), s } : null;
-            }));
+            const results = await Promise.all(
+              batch.map(async (t) => {
+                const curve = curveByAddr.get(t.address.toLowerCase());
+                if (!curve) return null;
+                const s = await getV3CardStats(curve as any).catch(() => null);
+                return s ? { address: t.address.toLowerCase(), s } : null;
+              }),
+            );
             if (cancelled) break;
             const upd = new Map(results.filter(Boolean).map((r: any) => [r.address, r.s]));
-            if (upd.size) setTokens((prev) => prev.map((t) => {
-              const s = upd.get(t.address.toLowerCase());
-              if (!s) return t;
-              const volWei = (BigInt(Math.round(s.volMon * 1e6)) * 1_000_000_000_000n).toString();
-              return { ...t, volume24hMon: volWei, sparkline: s.spark };
-            }));
+            if (upd.size) {
+              setTokens((prev) =>
+                prev.map((t) => {
+                  const s = upd.get(t.address.toLowerCase());
+                  if (!s) return t;
+                  const volWei = (BigInt(Math.round(s.volMon * 1e6)) * 1_000_000_000_000n).toString();
+                  return { ...t, volume24hMon: volWei, sparkline: s.spark };
+                }),
+              );
+            }
           }
-        } catch { /* card stats optional */ }
+        } catch { /* optional */ }
       } catch {
-        if (cancelled) return;
-        setTokens([]);
-        setLoading(false);
+        if (!cancelled) {
+          setTokens([]);
+          setLoading(false);
+        }
       }
     })();
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [filter]);
 
   const visible = useMemo(() => {
@@ -120,13 +125,13 @@ export default function Home() {
     );
   }, [tokens, query]);
 
-  const king = useMemo(() => {
-    const live = tokens.filter((t) => !t.graduated);
-    if (!live.length) return null;
-    return [...live].sort((a, b) => {
+  /** Highest volume / raise — "Monshi's Crown" (not King of the Hill) */
+  const crown = useMemo(() => {
+    if (!tokens.length) return null;
+    return [...tokens].sort((a, b) => {
       try {
-        const A = BigInt(a.monRaisedNet || '0');
-        const B = BigInt(b.monRaisedNet || '0');
+        const A = BigInt(a.volume24hMon || a.monRaisedNet || '0');
+        const B = BigInt(b.volume24hMon || b.monRaisedNet || '0');
         return A > B ? -1 : A < B ? 1 : 0;
       } catch {
         return 0;
@@ -137,82 +142,32 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Monpad — Fair Launch on Monad · powered by Monshi</title>
-        <meta key="description" name="description" content="Monpad on Monad. Every trade burns Monshi. Creators earn fees forever. Live burn counter." />
-        <meta key="og:title" property="og:title" content="Monpad — Fair Launch on Monad" />
-        <meta key="og:description" property="og:description" content="Monpad on Monad. Every trade burns Monshi. Creators earn fees forever." />
+        <title>Monpad — DEX launches on Monad · every trade burns Monshi</title>
+        <meta
+          key="description"
+          name="description"
+          content="Monpad on Monad. LP fees split 70% creator / 10% platform / 10% burn Monshi / 10% burn your token. Bots welcome."
+        />
+        <meta key="og:title" property="og:title" content="Monpad — burn Monshi on every trade" />
+        <meta key="og:description" property="og:description" content="Busy DEX launchpad. Monshi mascot. 70/10/10/10 LP fees." />
         <meta key="og:url" property="og:url" content={canonical} />
-        <meta key="twitter:title" name="twitter:title" content="Monpad — Fair Launch on Monad" />
-        <meta key="twitter:description" name="twitter:description" content="Monpad on Monad. Every trade burns Monshi. Creators earn fees forever." />
         <link key="canonical" rel="canonical" href={canonical} />
       </Head>
 
-      {/* Slim busy strip — pump.fun energy, Monshi stays the brand face */}
-      <div
-        style={{
-          borderBottom: '1px solid var(--bd)',
-          background:
-            'linear-gradient(90deg, rgba(124,58,237,0.18) 0%, rgba(5,3,8,0.95) 40%, rgba(236,72,153,0.12) 100%)',
-        }}
-      >
-        <div
-          style={{
-            maxWidth: 1440,
-            margin: '0 auto',
-            padding: '10px 12px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 12,
-            flexWrap: 'wrap',
-          }}
-        >
+      {/* Brand strip — Monshi + Monpad + create */}
+      <div className="mp-brand-strip">
+        <div className="mp-brand-inner">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/meshy/monshi-mascot.png"
-            alt="Monshi"
-            style={{
-              width: 56,
-              height: 56,
-              objectFit: 'contain',
-              flexShrink: 0,
-              filter: 'drop-shadow(0 6px 16px rgba(124,58,237,0.5))',
-            }}
-          />
-          <div style={{ flex: 1, minWidth: 140 }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-              <span
-                style={{
-                  fontSize: 22,
-                  fontWeight: 800,
-                  letterSpacing: '-0.03em',
-                  color: '#fff',
-                  lineHeight: 1,
-                }}
-              >
-                Monpad
-              </span>
-              <span style={{ fontSize: 12, color: 'var(--t3)', fontWeight: 600 }}>
-                live board · every trade burns Monshi
-              </span>
-            </div>
+          <img src="/meshy/monshi-mascot.png" alt="Monshi" className="mp-brand-mascot" />
+          <div className="mp-brand-copy">
+            <h1 className="mp-brand-title">Monpad</h1>
+            <p className="mp-brand-sub">
+              DEX launches · LP fees → <b>70%</b> creator · <b>10%</b> platform · <b>10%</b> burn Monshi · <b>10%</b> burn
+              your token
+            </p>
           </div>
-          <Link
-            href="/create"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              padding: '10px 16px',
-              borderRadius: 8,
-              background: 'var(--p, #A855F7)',
-              color: '#fff',
-              fontWeight: 800,
-              fontSize: 13,
-              textDecoration: 'none',
-              letterSpacing: '0.02em',
-              textTransform: 'uppercase',
-            }}
-          >
-            + Create coin
+          <Link href="/create" className="mp-create-btn">
+            + Launch
           </Link>
         </div>
       </div>
@@ -224,92 +179,35 @@ export default function Home() {
       </div>
 
       {!configured && (
-        <div style={{ maxWidth: 1440, margin: '0 auto', padding: '0 12px 8px' }}>
-          <div style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--bd)', background: 'var(--bg-card)', color: 'var(--t3)', fontSize: 12 }}>
-            Contracts not configured — set NEXT_PUBLIC_FACTORY_V3 / NEXT_PUBLIC_GRADUATOR_V3.
-          </div>
+        <div className="mp-shell" style={{ paddingBottom: 8 }}>
+          <div className="mp-warn">Contracts not configured — set NEXT_PUBLIC_FACTORY_V3.</div>
         </div>
       )}
 
-      <div style={{ maxWidth: 1440, margin: '0 auto', padding: '0 12px' }}>
-        <PromoBanner />
-      </div>
-
-      {/* King of the hill */}
-      {king && (
-        <div style={{ maxWidth: 1440, margin: '0 auto', padding: '8px 12px 0' }}>
-          <Link
-            href={`/token/${king.address}`}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              padding: '10px 12px',
-              borderRadius: 10,
-              border: '1px solid rgba(252, 211, 77, 0.35)',
-              background: 'linear-gradient(90deg, rgba(252,211,77,0.12), rgba(20,16,42,0.7))',
-              textDecoration: 'none',
-              color: 'inherit',
-            }}
-          >
-            <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', color: '#FCD34D', textTransform: 'uppercase' }}>
-              ★ King of the hill
-            </span>
-            <span style={{ fontWeight: 800, color: '#fff', fontSize: 14 }}>{king.name}</span>
-            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--p)', background: 'rgba(168,85,247,0.15)', padding: '2px 6px', borderRadius: 4 }}>
-              ${king.symbol}
-            </span>
-            <span style={{ marginLeft: 'auto', fontSize: 12, color: '#4ADE80', fontWeight: 700 }}>
-              {fmtMon(king.monRaisedNet)} MON raised
-            </span>
+      {/* Monshi's Crown — volume lead (NOT King of the Hill) */}
+      {crown && (
+        <div className="mp-shell" style={{ paddingTop: 8 }}>
+          <Link href={`/token/${crown.address}`} className="mp-crown">
+            <span className="mp-crown-label">Monshi&apos;s Crown</span>
+            <span className="mp-crown-name">{crown.name}</span>
+            <span className="mp-crown-sym">${crown.symbol}</span>
+            <span className="mp-crown-stat">{fmtMon(crown.volume24hMon || crown.monRaisedNet)} MON</span>
           </Link>
         </div>
       )}
 
-      {/* Sticky filters + search — pump.fun board chrome */}
-      <div
-        ref={gridRef}
-        style={{
-          position: 'sticky',
-          top: 56,
-          zIndex: 10,
-          background: 'rgba(5, 3, 8, 0.92)',
-          backdropFilter: 'blur(10px)',
-          WebkitBackdropFilter: 'blur(10px)',
-          borderBottom: '1px solid var(--bd)',
-          marginTop: 8,
-        }}
-      >
-        <div
-          style={{
-            maxWidth: 1440,
-            margin: '0 auto',
-            padding: '8px 12px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            flexWrap: 'wrap',
-          }}
-        >
-          <div style={{ display: 'flex', gap: 4, overflowX: 'auto', flex: 1, minWidth: 0 }}>
+      {/* Filters */}
+      <div ref={gridRef} className="mp-filters">
+        <div className="mp-filters-inner">
+          <div className="mp-filter-tabs">
             {FILTERS.map((f) => {
-              const isActive = f.key === filter;
+              const active = f.key === filter;
               return (
                 <button
                   key={f.key}
                   type="button"
+                  className={active ? 'mp-chip mp-chip-on' : 'mp-chip'}
                   onClick={() => setFilter(f.key)}
-                  style={{
-                    padding: '7px 12px',
-                    borderRadius: 999,
-                    border: isActive ? '1px solid rgba(168,85,247,0.55)' : '1px solid transparent',
-                    background: isActive ? 'rgba(168,85,247,0.2)' : 'transparent',
-                    color: isActive ? '#fff' : 'var(--t3)',
-                    fontWeight: isActive ? 800 : 600,
-                    fontSize: 12,
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap',
-                  }}
                 >
                   {f.label}
                 </button>
@@ -318,72 +216,248 @@ export default function Home() {
           </div>
           <input
             type="search"
-            placeholder="Search by name / ticker / CA…"
+            className="mp-search"
+            placeholder="Search name / ticker / CA…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            style={{
-              width: 'min(280px, 100%)',
-              padding: '8px 12px',
-              borderRadius: 8,
-              border: '1px solid var(--bd)',
-              background: 'rgba(20,16,42,0.8)',
-              color: '#fff',
-              fontSize: 13,
-              outline: 'none',
-            }}
           />
-          <span style={{ fontSize: 11, color: 'var(--t4)', fontWeight: 600, whiteSpace: 'nowrap' }}>
-            {loading ? 'loading…' : `${visible.length} coins`}
-          </span>
+          <span className="mp-count">{loading ? '…' : `${visible.length}`}</span>
         </div>
       </div>
 
-      {/* Busy board: dense grid + slim rails */}
-      <div
-        style={{
-          maxWidth: 1440,
-          margin: '0 auto',
-          padding: '12px 12px 48px',
-        }}
-      >
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(0, 1fr) 280px',
-            gap: 12,
-            alignItems: 'start',
-          }}
-          className="monpad-board"
-        >
+      {/* Board */}
+      <div className="mp-shell mp-board-wrap">
+        <div className="mp-board">
           <main>
             <TokenGrid tokens={visible} loading={loading} dense />
           </main>
-          <aside
-            style={{ display: 'flex', flexDirection: 'column', gap: 10 }}
-            className="monpad-board-aside"
-          >
+          <aside className="mp-aside">
             <HomeRail variant="hottest-24h" limit={10} />
-            <HomeRail variant="top-graduated" limit={8} />
             <HomeRail variant="top-earners" limit={8} />
           </aside>
         </div>
       </div>
 
       <style jsx global>{`
-        @media (max-width: 1024px) {
-          .monpad-board {
-            grid-template-columns: 1fr !important;
+        .mp-brand-strip {
+          border-bottom: 1px solid var(--bd);
+          background:
+            linear-gradient(105deg, rgba(181, 123, 255, 0.16) 0%, transparent 42%),
+            linear-gradient(280deg, rgba(255, 77, 154, 0.1) 0%, transparent 38%),
+            rgba(8, 5, 14, 0.9);
+        }
+        .mp-brand-inner {
+          max-width: var(--max-w);
+          margin: 0 auto;
+          padding: 12px 14px;
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          flex-wrap: wrap;
+        }
+        .mp-brand-mascot {
+          width: 64px;
+          height: 64px;
+          object-fit: contain;
+          flex-shrink: 0;
+          filter: drop-shadow(0 8px 20px rgba(181, 123, 255, 0.45));
+          animation: mpFloat 5.5s ease-in-out infinite;
+        }
+        @keyframes mpFloat {
+          0%,
+          100% {
+            transform: translateY(0);
           }
-          .monpad-board-aside {
+          50% {
+            transform: translateY(-6px);
+          }
+        }
+        .mp-brand-copy {
+          flex: 1;
+          min-width: 180px;
+        }
+        .mp-brand-title {
+          font-family: var(--font-display);
+          font-size: clamp(26px, 4vw, 34px);
+          font-weight: 800;
+          letter-spacing: -0.03em;
+          line-height: 1;
+          margin: 0;
+          color: #fff;
+        }
+        .mp-brand-sub {
+          margin: 6px 0 0;
+          font-size: 12px;
+          line-height: 1.45;
+          color: var(--t3);
+          max-width: 560px;
+        }
+        .mp-brand-sub b {
+          color: var(--t2);
+          font-weight: 700;
+        }
+        .mp-create-btn {
+          display: inline-flex;
+          align-items: center;
+          padding: 11px 18px;
+          border-radius: 999px;
+          background: linear-gradient(135deg, var(--p) 0%, var(--pink) 100%);
+          color: #fff;
+          font-weight: 800;
+          font-size: 13;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+          text-decoration: none;
+          box-shadow: var(--glow-pink);
+        }
+        .mp-shell {
+          max-width: var(--max-w);
+          margin: 0 auto;
+          padding-left: 12px;
+          padding-right: 12px;
+        }
+        .mp-warn {
+          padding: 8px 12px;
+          border-radius: 8px;
+          border: 1px solid var(--bd);
+          background: var(--bg-card);
+          color: var(--t3);
+          font-size: 12px;
+        }
+        .mp-crown {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
+          padding: 10px 12px;
+          border-radius: 12px;
+          border: 1px solid rgba(255, 77, 154, 0.35);
+          background: linear-gradient(90deg, rgba(255, 77, 154, 0.14), rgba(18, 12, 32, 0.8));
+          text-decoration: none;
+          color: inherit;
+        }
+        .mp-crown-label {
+          font-size: 10px;
+          font-weight: 800;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          color: var(--pink);
+        }
+        .mp-crown-name {
+          font-weight: 800;
+          font-size: 14px;
+          color: #fff;
+        }
+        .mp-crown-sym {
+          font-size: 11px;
+          font-weight: 700;
+          color: var(--p);
+          background: rgba(181, 123, 255, 0.15);
+          padding: 2px 7px;
+          border-radius: 4px;
+        }
+        .mp-crown-stat {
+          margin-left: auto;
+          font-size: 12px;
+          font-weight: 700;
+          color: var(--green);
+          font-family: var(--mono);
+        }
+        .mp-filters {
+          position: sticky;
+          top: var(--topbar-h, 58px);
+          z-index: 10;
+          margin-top: 8px;
+          background: rgba(7, 5, 12, 0.92);
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
+          border-bottom: 1px solid var(--bd);
+        }
+        .mp-filters-inner {
+          max-width: var(--max-w);
+          margin: 0 auto;
+          padding: 8px 12px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+        .mp-filter-tabs {
+          display: flex;
+          gap: 4px;
+          overflow-x: auto;
+          flex: 1;
+          min-width: 0;
+        }
+        .mp-chip {
+          padding: 7px 12px;
+          border-radius: 999px;
+          border: 1px solid transparent;
+          background: transparent;
+          color: var(--t3);
+          font-weight: 600;
+          font-size: 12px;
+          cursor: pointer;
+          white-space: nowrap;
+        }
+        .mp-chip-on {
+          border-color: rgba(181, 123, 255, 0.5);
+          background: rgba(181, 123, 255, 0.18);
+          color: #fff;
+          font-weight: 800;
+        }
+        .mp-search {
+          width: min(280px, 100%);
+          padding: 8px 12px;
+          border-radius: 8px;
+          border: 1px solid var(--bd);
+          background: rgba(18, 12, 32, 0.85);
+          color: #fff;
+          font-size: 13px;
+          outline: none;
+        }
+        .mp-search:focus {
+          border-color: rgba(181, 123, 255, 0.55);
+        }
+        .mp-count {
+          font-size: 11px;
+          color: var(--t4);
+          font-weight: 700;
+          font-family: var(--mono);
+          min-width: 2ch;
+        }
+        .mp-board-wrap {
+          padding-top: 12px;
+          padding-bottom: 48px;
+        }
+        .mp-board {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 280px;
+          gap: 12px;
+          align-items: start;
+        }
+        .mp-aside {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+        @media (max-width: 1024px) {
+          .mp-board {
+            grid-template-columns: 1fr;
+          }
+          .mp-aside {
             order: -1;
-            display: grid !important;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
+            display: grid;
+            grid-template-columns: 1fr 1fr;
             gap: 8px;
           }
         }
-        @media (max-width: 720px) {
-          .monpad-board-aside {
-            grid-template-columns: 1fr !important;
+        @media (max-width: 640px) {
+          .mp-aside {
+            grid-template-columns: 1fr;
+          }
+          .mp-brand-sub {
+            font-size: 11px;
           }
         }
       `}</style>

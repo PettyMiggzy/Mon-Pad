@@ -112,18 +112,30 @@ export function Layout({ children }: { children: ReactNode }) {
           }}
         >
           <Link
-          href="/"
-          className="flex items-center"
-          aria-label="Mon-Pad home"
-          style={{ textDecoration: 'none' }}
-        >
-          <img
-            src="/monpad-text-logo.png"
-            alt="Mon-Pad"
-            className="h-12 w-auto md:h-16 select-none"
-            draggable={false}
-          />
-        </Link>
+            href="/"
+            className="flex items-center"
+            aria-label="Monpad home"
+            style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 8 }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/meshy/monshi-mascot.png"
+              alt=""
+              style={{ width: 36, height: 36, objectFit: 'contain' }}
+              draggable={false}
+            />
+            <span
+              style={{
+                fontFamily: 'var(--font-display, Syne, sans-serif)',
+                fontWeight: 800,
+                fontSize: 20,
+                letterSpacing: '-0.03em',
+                color: '#fff',
+              }}
+            >
+              Monpad
+            </span>
+          </Link>
           <nav className="mp-desktop-nav" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             {PRIMARY_NAV.map((n) => (
               <NavLink key={n.href} href={n.href} active={router.pathname === n.href}>

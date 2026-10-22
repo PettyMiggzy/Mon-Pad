@@ -4,56 +4,57 @@
 
 
 :root {
-  /* Backgrounds */
-  --bg:        #050308;
-  --bg2:       #0d0918;
-  --bg3:       #14102a;
-  --bg-card:   rgba(20, 16, 42, 0.65);
-  --bd:        rgba(139, 92, 246, 0.15);
-  --bd2:       rgba(139, 92, 246, 0.3);
-  --bd-glow:   rgba(168, 85, 247, 0.5);
-  
-  /* Brand */
-  --p:         #A855F7;     /* primary purple */
-  --p2:        #C4B5FD;     /* light */
-  --p-deep:    #7C3AED;     /* deep */
-  --cyan:      #22D3EE;     /* cyan accent */
-  --cyan2:     #67E8F9;
-  --pink:      #EC4899;     /* monshi pink */
-  --gold:      #FCD34D;     /* royalty */
-  --green:     #4ADE80;     /* success / buy */
-  --red:       #F87171;     /* danger / sell */
-  --amber:     #F59E0B;
-  
+  /* Backgrounds — deep ink, not flat black */
+  --bg:        #07050c;
+  --bg2:       #0e0a16;
+  --bg3:       #161022;
+  --bg-card:   rgba(18, 12, 32, 0.72);
+  --bd:        rgba(180, 120, 255, 0.14);
+  --bd2:       rgba(180, 120, 255, 0.28);
+  --bd-glow:   rgba(200, 140, 255, 0.45);
+
+  /* Brand — Monad purple + Monshi heat */
+  --p:         #B57BFF;
+  --p2:        #D4B8FF;
+  --p-deep:    #7B3FE4;
+  --cyan:      #5EEAD4;
+  --cyan2:     #99F6E4;
+  --pink:      #FF4D9A;
+  --gold:      #F5C542;
+  --green:     #3DFF9A;
+  --red:       #FF5C7A;
+  --amber:     #FFB020;
+
   /* Text */
-  --t1:        #FFFFFF;
-  --t2:        #DDD7FE;
-  --t3:        #A1A1AA;
-  --t4:        #71717A;
-  
+  --t1:        #FAFAFC;
+  --t2:        #D8D0F0;
+  --t3:        #9B94B0;
+  --t4:        #6B6580;
+
   /* Layout */
   --sidebar-w: 72px;
-  --topbar-h:  60px;
+  --topbar-h:  58px;
   --bottomnav-h: 64px;
-  --max-w:     1440px;
-  
+  --max-w:     1480px;
+
   /* Radius */
   --r-sm:      8px;
   --r:         12px;
   --r-lg:      16px;
-  --r-xl:      24px;
-  
-  /* Fonts */
-  --font:      'Space Grotesk', system-ui, sans-serif;
+  --r-xl:      22px;
+
+  /* Fonts — Syne display, DM Sans body */
+  --font-display: 'Syne', 'Space Grotesk', sans-serif;
+  --font:      'DM Sans', 'Space Grotesk', system-ui, sans-serif;
   --mono:      'JetBrains Mono', monospace;
-  
+
   /* Shadows */
-  --glow-p:    0 0 24px rgba(168, 85, 247, 0.4);
-  --glow-cyan: 0 0 24px rgba(34, 211, 238, 0.4);
-  --glow-pink: 0 0 24px rgba(236, 72, 153, 0.4);
-  --glow-green: 0 0 24px rgba(74, 222, 128, 0.4);
-  --shadow:    0 4px 16px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.5);
+  --glow-p:    0 0 28px rgba(181, 123, 255, 0.35);
+  --glow-cyan: 0 0 24px rgba(94, 234, 212, 0.3);
+  --glow-pink: 0 0 28px rgba(255, 77, 154, 0.35);
+  --glow-green: 0 0 24px rgba(61, 255, 154, 0.3);
+  --shadow:    0 4px 20px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.55);
 }
 
 * {
@@ -73,17 +74,28 @@ html, body {
   max-width: 100vw;
 }
 
-/* Animated background gradient */
+/* Atmospheric field — grainy depth without looking like a dashboard wallpaper */
 body::before {
   content: '';
   position: fixed;
   inset: 0;
   z-index: -1;
   background:
-    radial-gradient(circle at 20% 0%, rgba(168, 85, 247, 0.15), transparent 40%),
-    radial-gradient(circle at 80% 100%, rgba(34, 211, 238, 0.1), transparent 40%),
-    radial-gradient(circle at 50% 50%, rgba(236, 72, 153, 0.05), transparent 60%);
+    radial-gradient(ellipse 90% 60% at 12% -10%, rgba(181, 123, 255, 0.22), transparent 55%),
+    radial-gradient(ellipse 70% 50% at 95% 10%, rgba(255, 77, 154, 0.12), transparent 50%),
+    radial-gradient(ellipse 80% 60% at 50% 110%, rgba(94, 234, 212, 0.08), transparent 55%),
+    linear-gradient(180deg, #0a0712 0%, #07050c 100%);
   pointer-events: none;
+}
+
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  opacity: 0.035;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
 a {

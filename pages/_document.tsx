@@ -12,15 +12,15 @@ export default function Document() {
         {/* Direct font stylesheet load — parallel with HTML parse, not blocking after CSS */}
         <link
           rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;700&display=swap"
         />
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: '{"@context": "https://schema.org", "@type": "Organization", "name": "Mon-Pad", "url": "https://www.monpad.net", "logo": "https://www.monpad.net/Pad.png", "description": "Fair-launch token platform on Monad blockchain", "sameAs": ["https://t.me/MonshiUtilitySupport", "https://t.me/monpadlounge"]}' }}
+          dangerouslySetInnerHTML={{ __html: '{"@context": "https://schema.org", "@type": "Organization", "name": "Monpad", "url": "https://www.monpad.net", "logo": "https://www.monpad.net/meshy/monshi-mascot.png", "description": "DEX launches on Monad. Every trade burns Monshi.", "sameAs": ["https://t.me/MonshiUtilitySupport", "https://t.me/monpadlounge"]}' }}
         />
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: '{"@context": "https://schema.org", "@type": "WebSite", "name": "Mon-Pad", "url": "https://www.monpad.net", "potentialAction": {"@type": "SearchAction", "target": "https://www.monpad.net/swap?q={search_term_string}", "query-input": "required name=search_term_string"}}' }}
+          dangerouslySetInnerHTML={{ __html: '{"@context": "https://schema.org", "@type": "WebSite", "name": "Monpad", "url": "https://www.monpad.net", "potentialAction": {"@type": "SearchAction", "target": "https://www.monpad.net/?q={search_term_string}", "query-input": "required name=search_term_string"}}' }}
         />
       </Head>
       <body>

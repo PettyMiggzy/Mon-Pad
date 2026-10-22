@@ -24,17 +24,18 @@ Read this file first. Then act. Do not invent addresses — use `/api/v1/spec`.
 
 ---
 
-## Protocol fee stack (every buy & sell)
+## LP fee split (buys & sells — off LP fees)
 
-Independent of creator tax:
+| Share | BPS | Destination |
+|---|---|---|
+| **Creator** | 7000 (70%) | Creator |
+| **Platform** | 1000 (10%) | `0x5899…5914` — MON/quote only on sells |
+| **Burn MONSHI** | 1000 (10%) | Buyback-and-burn Monchi |
+| **Burn project token** | 1000 (10%) | Launched token → `dEaD` |
 
-1. **10%** burn traded token → `dEaD`
-2. **10%** MON → MONSHI buyback-and-burn (accrued, pull-claim)
-3. **10%** MON → platform wallet (quote-only; never bags on sells)
-
-Creator-set tax is **extra** and stays creator-controlled. Optional **dev bot**: atomic first buy in `createLaunch` (same tx as deploy) so the creator is not sniped.
-
-Source of truth: `lib/fees.ts` + `hardhat-test/contracts/v3/MonPadCurveV3.sol`.
+No “graduation target” in the product story — liquidity lives in the DEX/LP.  
+Optional **dev bot**: atomic first buy in `createLaunch`.  
+Source of truth: `lib/fees.ts`.
 
 ---
 

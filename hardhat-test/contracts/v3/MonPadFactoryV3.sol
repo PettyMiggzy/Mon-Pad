@@ -87,17 +87,17 @@ contract MonPadFactoryV3 {
     uint256 public monshiDiscountThreshold = 1_000_000 ether; // hold >= this MONSHI
     uint16  public monshiDiscountBps = 5000;                  // 50% off creation fee
 
-    // Fee splits (bps). buyFee* + MAX_TRADE_TAX + protocol skims <= 10000.
-    // Monpad protocol (Minta-port spec): on every trade, curve also applies
-    //   10% burn traded token + 10% MONSHI buyback-burn + 10% platform (quote-only on sells).
-    // Creator tax (FeeConfig) stays independent / creator-set.
-    // Sale-layer creator share target: 80% (CREATOR_SALE_SHARE_BPS in frontend fees.ts).
-    uint16 public buyFeeCreatorBps = 100;     // base creator fee (creator tax stacks on top)
-    uint16 public buyFeeBufferBps = 0;        // retired — platform taken via protocolPlatformBps on curve
-    uint16 public sellFeeCreatorBps = 50;     // base creator fee on sells
-    uint16 public sellFeeStakingBps = 1000;   // 10% -> MONSHI buyback-and-burn (quote)
-    uint16 public sellFeePlatformBps = 1000;  // 10% platform (MON only — never project tokens)
-    uint16 public protocolBurnTokenBps = 1000; // 10% burn traded token (curve-enforced)
+    // Of LP fees on buys & sells (product truth):
+    //   70% creator · 10% platform · 10% burn MONSHI · 10% burn project token
+    // Platform always in MON/quote on sells (never project tokens).
+    // Curve still skims protocol legs off trade notional until a dedicated LP-fee
+    // router lands; creator share of the fee layer is 70% in fees.ts / API / UI.
+    uint16 public buyFeeCreatorBps = 100;     // base creator cut (stacks with tax)
+    uint16 public buyFeeBufferBps = 0;
+    uint16 public sellFeeCreatorBps = 100;
+    uint16 public sellFeeStakingBps = 1000;   // 10% → MONSHI buyback-and-burn
+    uint16 public sellFeePlatformBps = 1000;  // 10% platform (MON only)
+    uint16 public protocolBurnTokenBps = 1000; // 10% burn launched project token
     uint16 public constant MAX_TRADE_TAX_BPS = 1000; // mirror of curve cap (headroom reserve)
     /// @dev Buyback skim on the creator's per-trade tax ABOVE the 2% free threshold:
     ///      the MONSHI buyback takes `taxSkimRateBps`/10000 of the excess tax (default 25%).

@@ -3,12 +3,6 @@ import Image from 'next/image';
 import { motion } from 'framer-motion';
 import type { TokenSummary } from '../lib/api';
 import { fmtMon } from '../lib/format';
-import { V3_GRADUATION_TARGET_MON } from '../lib/constants';
-
-// V3 graduation target in wei. The old graduationProgress() used the stale 425k V2
-// constant, so V3 cards (which graduate far lower) showed a wildly wrong %. Drive
-// progress from the live V3 target — the same value chainV3 uses.
-const GRAD_TARGET_WEI = V3_GRADUATION_TARGET_MON * 10n ** 18n;
 
 type Props = {
   token: TokenSummary;
@@ -66,15 +60,6 @@ function Sparkline({ points }: { points: number[] }) {
 }
 
 export default function TokenCard({ token, index = 0, dense = false }: Props) {
-  // Bonding-curve progress 0..1, against the live V3 graduation target.
-  const raisedWei = (() => { try { return BigInt(token.monRaisedNet); } catch { return 0n; } })();
-  const progressRaw = GRAD_TARGET_WEI > 0n ? Number((raisedWei * 10000n) / GRAD_TARGET_WEI) / 10000 : 0;
-  const progress = Math.max(0, Math.min(1, progressRaw));
-  const progressPct = progress * 100;
-  // Clamp visual bar at 99% pre-graduation so the "NEAR GRAD" pill carries the energy.
-  const barPct = token.graduated ? 100 : Math.min(99, progressPct);
-  const nearGrad = !token.graduated && progressPct >= 95;
-
   const placeholderLetter = (token.symbol || '?').slice(0, 1).toUpperCase();
 
   return (
@@ -153,12 +138,12 @@ export default function TokenCard({ token, index = 0, dense = false }: Props) {
                 fontWeight: 700,
                 letterSpacing: 0.5,
                 background: 'rgba(0, 0, 0, 0.7)',
-                color: 'var(--brand, #8B5CF6)',
-                border: '1px solid var(--bd-glow, rgba(168, 85, 247, 0.5))',
+                color: 'var(--cyan, #5EEAD4)',
+                border: '1px solid rgba(94, 234, 212, 0.4)',
                 textTransform: 'uppercase',
               }}
             >
-              Graduated
+              On DEX
             </div>
           )}
         </div>
@@ -243,73 +228,23 @@ export default function TokenCard({ token, index = 0, dense = false }: Props) {
           </span>
         </div>
 
-        {/* Graduation row */}
-        {token.graduated ? (
-          <div
-            style={{
-              fontSize: 11,
-              fontWeight: 600,
-              color: 'var(--brand, #8B5CF6)',
-              textAlign: 'center',
-              padding: '4px 0',
-            }}
-          >
-            🎓 Graduated to LP
-          </div>
-        ) : (
-          <div>
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                fontSize: 10,
-                marginBottom: 4,
-              }}
-            >
-              <span style={{ color: 'var(--fg-muted, rgba(255,255,255,0.6))' }}>
-                {progressPct.toFixed(1)}%
-              </span>
-              {nearGrad && (
-                <span
-                  style={{
-                    padding: '1px 6px',
-                    borderRadius: 999,
-                    fontSize: 9,
-                    fontWeight: 700,
-                    letterSpacing: 0.5,
-                    background: 'var(--bd-glow, rgba(168, 85, 247, 0.5))',
-                    color: '#fff',
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  Near Grad
-                </span>
-              )}
-            </div>
-            <div
-              style={{
-                position: 'relative',
-                height: 4,
-                borderRadius: 999,
-                background: 'var(--bd, rgba(139, 92, 246, 0.15))',
-                overflow: 'hidden',
-              }}
-            >
-              <div
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  width: `${barPct}%`,
-                  background:
-                    'linear-gradient(90deg, var(--brand, #8B5CF6), var(--bd-glow, rgba(168, 85, 247, 0.5)))',
-                  borderRadius: 999,
-                  transition: 'width 0.4s ease',
-                }}
-              />
-            </div>
-          </div>
-        )}
+        {/* Liquidity / raise — no graduation target in product UX */}
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            fontSize: dense ? 10 : 11,
+            marginTop: 2,
+          }}
+        >
+          <span style={{ color: 'var(--fg-muted, rgba(255,255,255,0.55))' }}>
+            {token.graduated ? 'DEX LP' : 'Liquidity'}
+          </span>
+          <span style={{ color: 'var(--t2, #D8D0F0)', fontWeight: 700, fontFamily: 'var(--mono)' }}>
+            {fmtMon(token.monRaisedNet)} MON
+          </span>
+        </div>
       </motion.div>
     </Link>
   );

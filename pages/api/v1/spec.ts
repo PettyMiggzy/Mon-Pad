@@ -27,12 +27,19 @@ export default function handler(_req: NextApiRequest, res: NextApiResponse) {
       sdk: '@monpad/sdk',
     },
     fees: {
+      source: 'lp_fees',
+      split: {
+        creatorBps: CREATOR_SALE_SHARE_BPS,       // 70%
+        platformBps: PROTOCOL_PLATFORM_BPS,       // 10%
+        burnMonshiBps: PROTOCOL_BURN_MONSHI_BPS,  // 10%
+        burnTokenBps: PROTOCOL_BURN_TOKEN_BPS,    // 10%
+      },
       burnTokenBps: PROTOCOL_BURN_TOKEN_BPS,
       burnMonshiBps: PROTOCOL_BURN_MONSHI_BPS,
       platformBps: PROTOCOL_PLATFORM_BPS,
       creatorSaleShareBps: CREATOR_SALE_SHARE_BPS,
       platformOnSells: 'quote (MON) only — never project tokens',
-      creatorTax: 'independent, creator-set',
+      note: '70% creator / 10% platform / 10% burn MONSHI / 10% burn project token — off LP fees on buys & sells',
     },
     addresses: {
       factory: FACTORY_V3,

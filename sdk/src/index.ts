@@ -27,7 +27,7 @@ export const FEES = {
   burnTokenBps: 1000,
   burnMonshiBps: 1000,
   platformBps: 1000,
-  creatorSaleShareBps: 8000,
+  creatorSaleShareBps: 7000,
   defaultSlippageBps: 200, // 2% — bots welcome; competing fills expected
 } as const;
 
