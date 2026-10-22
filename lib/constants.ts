@@ -3,13 +3,23 @@
 // until mainnet deploy lands — fill via NEXT_PUBLIC_* env vars in .env.local.
 
 import type { Address } from 'viem';
+import { MONPAD_PLATFORM_WALLET } from './fees';
+
+export {
+  MONPAD_PLATFORM_WALLET,
+  PROTOCOL_BURN_TOKEN_BPS,
+  PROTOCOL_BURN_MONSHI_BPS,
+  PROTOCOL_PLATFORM_BPS,
+  CREATOR_SALE_SHARE_BPS,
+  PROTOCOL_TRADE_SKIM_BPS,
+} from './fees';
 
 export const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as const;
 
-// --- Wallets (SPEC §8) ----------------------------------------------------
-export const PLATFORM_WALLET = (process.env.NEXT_PUBLIC_PLATFORM_WALLET ?? ZERO_ADDRESS) as Address;
-export const TREASURY_WALLET = (process.env.NEXT_PUBLIC_TREASURY_WALLET ?? ZERO_ADDRESS) as Address;
-export const BUYBACK_WALLET = (process.env.NEXT_PUBLIC_BUYBACK_WALLET ?? TREASURY_WALLET) as Address; // buyback defaults to treasury per V2.1 spec; split via env when needed
+// --- Wallets (Monpad / Minta-carried platform treasury) --------------------
+export const PLATFORM_WALLET = (process.env.NEXT_PUBLIC_PLATFORM_WALLET ?? MONPAD_PLATFORM_WALLET) as Address;
+export const TREASURY_WALLET = (process.env.NEXT_PUBLIC_TREASURY_WALLET ?? MONPAD_PLATFORM_WALLET) as Address;
+export const BUYBACK_WALLET = (process.env.NEXT_PUBLIC_BUYBACK_WALLET ?? TREASURY_WALLET) as Address;
 export const MONSHI_TOKEN = '0xB744F5CDb792d8187640214C4A1c9aCE29af7777' as const;
 export const WMON = '0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A' as const;
 // Official Uniswap V3 NonfungiblePositionManager on Monad — graduated pools land

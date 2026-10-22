@@ -1,0 +1,21 @@
+{
+  "name": "@monpad/mcp",
+  "version": "0.1.0",
+  "description": "MCP server for Monpad — AI agents can discover, launch, buy, sell, and read Monchi burns",
+  "type": "module",
+  "bin": {
+    "monpad-mcp": "./server.mjs"
+  },
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "viem": "^2.21.40",
+    "zod": "^3.24.0"
+  },
+  "license": "MIT"
+}

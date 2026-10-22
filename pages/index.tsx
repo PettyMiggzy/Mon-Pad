@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { motion } from 'framer-motion';
 import LiveTicker from '@/components/LiveTicker';
 import PromoBanner from '@/components/PromoBanner';
+import MonshiBurnCounter from '@/components/MonshiBurnCounter';
 import TokenGrid from '@/components/TokenGrid';
 import HomeRail from '@/components/HomeRail';
 import { type TokenSummary } from '@/lib/api';
@@ -111,13 +112,13 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Mon-Pad — Fair Launch on Monad</title>
-        <meta key="description" name="description" content="Fair token launches on Monad. 500 MON to launch, 260k to graduate. Creators earn fees on every trade." />
-        <meta key="og:title" property="og:title" content="Mon-Pad — Fair Launch on Monad" />
-        <meta key="og:description" property="og:description" content="Fair token launches on Monad. 500 MON to launch, 260k to graduate. Creators earn fees on every trade." />
+        <title>Monpad — Fair Launch on Monad · powered by Monchi</title>
+        <meta key="description" name="description" content="Monpad on Monad. Every trade burns Monchi. Creators earn fees forever. Live burn counter." />
+        <meta key="og:title" property="og:title" content="Monpad — Fair Launch on Monad" />
+        <meta key="og:description" property="og:description" content="Monpad on Monad. Every trade burns Monchi. Creators earn fees forever." />
         <meta key="og:url" property="og:url" content={canonical} />
-        <meta key="twitter:title" name="twitter:title" content="Mon-Pad — Fair Launch on Monad" />
-        <meta key="twitter:description" name="twitter:description" content="Fair token launches on Monad. 500 MON to launch, 260k to graduate. Creators earn fees on every trade." />
+        <meta key="twitter:title" name="twitter:title" content="Monpad — Fair Launch on Monad" />
+        <meta key="twitter:description" name="twitter:description" content="Monpad on Monad. Every trade burns Monchi. Creators earn fees forever." />
         <link key="canonical" rel="canonical" href={canonical} />
       </Head>
       {/* Live trade ticker at the very top */}
@@ -126,6 +127,11 @@ export default function Home() {
       {/* Promo banner */}
       <div className="max-w-7xl mx-auto px-4">
         <PromoBanner />
+      </div>
+
+      {/* Live Monchi burn FOMO counter */}
+      <div style={{ paddingTop: 12 }}>
+        <MonshiBurnCounter />
       </div>
 
       {/* Compact app header — sell the creator upside (FOMO to launch) */}
@@ -146,10 +152,10 @@ export default function Home() {
       >
         <div style={{ minWidth: 0 }}>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--p1, #ECE9F8)', margin: 0, lineHeight: 1.2 }}>
-            Launch a coin. Earn forever.
+            Monpad · launch on Monad
           </h1>
           <p style={{ marginTop: 4, fontSize: 13, color: 'var(--p2, rgba(220, 215, 240, 0.7))' }}>
-            Pocket fees on every trade + <span style={{ color: '#4ADE80', fontWeight: 700 }}>~$800</span> when your coin graduates. Liquidity locks itself.
+            Every buy &amp; sell burns Monchi. Creators keep their tax. Platform cut in MON — never your bags.
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>

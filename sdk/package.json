@@ -1,0 +1,17 @@
+{
+  "name": "@monpad/sdk",
+  "version": "0.1.0",
+  "description": "Monpad trader/bot SDK for Monad — sniper-friendly, AI/MCP-ready",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "peerDependencies": {
+    "viem": "^2.21.0"
+  },
+  "license": "MIT"
+}

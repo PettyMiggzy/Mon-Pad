@@ -182,17 +182,46 @@ export default function CreatePage() {
         <Field label="Website" value={website} onChange={setWebsite} placeholder="https://..." />
       </div>
 
+      {/* Dev bot = Minta-style atomic first buy in the same launch tx (so you aren't sniped on your own coin). */}
+      <div style={{ marginTop: 24, padding: 16, background: 'rgba(236,72,153,0.06)', border: '1px solid rgba(236,72,153,0.28)', borderRadius: 8 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4, color: 'var(--pink, #EC4899)' }}>Dev bot on deploy</div>
+        <div style={{ fontSize: 11, color: '#aaa', marginBottom: 10, lineHeight: 1.45 }}>
+          Same pattern as Minta: your first buy lands <strong style={{ color: '#ddd' }}>in the launch transaction</strong>, before anyone else can trade.
+          Fee-free + tax-free, capped at {V3_MAX_DEV_BUY_BPS / 100}% of supply. External bots &amp; snipers are still welcome after that — Monpad has no anti-sniper gate.
+        </div>
+        <Field label="Dev buy (MON)" value={devBuy} onChange={setDevBuy} placeholder="0" />
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+          {[
+            { label: 'Skip', v: '' },
+            { label: '0.5 MON', v: '0.5' },
+            { label: '1 MON', v: '1' },
+            { label: '5 MON', v: '5' },
+          ].map((p) => (
+            <button
+              key={p.label}
+              type="button"
+              onClick={() => setDevBuy(p.v)}
+              style={{
+                padding: '5px 10px', borderRadius: 999, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                border: `1px solid ${devBuy === p.v ? 'rgba(236,72,153,0.7)' : 'rgba(255,255,255,0.1)'}`,
+                background: devBuy === p.v ? 'rgba(236,72,153,0.2)' : 'transparent',
+                color: devBuy === p.v ? '#fff' : '#aaa',
+              }}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Creator tokenomics */}
       <div style={{ marginTop: 24, padding: 16, background: 'rgba(167,139,250,0.05)', border: '1px solid rgba(167,139,250,0.2)', borderRadius: 8 }}>
         <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Your tokenomics (optional, editable later)</div>
-        <div style={{ fontSize: 11, color: '#888', marginBottom: 10 }}>Route your own dev fee, and/or add a per-trade tax that everyone pays. Both go to buyback-burning your token or its graduation LP — never to anyone else.</div>
-        <PctRow label="Dev fee → buyback &amp; burn" value={cfBurnPct} onChange={setCfBurnPct} max={100} />
-        <PctRow label="Dev fee → liquidity (at graduation)" value={cfLpPct} onChange={setCfLpPct} max={100} />
+        <div style={{ fontSize: 11, color: '#888', marginBottom: 10 }}>Route your own creator fee, and/or add a per-trade tax that everyone pays. Both go to buyback-burning your token or its graduation LP — never to anyone else. Independent of the protocol Monchi burn stack.</div>
+        <PctRow label="Creator fee → buyback &amp; burn" value={cfBurnPct} onChange={setCfBurnPct} max={100} />
+        <PctRow label="Creator fee → liquidity (at graduation)" value={cfLpPct} onChange={setCfLpPct} max={100} />
         <PctRow label="Per-trade tax → buyback &amp; burn" value={taxBurnPct} onChange={setTaxBurnPct} max={V3_MAX_TRADE_TAX_BPS / 100} />
         <PctRow label="Per-trade tax → liquidity" value={taxLpPct} onChange={setTaxLpPct} max={V3_MAX_TRADE_TAX_BPS / 100} />
-        <div style={{ marginTop: 10 }}>
-          <Field label={`Optional dev buy (MON, ≤ ${V3_MAX_DEV_BUY_BPS / 100}% of supply, fee-free)`} value={devBuy} onChange={setDevBuy} placeholder="0" />
-        </div>
       </div>
 
       <div style={{ marginTop: 16, padding: 16, background: 'rgba(255,255,255,0.03)', borderRadius: 8 }}>
@@ -205,7 +234,7 @@ export default function CreatePage() {
       </div>
 
       <button onClick={launch} disabled={!address || !name || !symbol || tx.status === 'pending' || factoryRetired} style={{ width: '100%', marginTop: 16, padding: 14, background: 'var(--brand, #A78BFA)', color: '#000', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 16, cursor: (!address || !name || !symbol || factoryRetired) ? 'not-allowed' : 'pointer', opacity: (!address || !name || !symbol || factoryRetired) ? 0.5 : 1 }}>
-        {!address ? 'Connect wallet' : factoryRetired ? 'Unavailable (misconfigured factory)' : `Launch (${V3_CREATION_FEE_MON} MON${devBuy && Number(devBuy) > 0 ? ` + ${devBuy} dev buy` : ''})`}
+        {!address ? 'Connect wallet' : factoryRetired ? 'Unavailable (misconfigured factory)' : `Launch (${V3_CREATION_FEE_MON} MON${devBuy && Number(devBuy) > 0 ? ` + ${devBuy} MON dev bot` : ''})`}
       </button>
       <StatusPill state={tx} />
     </div>
