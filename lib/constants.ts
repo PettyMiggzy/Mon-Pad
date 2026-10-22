@@ -144,7 +144,14 @@ export const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL || '';
 // token poll only runs against a dedicated indexer. Without one set, the app
 // reads everything on-chain and the ticker stays quiet (no 404 spam).
 export const INDEXER_URL = process.env.NEXT_PUBLIC_INDEXER_URL || '';
-export const MOCK_MODE = process.env.NEXT_PUBLIC_MOCK_MODE === '1';
+// Auto-demo when factory is unset so UI review isn't an empty board.
+// Force off with NEXT_PUBLIC_MOCK_MODE=0 once FACTORY_V3 is live.
+const _factoryEnv = (process.env.NEXT_PUBLIC_FACTORY_V3 ?? ZERO_ADDRESS).toLowerCase();
+const _mockOff = process.env.NEXT_PUBLIC_MOCK_MODE === '0' || process.env.NEXT_PUBLIC_MOCK_MODE === 'false';
+const _mockOn = process.env.NEXT_PUBLIC_MOCK_MODE === '1' || process.env.NEXT_PUBLIC_MOCK_MODE === 'true';
+export const MOCK_MODE = _mockOff
+  ? false
+  : _mockOn || _factoryEnv === ZERO_ADDRESS.toLowerCase() || !_factoryEnv || _factoryEnv === '0x';
 
 // --- Bonding curve constants (mirrors MonPadCurveV2.sol lines 142-144) ---
 export const CURVE = {

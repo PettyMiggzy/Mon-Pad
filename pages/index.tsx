@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import LiveTicker from '@/components/LiveTicker';
 import MonshiBurnCounter from '@/components/MonshiBurnCounter';
@@ -6,10 +7,14 @@ import TokenGrid from '@/components/TokenGrid';
 import HomeRail from '@/components/HomeRail';
 import { type TokenSummary } from '@/lib/api';
 import { listV3Tokens, getV3CardStats } from '@/lib/chainV3';
-import { v3Configured } from '@/lib/constants';
+import { MOCK_MODE, v3Configured } from '@/lib/constants';
+import { mockTokens } from '@/lib/mocks';
+import { DEMO_BOARD, demoBannerCopy, pickCrown } from '@/lib/demo';
 import { fmtMon } from '@/lib/format';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
+
+const HeroConsole = dynamic(() => import('@/components/HeroConsole'), { ssr: false });
 
 type FilterKey = 'all' | 'trending' | 'new' | 'hot';
 
@@ -27,6 +32,7 @@ export default function Home() {
   const [query, setQuery] = useState('');
   const [tokens, setTokens] = useState<TokenSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [demo, setDemo] = useState(DEMO_BOARD || MOCK_MODE);
   const gridRef = useRef<HTMLDivElement | null>(null);
   const configured = v3Configured();
 
@@ -36,8 +42,29 @@ export default function Home() {
 
     (async () => {
       try {
+        if (DEMO_BOARD || MOCK_MODE) {
+          const mapped = await mockTokens(filter === 'all' ? undefined : filter);
+          if (cancelled) return;
+          setDemo(true);
+          setTokens(mapped);
+          setLoading(false);
+          return;
+        }
+
         const list = await listV3Tokens(120);
         if (cancelled) return;
+
+        // Factory live but empty → still show demo so UI isn't blank during cutover.
+        if (!list.length) {
+          const mapped = await mockTokens(filter === 'all' ? undefined : filter);
+          if (cancelled) return;
+          setDemo(true);
+          setTokens(mapped);
+          setLoading(false);
+          return;
+        }
+
+        setDemo(false);
         let rows = [...list];
         if (filter === 'trending' || filter === 'hot') {
           rows.sort((a, b) => b.progress - a.progress);
@@ -102,7 +129,9 @@ export default function Home() {
         } catch { /* optional */ }
       } catch {
         if (!cancelled) {
-          setTokens([]);
+          const mapped = await mockTokens().catch(() => []);
+          setDemo(true);
+          setTokens(mapped);
           setLoading(false);
         }
       }
@@ -124,18 +153,7 @@ export default function Home() {
     );
   }, [tokens, query]);
 
-  const crown = useMemo(() => {
-    if (!tokens.length) return null;
-    return [...tokens].sort((a, b) => {
-      try {
-        const A = BigInt(a.volume24hMon || a.monRaisedNet || '0');
-        const B = BigInt(b.volume24hMon || b.monRaisedNet || '0');
-        return A > B ? -1 : A < B ? 1 : 0;
-      } catch {
-        return 0;
-      }
-    })[0];
-  }, [tokens]);
+  const crown = useMemo(() => pickCrown(tokens), [tokens]);
 
   return (
     <>
@@ -153,6 +171,12 @@ export default function Home() {
         <link key="canonical" rel="canonical" href={canonical} />
       </Head>
 
+      {demo && (
+        <div className="mp-demo-banner" role="status">
+          {demoBannerCopy()}
+        </div>
+      )}
+
       {/* Hero — one composition: brand + line + CTA + Monshi */}
       <section className="mp-hero" aria-label="Monpad">
         <div className="mp-hero-glow" aria-hidden />
@@ -162,7 +186,7 @@ export default function Home() {
             <h1 className="mp-hero-title">
               Mon<span className="mp-brand-accent">pad</span>
             </h1>
-            <p className="mp-hero-sub">Fair launches on Monad. Every trade burns Monshi.</p>
+            <p className="mp-hero-sub">You&apos;re smart. Drive.</p>
             <div className="mp-hero-actions">
               <Link href="/create" className="mp-create-btn">
                 Launch a token
@@ -172,15 +196,7 @@ export default function Home() {
               </a>
             </div>
           </div>
-          <div className="mp-hero-mascot-wrap">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/meshy/monshi-mascot.png"
-              alt="Monshi"
-              className="mp-hero-mascot"
-              draggable={false}
-            />
-          </div>
+          <HeroConsole />
         </div>
       </section>
 
@@ -198,7 +214,7 @@ export default function Home() {
         ) : null}
       </div>
 
-      {!configured && (
+      {!configured && !demo && (
         <div className="mp-shell" style={{ paddingBottom: 8 }}>
           <div className="mp-warn">Board is empty until the next factory goes live.</div>
         </div>

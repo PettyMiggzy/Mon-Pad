@@ -4,9 +4,11 @@ import { ConnectButton, useConnectModal } from '@rainbow-me/rainbowkit';
 import { useAccount, useSwitchChain } from 'wagmi';
 import { Home, Plus, ArrowLeftRight, User, Shield, FileText, Trophy, Bot } from 'lucide-react';
 import { isAdmin, MONAD_CHAIN_ID } from '@/lib/constants';
+import dynamic from 'next/dynamic';
 import { AddressGuard } from './AddressGuard';
-import MonshiMark from './MonshiMark';
 import type { ReactNode } from 'react';
+
+const HeaderMonshi = dynamic(() => import('./HeaderMonshi'), { ssr: false });
 
 const PRIMARY_NAV = [
   { href: '/', label: 'Home', icon: Home, desktopOnly: false },
@@ -73,31 +75,29 @@ export function Layout({ children }: { children: ReactNode }) {
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <AddressGuard />
       <WrongChainBar />
-      <header className="mp-topbar">
-        <div className="mp-topbar-inner">
-          <Link href="/" className="mp-brand" aria-label="Monpad home">
-            <MonshiMark size={42} spin />
-            <span className="mp-brand-word">
-              Mon<span className="mp-brand-accent">pad</span>
-            </span>
-          </Link>
-          <nav className="mp-desktop-nav" style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            {PRIMARY_NAV.map((n) => (
-              <NavLink key={n.href} href={n.href} active={router.pathname === n.href}>
-                {n.label}
-              </NavLink>
-            ))}
-            {address && (
-              <NavLink href={`/profile/${address}`} active={onProfile}>
-                Profile
-              </NavLink>
-            )}
-            {admin && (
-              <NavLink href="/admin" active={onAdmin}>
-                <Shield size={14} /> Admin
-              </NavLink>
-            )}
-          </nav>
+      <header className="nx-bar">
+        <HeaderMonshi />
+        <Link href="/" className="nx-word" aria-label="Monpad home">
+          MON<span>PAD</span>
+        </Link>
+        <nav className="nx-nav mp-desktop-nav">
+          {PRIMARY_NAV.map((n) => (
+            <NavLink key={n.href} href={n.href} active={router.pathname === n.href}>
+              {n.label}
+            </NavLink>
+          ))}
+          {address && (
+            <NavLink href={`/profile/${address}`} active={onProfile}>
+              Profile
+            </NavLink>
+          )}
+          {admin && (
+            <NavLink href="/admin" active={onAdmin}>
+              <Shield size={14} /> Admin
+            </NavLink>
+          )}
+        </nav>
+        <div className="nx-wallet">
           <ConnectButton chainStatus="icon" showBalance={{ smallScreen: false, largeScreen: true }} />
         </div>
       </header>

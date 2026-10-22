@@ -10,6 +10,7 @@ import { curveV3Abi, tokenAbi } from '@/lib/abis';
 import V3TokenActivity from '@/components/V3TokenActivity';
 import MonshiBurnCounter from '@/components/MonshiBurnCounter';
 import { getV3Trades, type V3Trade } from '@/lib/chainV3';
+import { getDemoToken } from '@/lib/mocks';
 import {
   MONAD_EXPLORER, V3_GRADUATION_TARGET_MON,
   V3_BUY_FEE_CREATOR_BPS, V3_BUY_FEE_BUFFER_BPS,
@@ -89,8 +90,9 @@ export default function TokenPage() {
     ] : [],
     query: { enabled: !!addr },
   }) as any);
-  const name = (meta.data?.[0]?.result as string) || 'Token';
-  const symbol = (meta.data?.[1]?.result as string) || '';
+  const demoTok = getDemoToken(addr);
+  const name = demoTok?.name || (meta.data?.[0]?.result as string) || 'Token';
+  const symbol = demoTok?.symbol || (meta.data?.[1]?.result as string) || '';
 
   const [tokenMeta, setTokenMeta] = useState<{ image_url?: string; description?: string; twitter?: string; telegram?: string; website?: string; created_at?: string } | null>(null);
   useEffect(() => {
@@ -198,9 +200,9 @@ export default function TokenPage() {
         transition={{ duration: 0.45, ease: 'easeOut' }}
       >
         <div className="td-hero-main">
-          {tokenMeta?.image_url ? (
+          {(tokenMeta?.image_url || demoTok?.imageUrl) ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={tokenMeta.image_url} alt="" className="td-avatar" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+            <img src={tokenMeta?.image_url || demoTok?.imageUrl} alt="" className="td-avatar" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
           ) : (
             <div className="td-avatar td-avatar-fallback">{letter}</div>
           )}

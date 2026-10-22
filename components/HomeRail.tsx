@@ -5,6 +5,9 @@ import { motion } from 'framer-motion';
 import { Trophy, GraduationCap, Flame } from 'lucide-react';
 import { type TokenSummary } from '../lib/api';
 import { listV3Tokens } from '../lib/chainV3';
+import { MOCK_MODE } from '../lib/constants';
+import { DEMO_BOARD } from '../lib/demo';
+import { mockTokens } from '../lib/mocks';
 import { fmtMon } from '../lib/format';
 
 export type HomeRailVariant = 'top-earners' | 'top-graduated' | 'hottest-24h';
@@ -47,8 +50,28 @@ export default function HomeRail({ variant, limit = 8 }: Props) {
 
     (async () => {
       try {
+        if (DEMO_BOARD || MOCK_MODE) {
+          const demo = await mockTokens(variant === 'hottest-24h' ? 'trending' : variant === 'top-graduated' ? 'graduated' : undefined);
+          let picked = [...demo];
+          if (variant === 'hottest-24h') picked.sort((a, b) => cmpBigDesc(a.volume24hMon, b.volume24hMon));
+          else if (variant === 'top-graduated') picked = picked.filter((t) => t.graduated);
+          else picked.sort((a, b) => cmpBigDesc(a.monRaisedNet, b.monRaisedNet));
+          if (cancelled) return;
+          setRows(picked.slice(0, limit));
+          return;
+        }
+
         // All rails read straight from chain — no backend dependency, no 404s.
         const list = await listV3Tokens(60);
+        if (!list.length) {
+          const demo = await mockTokens();
+          let picked = [...demo];
+          if (variant === 'hottest-24h') picked.sort((a, b) => cmpBigDesc(a.volume24hMon, b.volume24hMon));
+          else picked.sort((a, b) => cmpBigDesc(a.monRaisedNet, b.monRaisedNet));
+          if (cancelled) return;
+          setRows(picked.slice(0, limit));
+          return;
+        }
         let picked = list;
         if (variant === 'top-graduated') {
           picked = list.filter((t) => t.graduated).sort((a, b) => cmpBigDesc(a.priceWeiPerToken, b.priceWeiPerToken));

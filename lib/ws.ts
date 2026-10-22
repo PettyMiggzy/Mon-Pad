@@ -1,5 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { MOCK_MODE, INDEXER_URL } from './constants';
+import { DEMO_BOARD } from './demo';
+import { SAMPLE } from './mocks';
 import type { Trade, TokenSummary } from './api';
 
 type WsEvent =
@@ -8,30 +10,21 @@ type WsEvent =
 
 const WS_URL = INDEXER_URL ? INDEXER_URL.replace(/^http/, 'ws') + '/ws' : '';
 
-// Pinned addresses keyed off symbol, matching SAMPLE[0..5] in lib/mocks.ts (hexPad(i+1, 40))
-const MOCK_TOKEN_MAP: Record<string, string> = {
-  DOGE2: '0x' + (1).toString(16).padStart(40, '0'),
-  MSHIB: '0x' + (2).toString(16).padStart(40, '0'),
-  PAD:   '0x' + (3).toString(16).padStart(40, '0'),
-  VLT:   '0x' + (4).toString(16).padStart(40, '0'),
-  LAMBO: '0x' + (5).toString(16).padStart(40, '0'),
-  DUST:  '0x' + (6).toString(16).padStart(40, '0'),
-};
+const useSyntheticFeed = () => MOCK_MODE || DEMO_BOARD;
 
-// MOCK_MODE synthetic trade emitter
+// MOCK / demo synthetic trade emitter — cycles the seeded board roster.
 function syntheticTrade(): Trade {
-  const symbols = ['DOGE2', 'MSHIB', 'PAD', 'VLT', 'LAMBO', 'DUST'];
-  const sym = symbols[Math.floor(Math.random() * symbols.length)];
+  const tok = SAMPLE[Math.floor(Math.random() * Math.min(SAMPLE.length, 12))];
   return {
     txHash: '0x' + Math.random().toString(16).slice(2).padStart(64, '0'),
     ts: Math.floor(Date.now() / 1000),
     side: Math.random() > 0.4 ? 'buy' : 'sell',
     wallet: '0x' + Math.random().toString(16).slice(2).padStart(40, '0'),
-    tokenAddress: MOCK_TOKEN_MAP[sym],
+    tokenAddress: tok.address,
     monAmount: String(BigInt(Math.floor(Math.random() * 500 + 10)) * 10n ** 18n),
     tokenAmount: String(BigInt(Math.floor(Math.random() * 100000 + 100)) * 10n ** 18n),
     priceMon: '0.0001',
-    tokenSymbol: sym,
+    tokenSymbol: tok.symbol,
   };
 }
 
@@ -43,10 +36,12 @@ export function useTradeFeed(maxItems = 30): Trade[] {
   const [trades, setTrades] = useState<Trade[]>([]);
 
   useEffect(() => {
-    if (MOCK_MODE) {
+    if (useSyntheticFeed()) {
+      // Seed a full strip immediately so the ticker isn't empty for 2s.
+      setTrades(Array.from({ length: Math.min(maxItems, 14) }, () => syntheticTrade()));
       const interval = setInterval(() => {
         setTrades((prev) => [syntheticTrade(), ...prev].slice(0, maxItems));
-      }, 2000 + Math.random() * 2000);
+      }, 1600 + Math.random() * 1400);
       return () => clearInterval(interval);
     }
 

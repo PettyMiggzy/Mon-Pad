@@ -8,6 +8,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Address } from 'viem';
 import { getV3Trades, tradesToCandles, getV3Holders, type V3Trade, type V3Holder } from '@/lib/chainV3';
 import { MONAD_EXPLORER } from '@/lib/constants';
+import { isDemoAddress } from '@/lib/demo';
+import { mockV3Trades } from '@/lib/mocks';
 
 const TokenChart3D = dynamic(() => import('@/components/TokenChart3D'), {
   ssr: false,
@@ -51,6 +53,10 @@ export default function V3TokenActivity({ curve, symbol, token, refreshKey }: { 
   // Lazy-load holders only when that panel is opened (the scan is heavier).
   useEffect(() => {
     if (lowerTab !== 'holders' || !token) return;
+    if (isDemoAddress(token)) {
+      setHolders([]);
+      return;
+    }
     let cancelled = false;
     setHolders(null);
     getV3Holders(token, curve ? [curve] : [])
@@ -60,6 +66,11 @@ export default function V3TokenActivity({ curve, symbol, token, refreshKey }: { 
   }, [lowerTab, token, curve, refreshKey]);
 
   useEffect(() => {
+    if (token && isDemoAddress(token)) {
+      setTrades(mockV3Trades(token));
+      setLoading(false);
+      return;
+    }
     if (!curve) return;
     let cancelled = false;
     let timer: any;
@@ -75,7 +86,7 @@ export default function V3TokenActivity({ curve, symbol, token, refreshKey }: { 
     timer = setInterval(load, 15000); // poll for fresh trades (paused when tab hidden)
     return () => { cancelled = true; clearInterval(timer); };
     // refreshKey bumps after a trade → reload immediately instead of waiting for the poll.
-  }, [curve, refreshKey]);
+  }, [curve, refreshKey, token]);
 
   const candles = useMemo(() => tradesToCandles(trades, tf), [trades, tf]);
 
