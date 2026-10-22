@@ -180,3 +180,27 @@ on conflict (id) do nothing;
 create policy "public read images" on storage.objects
   for select using (bucket_id = 'images');
 -- Uploads happen server-side via the service role (POST /api/upload).
+
+-- 4e) Launch-by-chat + living coins ---------------------------------------------
+-- ⚠️ MIGRATION: run in the Supabase SQL editor before deploying the launch agent.
+create table if not exists launch_characters (
+  id             uuid primary key default gen_random_uuid(),
+  wallet         text not null,
+  token          text,                         -- token address once launched/linked
+  source_image   text not null,                -- public https image the 3D model is built from
+  stage          text not null default 'model',-- model | rig | ready | failed
+  model_task     text,                         -- Meshy image-to-3d task id
+  rig_task       text,                         -- Meshy rigging task id
+  glb_url        text,                         -- our own stored copy (Meshy links expire)
+  rigged         boolean not null default false,
+  credits        bigint not null default 0,    -- Monpad credits charged to the user
+  meshy_credits  int not null default 0,       -- provider credits we spent (for real-cost tracking)
+  refunded       boolean not null default false,
+  error          text,
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now()
+);
+create index if not exists launch_characters_wallet_idx on launch_characters (wallet, created_at desc);
+create index if not exists launch_characters_token_idx on launch_characters (token);
+alter table launch_characters enable row level security;
+-- no public policies: server-only (service role)

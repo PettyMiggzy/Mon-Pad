@@ -85,6 +85,7 @@ export function Layout({ children }: { children: ReactNode }) {
             <Link href="/docs" className={router.pathname === '/docs' ? 'on' : ''}>
               Docs
             </Link>
+            <Link href="/chat" className={router.pathname === '/chat' ? 'on' : ''}>Chat</Link>
             <Link href="/docs#agents">Agents</Link>
             <Link href="/how-it-works">How it works</Link>
             {admin && <Link href="/admin">Admin</Link>}

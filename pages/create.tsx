@@ -1,6 +1,7 @@
 import { useState, useEffect, type ChangeEvent } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/router';
+import { postJson, studioSig } from '@/lib/launchClient';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt, usePublicClient, useSignMessage } from 'wagmi';
 import { parseEther, decodeEventLog, type Address } from 'viem';
 import { factoryV3Abi } from '@/lib/abis';
@@ -56,6 +57,20 @@ export default function CreatePage() {
   const factoryRetired = factoryIsSuperseded();
   const toast = useToast();
 
+  // Prefill from a Monshi chat draft: /create?name=&symbol=&desc=&img=&cid=
+  const [characterId, setCharacterId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!router.isReady) return;
+    const q = router.query;
+    const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) || '';
+    if (one(q.name)) setName(one(q.name).slice(0, 32));
+    if (one(q.symbol)) setSymbol(one(q.symbol).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10));
+    if (one(q.desc)) setDescription(one(q.desc).slice(0, 240));
+    if (/^https:\/\//i.test(one(q.img))) setImageUrl(one(q.img));
+    if (/^[0-9a-f-]{36}$/i.test(one(q.cid))) setCharacterId(one(q.cid));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router.isReady]);
+
   useEffect(() => {
     if (!isSuccess || !receipt || tx.status !== 'pending') return;
     let newAddr: string | undefined;
@@ -83,6 +98,15 @@ export default function CreatePage() {
           body: JSON.stringify({ address: dest, name, symbol, imageUrl, description, twitter, telegram, website, signature }),
         }).catch(() => {});
       })();
+      if (characterId && address) {
+        // Attach the 3D character built in chat to the new token.
+        (async () => {
+          try {
+            const sig = await studioSig(address, signMessageAsync as any);
+            await postJson(`/api/v1/launch/character/${characterId}`, { wallet: address, signature: sig, token: dest });
+          } catch { /* the character can be linked later */ }
+        })();
+      }
       setTimeout(() => router.push(`/token/${dest}`), 1200);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

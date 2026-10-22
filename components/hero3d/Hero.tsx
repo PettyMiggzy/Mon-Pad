@@ -92,7 +92,7 @@ export function Hero({ symbols }: Props) {
   return (
     <section className="pad-hero" aria-label="Monpad">
       <div className="pad-hero-stage" ref={stage}>
-        <Poster />
+        {(!ready || reduced || low) && <Poster />}
         {!reduced && !low && (
           <WebGLBoundary fallback={<Poster />}>
             <HeroCanvas symbols={symbols} low={low} live={live} onReady={() => setReady(true)} />

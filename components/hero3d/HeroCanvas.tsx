@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { Suspense, useEffect, useMemo, useRef } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { Text, useFont } from '@react-three/drei';
 import { useAccount } from 'wagmi';
 import type { Group, PointLight } from 'three';
 import { currentMood, heroBus, setHeroMood, type HeroMood } from './bus';
 import { Logo3D } from './Logo3D';
+import { MonshiGLB } from './MonshiGLB';
 import { HERO } from './palette';
 
 useFont.preload('/fonts/RussoOne.json');
@@ -78,7 +79,7 @@ function Orbits({ symbols }: { symbols: string[] }) {
   );
 }
 
-function Stage({ symbols, low }: { symbols: string[]; low: boolean }) {
+function Stage({ symbols, low, onModel }: { symbols: string[]; low: boolean; onModel: () => void }) {
   const logo = useRef<Group>(null);
   const sweep = useRef<PointLight>(null);
 
@@ -92,7 +93,8 @@ function Stage({ symbols, low }: { symbols: string[]; low: boolean }) {
     <>
       <color attach="background" args={[HERO.bg]} />
       <fog attach="fog" args={[HERO.bg, 6.5, 14]} />
-      <ambientLight intensity={0.55} />
+      <ambientLight intensity={0.7} />
+      <directionalLight position={[0.5, 1.6, 4.5]} intensity={1.5} color="#ffffff" />
       <directionalLight position={[3.2, 4.5, 4]} intensity={1.45} color={HERO.lilac} />
       <pointLight position={[-2.2, 1.2, 2.2]} intensity={low ? 0.7 : 2.2} color={HERO.pink} distance={8} />
       <pointLight position={[2.4, 0.4, 1.6]} intensity={low ? 0.4 : 1.1} color={HERO.purple} distance={7} />
@@ -101,6 +103,11 @@ function Stage({ symbols, low }: { symbols: string[]; low: boolean }) {
         <Logo3D />
         <Burst />
         <Orbits symbols={symbols} />
+      </group>
+      <group position={[1.85, -0.62, 0.5]}>
+        <Suspense fallback={null}>
+          <MonshiGLB height={1.75} onLoaded={onModel} />
+        </Suspense>
       </group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[low ? 0 : 0.3, -1.45, -0.6]}>
         <circleGeometry args={[2.4, low ? 24 : 48]} />
@@ -118,6 +125,10 @@ export default function HeroCanvas({ symbols, onReady, low, live }: Props) {
     if (isConnected && !wasConnected.current) setHeroMood('wave', 1600);
     wasConnected.current = isConnected;
   }, [isConnected]);
+
+  useEffect(() => {
+    try { if (localStorage.getItem('debugHero')) (window as any).__setHeroMood = setHeroMood; } catch { /* ignore */ }
+  }, []);
 
   useEffect(() => {
     const onMove = (e: PointerEvent) => {
@@ -146,9 +157,8 @@ export default function HeroCanvas({ symbols, onReady, low, live }: Props) {
       camera={{ position: [0.15, 0.32, 4.9], fov: 34 }}
       gl={{ antialias: !low, alpha: false, powerPreference: 'high-performance' }}
       frameloop={live ? 'always' : 'never'}
-      onCreated={onReady}
     >
-      <Stage symbols={symbols} low={low} />
+      <Stage symbols={symbols} low={low} onModel={onReady} />
     </Canvas>
   );
 }

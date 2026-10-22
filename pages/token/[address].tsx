@@ -5,6 +5,8 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useAccount, useReadContract, useReadContracts, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseEther, formatEther, type Address } from 'viem';
 import { motion } from 'framer-motion';
+import dynamic from 'next/dynamic';
+import { coinMood } from '@/lib/mood';
 import { Flame, Share2, ExternalLink, Copy, Wrench, Zap, Shield, Wallet, Link2 } from 'lucide-react';
 import { curveV3Abi, tokenAbi } from '@/lib/abis';
 import V3TokenActivity from '@/components/V3TokenActivity';
@@ -74,6 +76,11 @@ function fmtNum(n: number, maxFrac = 2): string {
   return n.toLocaleString(undefined, { maximumFractionDigits: Math.max(maxFrac, 4) });
 }
 
+function prefersReducedMotion() {
+  return typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+}
+const LivingCoin = dynamic(() => import('@/components/token/LivingCoin'), { ssr: false });
+
 export default function TokenPage() {
   const router = useRouter();
   const rawAddr = typeof router.query.address === 'string' ? router.query.address : undefined;
@@ -95,6 +102,13 @@ export default function TokenPage() {
   const symbol = demoTok?.symbol || (meta.data?.[1]?.result as string) || '';
 
   const [tokenMeta, setTokenMeta] = useState<{ image_url?: string; description?: string; twitter?: string; telegram?: string; website?: string; created_at?: string } | null>(null);
+  const [livingGlb, setLivingGlb] = useState<string | null>(null);
+  useEffect(() => {
+    if (!addr) return;
+    let cancelled = false;
+    fetch(`/api/v1/launch/living?token=${addr}`).then((r) => (r.ok ? r.json() : null)).then((d) => { if (!cancelled && d?.glb) setLivingGlb(d.glb); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [addr]);
   useEffect(() => {
     if (!addr) return;
     let cancelled = false;
@@ -197,6 +211,11 @@ export default function TokenPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.45, ease: 'easeOut' }}
       >
+        {livingGlb && !prefersReducedMotion() && (
+          <div style={{ marginBottom: 12 }}>
+            <LivingCoin glb={livingGlb} mood={coinMood({ change: stats.change })} height={240} />
+          </div>
+        )}
         <div className="td-hero-main">
           {(tokenMeta?.image_url || demoTok?.imageUrl) ? (
             // eslint-disable-next-line @next/next/no-img-element

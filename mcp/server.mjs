@@ -286,5 +286,81 @@ server.tool(
   },
 );
 
+
+// ── Launch by chat: draft, art, 3D character, and a ready-to-sign launch link ──
+// The wallet signs one daily message (same as Monpad Studio); every paid step is charged in
+// Monpad credits BEFORE it runs and refunded if it fails. Needs MONPAD_PRIVATE_KEY.
+const SITE = (process.env.MONPAD_SITE || 'https://www.monpad.net').replace(/\/$/, '');
+
+async function launchCall(path, body) {
+  const pk = process.env.MONPAD_PRIVATE_KEY || process.env.PRIVATE_KEY;
+  if (!pk) throw new Error('Set MONPAD_PRIVATE_KEY to use paid launch tools, or use ' + SITE + '/chat in a browser.');
+  const acct = pkAccount(pk.startsWith('0x') ? pk : `0x${pk}`);
+  const day = new Date().toISOString().slice(0, 10);
+  const signature = await acct.signMessage({ message: `Mon-Pad Studio: ${acct.address.toLowerCase()} ${day}` });
+  const res = await fetch(`${SITE}/api/v1/launch/${path}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ wallet: acct.address, signature, ...body }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.error || `request failed (${res.status})`);
+  return data;
+}
+
+server.tool(
+  'monpad_launch_prices',
+  'Prices (in Monpad credits, 1 credit = $0.01) for launch-by-chat: draft, art, 3D living character.',
+  {},
+  async () => ok(await (await fetch(`${SITE}/api/v1/launch/prices`)).json()),
+);
+
+server.tool(
+  'monpad_draft_launch',
+  'Turn a one-sentence idea into a launch draft (name, ticker, description, image prompt). Costs credits; refunded if it fails or is refused.',
+  { idea: z.string().min(3).max(400) },
+  async ({ idea }) => ok(await launchCall('draft', { prompt: idea })),
+);
+
+server.tool(
+  'monpad_make_art',
+  'Generate the token picture from a draft imagePrompt. Returns a data URL; upload it with the site /api/upload to get a public URL.',
+  { imagePrompt: z.string().min(5).max(300) },
+  async ({ imagePrompt }) => ok(await launchCall('art', { imagePrompt })),
+);
+
+server.tool(
+  'monpad_start_character',
+  'Start building a 3D living character for a token from its public https image URL. Takes a few minutes; poll monpad_character_status.',
+  { imageUrl: z.string().url() },
+  async ({ imageUrl }) => ok(await launchCall('character', { imageUrl })),
+);
+
+server.tool(
+  'monpad_character_status',
+  'Check a 3D character build. stage: model | rig | ready | failed. When ready, returns the glb URL.',
+  { id: z.string().uuid() },
+  async ({ id }) => ok(await (await fetch(`${SITE}/api/v1/launch/character/${id}`)).json()),
+);
+
+server.tool(
+  'monpad_prepare_launch',
+  'Build a link that opens Monpad /create pre-filled from a draft, so the human signs the launch in their wallet. Never signs for the user.',
+  {
+    name: z.string().min(1).max(32),
+    symbol: z.string().min(2).max(10),
+    description: z.string().max(240).optional(),
+    imageUrl: z.string().url().optional(),
+    characterId: z.string().uuid().optional(),
+  },
+  async ({ name, symbol, description, imageUrl, characterId }) => {
+    const q = new URLSearchParams({ name, symbol });
+    if (description) q.set('desc', description);
+    if (imageUrl) q.set('img', imageUrl);
+    if (characterId) q.set('cid', characterId);
+    return ok({ url: `${SITE}/create?${q.toString()}`, next: 'Open this link, connect a wallet, and sign the launch transaction.' });
+  },
+);
+
 const transport = new StdioServerTransport();
 await server.connect(transport);
