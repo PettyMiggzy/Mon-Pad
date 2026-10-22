@@ -3,13 +3,14 @@ import { useRouter } from 'next/router';
 import { FormEvent, useEffect, useState, type ReactNode } from 'react';
 import { ConnectButton, useConnectModal } from '@rainbow-me/rainbowkit';
 import { useAccount, useSwitchChain } from 'wagmi';
-import { Home, ArrowLeftRight, User, Trophy, Bot } from 'lucide-react';
+import { Home, ArrowLeftRight, User, Trophy, Bot, MessageCircle } from 'lucide-react';
 import { isAdmin, MONAD_CHAIN_ID } from '@/lib/constants';
 import { AddressGuard } from './AddressGuard';
 import { Splash } from './ui/Splash';
 
 const DOCK = [
   { href: '/', label: 'Home', icon: Home },
+  { href: '/chat', label: 'Chat', icon: MessageCircle },
   { href: '/swap', label: 'Swap', icon: ArrowLeftRight },
   { href: '/rewards', label: 'Rewards', icon: Trophy },
   { href: '/studio', label: 'Studio', icon: Bot },

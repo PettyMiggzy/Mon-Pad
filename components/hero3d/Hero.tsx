@@ -116,6 +116,9 @@ export function Hero({ symbols }: Props) {
           >
             + Launch
           </Link>
+          <Link href="/chat" className="pad-ghost">
+            Launch by chat
+          </Link>
           <a href="#board" className="pad-ghost">
             The board
           </a>
