@@ -88,7 +88,8 @@ describe("MonPad V3 (native MON)", () => {
 
   it("dev buy at creation gives the creator tokens, capped at 2%", async () => {
     const ctx = await setup();
-    const { token } = await launch(ctx, ZERO_CFG, 100n * E18); // 100 MON dev buy
+    // TEST economics: grad target 20 MON — tiny virtuals, so keep dev buy very small.
+    const { token } = await launch(ctx, ZERO_CFG, E18 / 50n); // 0.02 MON dev buy
     const tok = await ethers.getContractAt("MonPadTokenV2", token);
     const bal = await tok.balanceOf(ctx.creator.address);
     expect(bal).to.be.gt(0n);
@@ -101,7 +102,7 @@ describe("MonPad V3 (native MON)", () => {
     const c = await curveAt(curve);
     const tok = await ethers.getContractAt("MonPadTokenV2", token);
 
-    await c.connect(ctx.buyer).buy(0, { value: 100n * E18 });
+    await c.connect(ctx.buyer).buy(0, { value: 2n * E18 });
     const tb = await tok.balanceOf(ctx.buyer.address);
     expect(tb).to.be.gt(0n);
     await invariant(curve);
@@ -119,7 +120,7 @@ describe("MonPad V3 (native MON)", () => {
     const cfg = { cfBurnTokenBps: 5000, cfLpBps: 5000, taxBurnTokenBps: 0, taxLpBps: 0 };
     const { curve } = await launch(ctx, cfg);
     const c = await curveAt(curve);
-    await c.connect(ctx.buyer).buy(0, { value: 1000n * E18 });
+    await c.connect(ctx.buyer).buy(0, { value: 3n * E18 });
     expect(await c.totalBurnedTokens()).to.be.gt(0n);
     expect(await c.lpPendingMon()).to.be.gt(0n);
     expect(await c.creatorPending()).to.equal(0n); // 100% routed to burn+lp
@@ -131,7 +132,7 @@ describe("MonPad V3 (native MON)", () => {
     const cfg = { cfBurnTokenBps: 0, cfLpBps: 0, taxBurnTokenBps: 500, taxLpBps: 500 }; // 10% tax
     const { curve } = await launch(ctx, cfg);
     const c = await curveAt(curve);
-    await c.connect(ctx.buyer).buy(0, { value: 1000n * E18 });
+    await c.connect(ctx.buyer).buy(0, { value: 3n * E18 });
     expect(await c.totalBurnedTokens()).to.be.gt(0n);
     expect(await c.lpPendingMon()).to.be.gt(0n);
     await invariant(curve);
@@ -139,23 +140,28 @@ describe("MonPad V3 (native MON)", () => {
 
   it("buyback skims 25% of the creator tax above the 2% free threshold", async () => {
     const ctx = await setup();
-    // 10% tax, all routed to burn — so any MONSHI accrual on a buy can only be the skim.
+    // 10% tax, all routed to burn. Buy also accrues 10% protocol MONSHI slice.
     const cfg = { cfBurnTokenBps: 0, cfLpBps: 0, taxBurnTokenBps: 1000, taxLpBps: 0 };
     const { curve } = await launch(ctx, cfg);
     const c = await curveAt(curve);
-    await c.connect(ctx.buyer).buy(0, { value: 1000n * E18 });
-    // tax = 100 MON; excess over 2% = 80 MON; skim = 25% = 20 MON -> buyback
-    expect(await c.monshiBuybackPending()).to.equal(20n * E18);
+    const monIn = 10n * E18;
+    await c.connect(ctx.buyer).buy(0, { value: monIn });
+    // protocol monshi = 10% of monIn; tax skim = 25% of excess over 2% = 25% of 8% = 2% of monIn
+    const protocolMonshi = (monIn * 1000n) / 10000n;
+    const taxSkim = (monIn * 200n) / 10000n; // 2% of notional
+    expect(await c.monshiBuybackPending()).to.equal(protocolMonshi + taxSkim);
     await invariant(curve);
   });
 
-  it("no buyback skim when the creator tax is at/below 2%", async () => {
+  it("no tax skim when the creator tax is at/below 2% (protocol monshi still accrues)", async () => {
     const ctx = await setup();
     const cfg = { cfBurnTokenBps: 0, cfLpBps: 0, taxBurnTokenBps: 200, taxLpBps: 0 }; // exactly 2%
     const { curve } = await launch(ctx, cfg);
     const c = await curveAt(curve);
-    await c.connect(ctx.buyer).buy(0, { value: 1000n * E18 });
-    expect(await c.monshiBuybackPending()).to.equal(0n); // buys carry no MONSHI slice; tax<=2% => no skim
+    const monIn = 10n * E18;
+    await c.connect(ctx.buyer).buy(0, { value: monIn });
+    // tax<=2% => no skim; buys still take 10% protocol MONSHI buyback
+    expect(await c.monshiBuybackPending()).to.equal((monIn * 1000n) / 10000n);
     await invariant(curve);
   });
 
@@ -164,16 +170,18 @@ describe("MonPad V3 (native MON)", () => {
     const { token, curve } = await launch(ctx);
     const c = await curveAt(curve);
     const tok = await ethers.getContractAt("MonPadTokenV2", token);
-    await c.connect(ctx.buyer).buy(0, { value: 1000n * E18 });
+    await c.connect(ctx.buyer).buy(0, { value: 3n * E18 });
     const tb = await tok.balanceOf(ctx.buyer.address);
     const sellAmt = tb / 2n; // selling 100% of the sole holding hits a 1-wei rounding edge; sell a portion
     await tok.connect(ctx.buyer).approve(curve, sellAmt);
+    const beforePend = await c.monshiBuybackPending();
     await c.connect(ctx.buyer).sell(sellAmt, 0);
     const pend = await c.monshiBuybackPending();
-    expect(pend).to.be.gt(0n);
+    expect(pend).to.be.gt(beforePend);
+    const claimable = pend; // claim pulls full pending (incl. buy-side accrual)
     const before = await ethers.provider.getBalance(ctx.buyback.address);
     await c.connect(ctx.buyer).claimMonshiBuyback();
-    expect((await ethers.provider.getBalance(ctx.buyback.address)) - before).to.equal(pend);
+    expect((await ethers.provider.getBalance(ctx.buyback.address)) - before).to.equal(claimable);
   });
 
   it("MONSHI holders get a discounted creation fee", async () => {
@@ -186,14 +194,17 @@ describe("MonPad V3 (native MON)", () => {
     expect(discounted).to.equal((full * (10000n - BigInt(await ctx.factory.monshiDiscountBps()))) / 10000n);
   });
 
-  it("graduates into a WMON/token LP with $200 treasury cut + $800 creator reward", async () => {
+  it("graduates into a WMON/token LP with treasury cut + creator reward (TEST economics)", async () => {
     const ctx = await setup();
     const { token, curve } = await launch(ctx);
     const c = await curveAt(curve);
 
-    await setBal(ctx.buyer.address, 400_000n * E18);
-    // One buy that crosses the ~260k target without draining all tokens.
-    await c.connect(ctx.buyer).buy(0, { value: 266_000n * E18 });
+    await setBal(ctx.buyer.address, 200n * E18);
+    // TEST target = 20 MON net. Protocol skims ~21% of gross, so overshoot with chunks.
+    for (let i = 0; i < 8; i++) {
+      await c.connect(ctx.buyer).buy(0, { value: 4n * E18 });
+      if (await c.canGrad()) break;
+    }
     expect(await c.canGrad()).to.equal(true);
     expect(await c.graduated()).to.equal(false); // decoupled
 
@@ -202,7 +213,7 @@ describe("MonPad V3 (native MON)", () => {
     expect(await c.graduated()).to.equal(true);
     expect(await ctx.grad.isGraduated(token)).to.equal(true);
 
-    // $200 treasury cut paid (treasury is a passive EOA, so delta is exact).
+    // Treasury cut paid (treasury is a passive EOA, so delta is exact).
     expect((await ethers.provider.getBalance(ctx.treasury.address)) - treBefore).to.equal(await ctx.factory.graduationTreasuryCut());
 
     // Real WMON/token LP minted via the functional NPM.
@@ -212,7 +223,7 @@ describe("MonPad V3 (native MON)", () => {
     expect(await ctx.npm.mintedAmount1(nftId)).to.be.gt(0n);
     expect(await ctx.grad.poolFor(token)).to.properAddress;
 
-    // $800 creator reward claimable.
+    // Creator reward claimable (TEST: 10 MON).
     const [amt, claimed] = await c.graduationRewardClaimable();
     expect(amt).to.equal(await ctx.factory.graduationCreatorReward());
     expect(claimed).to.equal(false);

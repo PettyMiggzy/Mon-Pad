@@ -61,3 +61,9 @@ console.log(await getMonshiBurned(publicClient));
 Read-only routes under `/api/v1/*` expose the same surface for non-TS bots
 (see `pages/api/v1/`). Writes always go on-chain via the wallet — the HTTP API
 does not custody keys.
+
+## MCP twin (AI agents)
+
+`mcp/server.mjs` exposes the same capabilities as MCP tools so any AI agent
+(Cursor, Claude Desktop, custom) can discover, launch (with optional **dev bot**),
+buy, sell, and read Monchi burns. See `mcp/README.md`.

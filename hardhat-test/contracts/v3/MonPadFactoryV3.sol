@@ -267,8 +267,9 @@ contract MonPadFactoryV3 {
     }
 
     /// @dev Caps reserve MAX_TRADE_TAX_BPS of headroom so curve trade math can never underflow (audit L-1).
+    ///      Buy path also applies sellFeeStakingBps + sellFeePlatformBps (quote-side protocol stack).
     function _applySetFeeSplits(uint16 _bc, uint16 _bb, uint16 _sc, uint16 _ss, uint16 _sp) internal {
-        require(uint256(_bc) + _bb + MAX_TRADE_TAX_BPS <= 10000, "buy fees+tax > 100%");
+        require(uint256(_bc) + _bb + _ss + _sp + MAX_TRADE_TAX_BPS <= 10000, "buy fees+tax > 100%");
         require(uint256(_sc) + _ss + _sp + MAX_TRADE_TAX_BPS <= 10000, "sell fees+tax > 100%");
         buyFeeCreatorBps = _bc; buyFeeBufferBps = _bb;
         sellFeeCreatorBps = _sc; sellFeeStakingBps = _ss; sellFeePlatformBps = _sp;

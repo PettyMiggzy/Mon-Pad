@@ -38,8 +38,9 @@ interface IFactory {
     function buyFeeCreatorBps() external view returns (uint16);
     function buyFeeBufferBps() external view returns (uint16);
     function sellFeeCreatorBps() external view returns (uint16);
-    function sellFeeStakingBps() external view returns (uint16);  // -> MONSHI buyback
-    function sellFeePlatformBps() external view returns (uint16);
+    function sellFeeStakingBps() external view returns (uint16);  // -> MONSHI buyback (buys + sells)
+    function sellFeePlatformBps() external view returns (uint16); // -> platform (MON/quote only)
+    function protocolBurnTokenBps() external view returns (uint16); // burn traded token (buys + sells)
     function taxSkimRateBps() external view returns (uint256); // buyback skim on tax above the free threshold
     function graduationTarget() external view returns (uint256);
     function graduationCreatorReward() external view returns (uint256);
@@ -279,11 +280,15 @@ contract MonPadCurveV3 {
     struct BuyLocals {
         uint256 creatorFee;
         uint256 bufferFee;
+        uint256 stakingFee;   // MON -> MONSHI buyback-and-burn
+        uint256 platformFee;  // MON -> platform (never project tokens)
         uint256 taxTotal;
         uint256 monForBuy;
         uint256 currentMon;
         uint256 currentTokens;
         uint256 newTokenReserve;
+        uint256 burnTok;
+        uint256 toBuyer;
         uint256 mcap;
     }
 
@@ -291,17 +296,26 @@ contract MonPadCurveV3 {
         IFactory f = IFactory(factory);
         BuyLocals memory L;
 
-        L.creatorFee = isDev ? 0 : (monIn * f.buyFeeCreatorBps()) / 10000;
-        L.bufferFee  = isDev ? 0 : (monIn * f.buyFeeBufferBps()) / 10000;
-        L.taxTotal   = isDev ? 0 : (monIn * tradeTaxBps()) / 10000;
-        L.monForBuy  = monIn - L.creatorFee - L.bufferFee - L.taxTotal;
+        // Protocol stack on buys (dev buy skips): creator fee + optional buffer +
+        // 10% MONSHI buyback (quote) + 10% platform (quote) + creator trade tax.
+        // Separately, 10% of purchased tokens are burned to DEAD (not a MON skim).
+        L.creatorFee  = isDev ? 0 : (monIn * f.buyFeeCreatorBps()) / 10000;
+        L.bufferFee   = isDev ? 0 : (monIn * f.buyFeeBufferBps()) / 10000;
+        L.stakingFee  = isDev ? 0 : (monIn * f.sellFeeStakingBps()) / 10000;
+        L.platformFee = isDev ? 0 : (monIn * f.sellFeePlatformBps()) / 10000;
+        L.taxTotal    = isDev ? 0 : (monIn * tradeTaxBps()) / 10000;
+        L.monForBuy   = monIn - L.creatorFee - L.bufferFee - L.stakingFee - L.platformFee - L.taxTotal;
 
         L.currentMon      = virtualMonReserve + realMonReserve;
         L.currentTokens   = virtualTokenReserve - (SUPPLY - realTokenReserve);
         L.newTokenReserve = (L.currentMon * L.currentTokens) / (L.currentMon + L.monForBuy);
         tokensOut         = L.currentTokens - L.newTokenReserve;
 
-        require(tokensOut >= minOut, "slippage");
+        // Protocol token burn: buyer receives (100% - protocolBurnTokenBps) of tokensOut.
+        L.burnTok = isDev ? 0 : (tokensOut * f.protocolBurnTokenBps()) / 10000;
+        L.toBuyer = tokensOut - L.burnTok;
+
+        require(L.toBuyer >= minOut, "slippage");
         require(tokensOut <= realTokenReserve, "no liquidity");
 
         // The buy "buffer" fee stays in the curve as real exit liquidity until the
@@ -317,9 +331,24 @@ contract MonPadCurveV3 {
         monRaised        += monIn;
         monRaisedNet     += L.monForBuy;
 
-        _safeTransfer(token, buyer, tokensOut);
+        if (L.burnTok > 0) {
+            _safeTransfer(token, DEAD, L.burnTok);
+            totalBurnedTokens += L.burnTok;
+            emit FeeCollected("protocol-token-burn", DEAD, L.burnTok);
+        }
+        _safeTransfer(token, buyer, L.toBuyer);
 
         if (!isDev) {
+            if (L.stakingFee > 0) {
+                monshiBuybackPending += L.stakingFee;
+                totalStakingFees += L.stakingFee;
+                emit FeeCollected("monshi-buyback-accrued", f.getRewardRecipient(), L.stakingFee);
+            }
+            if (L.platformFee > 0) {
+                platformPending += L.platformFee;
+                totalPlatformFees += L.platformFee;
+                emit FeeCollected("platform-buy-accrued", f.platformWallet(), L.platformFee);
+            }
             _routeCreatorFee(L.creatorFee);
             _routeTradeTax(monIn);
         }
@@ -327,8 +356,10 @@ contract MonPadCurveV3 {
         L.mcap = (priceWeiPerToken() * SUPPLY) / 1e18;
         if (L.mcap > ath) ath = L.mcap;
 
-        emit Trade(token, buyer, true, monIn, tokensOut, virtualMonReserve, virtualTokenReserve, realMonReserve, realTokenReserve, priceWeiPerToken(), block.timestamp);
+        // Trade event reports tokens delivered to buyer (post protocol burn).
+        emit Trade(token, buyer, true, monIn, L.toBuyer, virtualMonReserve, virtualTokenReserve, realMonReserve, realTokenReserve, priceWeiPerToken(), block.timestamp);
         // Graduation finalized via the separate retryable graduate() (never bricks buys).
+        return L.toBuyer;
     }
 
     // ── CORE: SELL ────────────────────────────
@@ -341,6 +372,8 @@ contract MonPadCurveV3 {
     }
 
     /// @notice Sell curve tokens for native MON. Approve `tokensIn` of the launched token first.
+    /// @dev Protocol token burn (10%) goes to DEAD before the curve swap; platform + MONSHI
+    ///      slices are taken in MON only (never as project tokens).
     function sell(uint256 tokensIn, uint256 minMonOut) external notGraduated nonReentrant returns (uint256 monOut) {
         require(!IFactory(factory).pauseAllSells(), "sells paused");
         require(!IFactory(factory).blocked(token), "blocked");
@@ -350,17 +383,26 @@ contract MonPadCurveV3 {
         IFactory f = IFactory(factory);
         require(IToken(token).transferFrom(msg.sender, address(this), tokensIn), "xfer");
 
+        uint256 burnTok = (tokensIn * f.protocolBurnTokenBps()) / 10000;
+        uint256 sellAmt = tokensIn - burnTok;
+        if (burnTok > 0) {
+            _safeTransfer(token, DEAD, burnTok);
+            totalBurnedTokens += burnTok;
+            emit FeeCollected("protocol-token-burn", DEAD, burnTok);
+        }
+        require(sellAmt > 0, "all burned");
+
         SellLocals memory L;
-        L.grossMonOut = _calcSellOut(tokensIn);
+        L.grossMonOut = _calcSellOut(sellAmt);
         require(L.grossMonOut <= realMonReserve, "no MON liquidity");
 
         realMonReserve -= L.grossMonOut;
-        realTokenReserve += tokensIn;
+        realTokenReserve += sellAmt;
         if (monRaisedNet > L.grossMonOut) monRaisedNet -= L.grossMonOut; else monRaisedNet = 0;
 
         L.creatorFee  = (L.grossMonOut * f.sellFeeCreatorBps()) / 10000;
         L.stakingFee  = (L.grossMonOut * f.sellFeeStakingBps()) / 10000; // -> MONSHI buyback
-        L.platformFee = (L.grossMonOut * f.sellFeePlatformBps()) / 10000;
+        L.platformFee = (L.grossMonOut * f.sellFeePlatformBps()) / 10000; // MON only
         L.taxTotal    = (L.grossMonOut * tradeTaxBps()) / 10000;
         monOut = L.grossMonOut - L.creatorFee - L.stakingFee - L.platformFee - L.taxTotal;
 
@@ -375,6 +417,7 @@ contract MonPadCurveV3 {
         }
         if (L.platformFee > 0) {
             platformPending += L.platformFee;
+            totalPlatformFees += L.platformFee;
             emit FeeCollected("platform-sell-accrued", f.platformWallet(), L.platformFee);
         }
 
@@ -384,9 +427,8 @@ contract MonPadCurveV3 {
         (bool sellerOk, ) = msg.sender.call{value: monOut}("");
         require(sellerOk, "seller pay fail");
 
-        // monAmount = gross curve-side MON (symmetric with buy's gross monIn) for consistent
-        // indexer volume; priceX18 is the post-trade spot price (audit L-2).
-        emit Trade(token, msg.sender, false, L.grossMonOut, tokensIn, virtualMonReserve, virtualTokenReserve, realMonReserve, realTokenReserve, priceWeiPerToken(), block.timestamp);
+        // monAmount = gross curve-side MON; tokenAmount = tokens sold into the curve (post burn).
+        emit Trade(token, msg.sender, false, L.grossMonOut, sellAmt, virtualMonReserve, virtualTokenReserve, realMonReserve, realTokenReserve, priceWeiPerToken(), block.timestamp);
     }
 
     function _calcSellOut(uint256 tokensIn) internal view returns (uint256) {

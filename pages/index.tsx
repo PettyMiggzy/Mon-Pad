@@ -121,87 +121,176 @@ export default function Home() {
         <meta key="twitter:description" name="twitter:description" content="Monpad on Monad. Every trade burns Monchi. Creators earn fees forever." />
         <link key="canonical" rel="canonical" href={canonical} />
       </Head>
-      {/* Live trade ticker at the very top */}
+      {/* Full-bleed hero — brand + one line + CTA + Meshy art */}
+      <motion.section
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.6 }}
+        style={{
+          position: 'relative',
+          minHeight: 'min(92vh, 860px)',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'flex-end',
+          overflow: 'hidden',
+        }}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/meshy/hero.png"
+          alt=""
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            objectPosition: 'center 35%',
+            transform: 'scale(1.04)',
+            animation: 'monpadHeroDrift 18s ease-in-out infinite alternate',
+          }}
+        />
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background:
+              'linear-gradient(180deg, rgba(5,3,8,0.35) 0%, rgba(5,3,8,0.55) 45%, rgba(5,3,8,0.92) 78%, var(--bg, #050308) 100%)',
+          }}
+        />
+        <div
+          style={{
+            position: 'relative',
+            zIndex: 1,
+            maxWidth: 1280,
+            width: '100%',
+            margin: '0 auto',
+            padding: 'clamp(24px, 6vh, 56px) 16px 28px',
+          }}
+        >
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.55, delay: 0.12 }}
+          >
+            <p
+              style={{
+                fontFamily: 'var(--font)',
+                fontSize: 'clamp(42px, 9vw, 88px)',
+                fontWeight: 800,
+                letterSpacing: '-0.04em',
+                lineHeight: 0.95,
+                color: '#fff',
+                margin: 0,
+                textShadow: '0 8px 40px rgba(0,0,0,0.45)',
+              }}
+            >
+              Monpad
+            </p>
+            <p
+              style={{
+                marginTop: 14,
+                maxWidth: 420,
+                fontSize: 'clamp(15px, 2.4vw, 18px)',
+                lineHeight: 1.45,
+                color: 'var(--t2, #DDD7FE)',
+              }}
+            >
+              Fair launches on Monad. Every trade burns Monchi.
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 22 }}>
+              <Link
+                href="/create"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  padding: '12px 22px',
+                  borderRadius: 10,
+                  background: 'var(--pink, #EC4899)',
+                  color: '#fff',
+                  fontWeight: 700,
+                  fontSize: 15,
+                  textDecoration: 'none',
+                }}
+              >
+                Launch a coin
+              </Link>
+              <button
+                type="button"
+                onClick={scrollToGrid}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  padding: '12px 20px',
+                  borderRadius: 10,
+                  background: 'transparent',
+                  color: '#fff',
+                  fontWeight: 700,
+                  fontSize: 15,
+                  border: '1px solid rgba(255,255,255,0.28)',
+                  cursor: 'pointer',
+                }}
+              >
+                Explore launches
+              </button>
+            </div>
+          </motion.div>
+        </div>
+        {/* Monchi idol accent — floats in on the right */}
+        <motion.img
+          src="/meshy/monchi.png"
+          alt="Monchi"
+          initial={{ opacity: 0, x: 40, y: 20 }}
+          animate={{ opacity: 0.92, x: 0, y: 0 }}
+          transition={{ duration: 0.8, delay: 0.25 }}
+          style={{
+            position: 'absolute',
+            right: 'max(0px, calc((100% - 1280px) / 2))',
+            bottom: '12%',
+            width: 'min(38vw, 360px)',
+            height: 'auto',
+            objectFit: 'contain',
+            pointerEvents: 'none',
+            filter: 'drop-shadow(0 20px 50px rgba(236,72,153,0.35))',
+            animation: 'monpadMonchiFloat 6s ease-in-out infinite',
+            zIndex: 1,
+            display: 'none',
+          }}
+          className="monpad-hero-monchi"
+        />
+      </motion.section>
+
+      <style jsx global>{`
+        @keyframes monpadHeroDrift {
+          from { transform: scale(1.04) translate3d(0, 0, 0); }
+          to { transform: scale(1.08) translate3d(-1.5%, -1%, 0); }
+        }
+        @keyframes monpadMonchiFloat {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-14px); }
+        }
+        @media (min-width: 900px) {
+          .monpad-hero-monchi { display: block !important; }
+        }
+      `}</style>
+
       <LiveTicker />
 
-      {/* Promo banner */}
-      <div className="max-w-7xl mx-auto px-4">
-        <PromoBanner />
-      </div>
-
-      {/* Live Monchi burn FOMO counter */}
-      <div style={{ paddingTop: 12 }}>
+      <div style={{ paddingTop: 8 }}>
         <MonshiBurnCounter />
       </div>
 
-      {/* Compact app header — sell the creator upside (FOMO to launch) */}
-      <motion.section
-        initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35 }}
-        style={{
-          maxWidth: 1280,
-          margin: '0 auto',
-          padding: '16px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 12,
-          flexWrap: 'wrap',
-        }}
-      >
-        <div style={{ minWidth: 0 }}>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--p1, #ECE9F8)', margin: 0, lineHeight: 1.2 }}>
-            Monpad · launch on Monad
-          </h1>
-          <p style={{ marginTop: 4, fontSize: 13, color: 'var(--p2, rgba(220, 215, 240, 0.7))' }}>
-            Every buy &amp; sell burns Monchi. Creators keep their tax. Platform cut in MON — never your bags.
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            type="button"
-            onClick={scrollToGrid}
-            style={{
-              display: 'inline-flex', alignItems: 'center', padding: '10px 16px', borderRadius: 10,
-              background: 'transparent', color: 'var(--brand, #8B5CF6)', fontWeight: 700, fontSize: 14,
-              border: '1px solid var(--bd, rgba(139, 92, 246, 0.3))', cursor: 'pointer',
-            }}
-          >
-            Explore
-          </button>
-          <Link
-            href="/create"
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 18px', borderRadius: 10,
-              background: 'var(--brand, #8B5CF6)', color: '#fff', fontWeight: 700, fontSize: 14,
-              textDecoration: 'none', boxShadow: '0 0 20px rgba(139, 92, 246, 0.35)',
-            }}
-          >
-            + Create coin
-          </Link>
-        </div>
-
-        {!configured && (
-          <div style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--bd, rgba(139, 92, 246, 0.15))', background: 'var(--bg-card, rgba(28, 24, 56, 0.6))', color: 'var(--p2, rgba(220, 215, 240, 0.7))', fontSize: 12 }}>
-            ⚠️ Contracts not configured — set NEXT_PUBLIC_FACTORY_V3 / NEXT_PUBLIC_GRADUATOR_V3.
+      {!configured && (
+        <div style={{ maxWidth: 1280, margin: '0 auto', padding: '0 16px 12px' }}>
+          <div style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--bd)', background: 'var(--bg-card)', color: 'var(--t3)', fontSize: 12 }}>
+            Contracts not configured — set NEXT_PUBLIC_FACTORY_V3 / NEXT_PUBLIC_GRADUATOR_V3.
           </div>
-        )}
-      </motion.section>
+        </div>
+      )}
 
-      {/* Creator rewards — the bullish bit, to FOMO people into launching */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2" style={{ maxWidth: 1280, margin: '0 auto', padding: '0 16px 12px' }}>
-        {[
-          { icon: '💸', t: 'Fees on every trade', d: 'You earn on every buy & sell your coin gets — claim anytime, forever.' },
-          { icon: '🎓', t: '~$800 at graduation', d: '41,700 MON paid straight to you the moment your coin bonds.' },
-          { icon: '🔒', t: 'Locked liquidity', d: 'LP auto-locks at graduation (rug-proof) — so buyers actually trust it.' },
-        ].map((p) => (
-          <div key={p.t} style={{ background: 'var(--bg-card, rgba(28,24,56,0.6))', border: '1px solid var(--bd, rgba(139,92,246,0.15))', borderRadius: 12, padding: '12px 14px' }}>
-            <div style={{ fontSize: 18 }}>{p.icon}</div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--p1,#ECE9F8)', marginTop: 4 }}>{p.t}</div>
-            <div style={{ fontSize: 11, color: 'var(--p2, rgba(220,215,240,0.6))', marginTop: 2, lineHeight: 1.4 }}>{p.d}</div>
-          </div>
-        ))}
+      <div className="max-w-7xl mx-auto px-4">
+        <PromoBanner />
       </div>
 
       {/* Sticky filter tabs */}

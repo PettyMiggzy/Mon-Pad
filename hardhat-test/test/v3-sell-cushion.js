@@ -128,8 +128,10 @@ describe("MonPad V3 — graduation still works with buffer-in-curve", () => {
     const c = await ethers.getContractAt("MonPadCurveV3", curve);
 
     // Buy in chunks to push monRaisedNet past the 20 MON target.
-    for (const w of [buyer, w1, w2, w3]) {
+    // Protocol skims ~21% of gross on buys, so need more than 4×6 MON gross.
+    for (const w of [buyer, w1, w2, w3, buyer, w1]) {
       await c.connect(w).buy(0, { value: 6n * E18 });
+      if (await c.canGrad()) break;
     }
     expect(await c.canGrad()).to.equal(true);
     await expect(c.graduate()).to.not.be.reverted;

@@ -59,11 +59,15 @@ describe("MonPad V3 — monRaisedNet excludes buyback-burn", () => {
     const monIn = 5n * E18;
     const creatorBps = await ctx.factory.buyFeeCreatorBps();
     const bufferBps  = await ctx.factory.buyFeeBufferBps();
+    const stakingBps = await ctx.factory.sellFeeStakingBps();
+    const platformBps = await ctx.factory.sellFeePlatformBps();
     const taxBps     = await c.tradeTaxBps();
     const creatorFee = (monIn * creatorBps) / 10000n;
     const bufferFee  = (monIn * bufferBps) / 10000n;
+    const stakingFee = (monIn * stakingBps) / 10000n;
+    const platformFee = (monIn * platformBps) / 10000n;
     const taxTotal   = (monIn * taxBps) / 10000n;
-    const expectedNet = monIn - creatorFee - bufferFee - taxTotal;
+    const expectedNet = monIn - creatorFee - bufferFee - stakingFee - platformFee - taxTotal;
     expect(taxTotal).to.be.gt(0n); // sanity: the tax (and thus the burn path) is live
 
     // The buy must emit BuybackBurn (proves _buyAndBurn ran — the code path that
