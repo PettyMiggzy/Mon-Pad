@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
-import { motion } from 'framer-motion';
 import LiveTicker from '@/components/LiveTicker';
 import PromoBanner from '@/components/PromoBanner';
 import MonshiBurnCounter from '@/components/MonshiBurnCounter';
