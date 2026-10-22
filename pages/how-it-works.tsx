@@ -22,7 +22,7 @@ const FAQ = [
   },
   {
     q: "How is this different from Pump.fun?",
-    a: "Pump.fun uses its own curve. Mon Pad launches on Monad straight into Uniswap V3, so the pair is on the DEX and DexScreener from block one. Bots and agents are welcome.",
+    a: "Pump.fun uses its own curve. Monpad launches on Monad straight into Uniswap V3, so the pair is on the DEX and DexScreener from block one. Bots and agents are welcome.",
   },
   {
     q: "How is this different from nad.fun?",
@@ -48,7 +48,7 @@ export default function HowItWorks() {
     <div className="max-w-5xl mx-auto px-4 py-12">
       <Head>
         <title>How Mon-Pad works | Fair launch on Monad</title>
-        <meta key="description" name="description" content="How MON PAD works: launch straight into a Uniswap V3 pool on Monad. LP fees pay the creator, the platform, and two burns." />
+        <meta key="description" name="description" content="How MONPAD works: launch straight into a Uniswap V3 pool on Monad. LP fees pay the creator, the platform, and two burns." />
         <meta key="og:title" property="og:title" content="How Mon-Pad works" />
         <meta key="og:description" property="og:description" content="Launch on Monad into Uniswap V3 from block one." />
         <meta key="og:url" property="og:url" content="https://www.monpad.net/how-it-works" />
@@ -85,7 +85,7 @@ export default function HowItWorks() {
         <h2 className="text-3xl font-bold text-white mb-6">What is Mon-Pad?</h2>
         <div className="space-y-4 text-base text-white/70 leading-relaxed">
           <p>
-            MON PAD is a fair-launch token platform on Monad. No pre-sale, no team allocation, no insider unlocks. The launch transaction puts the token in a Uniswap V3 pool.
+            MONPAD is a fair-launch token platform on Monad. No pre-sale, no team allocation, no insider unlocks. The launch transaction puts the token in a Uniswap V3 pool.
           </p>
           <p>
             From that block the pair is on the DEX and DexScreener. Creators earn LP fees. Every trade also burns MONSHI and a slice of the project token.

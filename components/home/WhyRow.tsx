@@ -29,7 +29,7 @@ export function WhyRow() {
   return (
     <section className="pad-why">
       <h2>
-        Why launch on <span>Mon Pad</span>
+        Why launch on <span>Monpad</span>
       </h2>
       <div className="pad-why-grid">
         {CARDS.map((card) => (

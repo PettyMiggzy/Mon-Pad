@@ -90,7 +90,7 @@ export function Hero({ symbols }: Props) {
   }, [reduced]);
 
   return (
-    <section className="pad-hero" aria-label="Mon Pad">
+    <section className="pad-hero" aria-label="Monpad">
       <div className="pad-hero-stage" ref={stage}>
         <Poster />
         {!reduced && !low && (
@@ -101,7 +101,7 @@ export function Hero({ symbols }: Props) {
       </div>
       <div className="pad-hero-copy">
         <p className="pad-kicker">Monad · 143</p>
-        <h1>You&apos;re smart. Drive.</h1>
+        <h1>Launch fair. Burn Monshi.</h1>
         <p>Fair launches straight into a Uniswap V3 pool. On the DEX and DexScreener from block one.</p>
         <div className="pad-hero-actions">
           <Link

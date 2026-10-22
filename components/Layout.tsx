@@ -24,7 +24,7 @@ function WrongChainBar() {
   return (
     <div className="pad-chain">
       <span>
-        Wallet is on chain <b>{chainId}</b>. Mon Pad runs on Monad.
+        Wallet is on chain <b>{chainId}</b>. Monpad runs on Monad.
       </span>
       <button type="button" onClick={() => switchChain({ chainId: MONAD_CHAIN_ID })}>
         Switch to Monad
@@ -74,10 +74,10 @@ export function Layout({ children }: { children: ReactNode }) {
       <WrongChainBar />
       <header className="pad-top">
         <div className="pad-top-in">
-          <Link href="/" className="pad-brand" aria-label="Mon Pad home">
+          <Link href="/" className="pad-brand" aria-label="Monpad home">
             <img src="/meshy/monshi-face.png" alt="" />
             <span>
-              MON <em>PAD</em>
+              MON<em>PAD</em>
             </span>
           </Link>
           <NavSearch />
@@ -100,7 +100,7 @@ export function Layout({ children }: { children: ReactNode }) {
       <main className="pad-main">{children}</main>
       <footer className="pad-foot">
         <div>
-          Mon Pad — fair launches on Monad. Every trade burns Monshi.
+          Monpad — fair launches on Monad. Every trade burns Monshi.
         </div>
         <nav>
           <Link href="/docs">Docs</Link>

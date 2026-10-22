@@ -14,7 +14,7 @@ export function Logo3D() {
         bevelSegments={2}
         curveSegments={4}
       >
-        MON PAD
+        MONPAD
         <meshStandardMaterial
           color={HERO.purple}
           metalness={0.88}

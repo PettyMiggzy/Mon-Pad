@@ -34,7 +34,7 @@ export function Splash() {
   return (
     <button type="button" className="pad-splash" onClick={dismiss}>
       <img src="/meshy/monshi-mascot.webp" alt="" />
-      <span>MON PAD</span>
+      <span>MONPAD</span>
       <small>Monad</small>
     </button>
   );

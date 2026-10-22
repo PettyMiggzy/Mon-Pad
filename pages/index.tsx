@@ -161,13 +161,13 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>MON PAD — launches on Monad</title>
+        <title>MONPAD — launches on Monad</title>
         <meta
           key="description"
           name="description"
-          content="MON PAD: fair token launches on Monad. Uniswap V3 from block one. Every trade burns Monshi."
+          content="MONPAD: fair token launches on Monad. Uniswap V3 from block one. Every trade burns Monshi."
         />
-        <meta key="og:title" property="og:title" content="MON PAD" />
+        <meta key="og:title" property="og:title" content="MONPAD" />
         <meta key="og:description" property="og:description" content="Fair launches on Monad. DEX from block one. Every trade burns Monshi." />
         <meta key="og:url" property="og:url" content={canonical} />
         <meta key="og:image" property="og:image" content="https://www.monpad.net/api/og" />

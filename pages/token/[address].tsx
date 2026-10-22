@@ -184,7 +184,7 @@ export default function TokenPage() {
     <div className="td-page">
       <Head>
         <title>{`${name}${symbol ? ` ($${symbol})` : ''} | Monpad`}</title>
-        <meta key="description" name="description" content={`Trade $${symbol || name} on Monpad. You're smart. Drive.`} />
+        <meta key="description" name="description" content={`Trade $${symbol || name} on Monpad. Every trade burns Monshi.`} />
         {addr && <link key="canonical" rel="canonical" href={`https://www.monpad.net/token/${addr}`} />}
       </Head>
 
@@ -212,7 +212,7 @@ export default function TokenPage() {
             </div>
             <p className="td-drive">
               <span className="td-drive-mark" aria-hidden />
-              You&apos;re smart. Drive.
+              Every trade burns Monshi.
             </p>
             <div className="td-meta-row">
               <CopyChip addr={addr} label="CA" />
@@ -551,7 +551,7 @@ function ToolsPanel({
         )}
         <a
           className="td-tool-btn"
-          href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(`$${symbol || name} on Monpad — you're smart. Drive.`)}&url=${encodeURIComponent(shareUrl)}`}
+          href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(`$${symbol || name} on Monpad — every trade burns Monshi.`)}&url=${encodeURIComponent(shareUrl)}`}
           target="_blank"
           rel="noreferrer"
         >

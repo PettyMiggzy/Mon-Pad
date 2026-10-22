@@ -70,8 +70,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           }}
         >
           <div style={{ display: 'flex', fontSize: 28, letterSpacing: 6, color: '#ff4d9a' }}>MONAD</div>
-          <div style={{ display: 'flex', fontSize: 108, fontWeight: 800, letterSpacing: -2 }}>MON PAD</div>
-          <div style={{ display: 'flex', fontSize: 32, color: 'rgba(255,255,255,0.8)' }}>You&apos;re smart. Drive.</div>
+          <div style={{ display: 'flex', fontSize: 108, fontWeight: 800, letterSpacing: -2 }}>MONPAD</div>
+          <div style={{ display: 'flex', fontSize: 32, color: 'rgba(255,255,255,0.8)' }}>Every trade burns Monshi.</div>
         </div>
       ),
       { width: 1200, height: 630 },
@@ -130,7 +130,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               letterSpacing: 1,
             }}
           >
-            MON-PAD
+            MONPAD
           </div>
 
           {/* Top row: logo + name */}

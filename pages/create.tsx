@@ -174,7 +174,7 @@ export default function CreatePage() {
   return (
     <div className="pad-create">
       <Head>
-        <title>Launch a token | MON PAD</title>
+        <title>Launch a token | MONPAD</title>
         <meta key="description" name="description" content="Launch a token on Monad into a Uniswap V3 pool. LP fees pay the creator, the platform, and two burns." />
         <link key="canonical" rel="canonical" href={canonical} />
       </Head>
