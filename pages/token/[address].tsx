@@ -362,6 +362,11 @@ export default function TokenPage() {
           color: var(--green); background: rgba(61,255,154,0.1);
         }
         .td-price-strip { display: flex; gap: 20px; flex-wrap: wrap; }
+        @media (max-width: 720px) {
+          .td-hero { flex-direction: column; align-items: stretch; }
+          .td-hero-main { width: 100%; }
+          .td-price-strip { width: 100%; gap: 12px 16px; }
+        }
         .td-desc { margin: 12px 0 0; font-size: 14px; line-height: 1.5; color: var(--t2); max-width: 72ch; }
         .td-burn-row {
           display: grid; grid-template-columns: 1.35fr 1fr; gap: 12px; margin: 16px 0;

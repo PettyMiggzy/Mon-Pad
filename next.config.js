@@ -10,6 +10,7 @@ const nextConfig = {
       { protocol: 'https', hostname: 'www.monpad.net', pathname: '/uploads/**' },
       { protocol: 'https', hostname: 'i.imgur.com' },
       { protocol: 'https', hostname: 'pbs.twimg.com' },
+      { protocol: 'https', hostname: 'api.dicebear.com' },
       // Supabase Storage public URLs (token logos uploaded via /api/upload)
       { protocol: 'https', hostname: '*.supabase.co', pathname: '/storage/v1/object/public/**' },
       { protocol: 'https', hostname: '*.supabase.in', pathname: '/storage/v1/object/public/**' },

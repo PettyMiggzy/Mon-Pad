@@ -33,7 +33,7 @@ function hexPad(n: number, len: number): string {
 
 function demoAvatar(seed: string, hue: string): string {
   // Deterministic public avatar — no upload needed for the demo board.
-  return `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(seed)}&backgroundColor=${hue}`;
+  return `https://api.dicebear.com/9.x/shapes/png?seed=${encodeURIComponent(seed)}&backgroundColor=${hue}`;
 }
 
 function genSpark(i: number): number[] {

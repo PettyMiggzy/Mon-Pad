@@ -4,11 +4,8 @@ import { ConnectButton, useConnectModal } from '@rainbow-me/rainbowkit';
 import { useAccount, useSwitchChain } from 'wagmi';
 import { Home, Plus, ArrowLeftRight, User, Shield, FileText, Trophy, Bot } from 'lucide-react';
 import { isAdmin, MONAD_CHAIN_ID } from '@/lib/constants';
-import dynamic from 'next/dynamic';
 import { AddressGuard } from './AddressGuard';
 import type { ReactNode } from 'react';
-
-const HeaderMonshi = dynamic(() => import('./HeaderMonshi'), { ssr: false });
 
 const PRIMARY_NAV = [
   { href: '/', label: 'Home', icon: Home, desktopOnly: false },
@@ -76,9 +73,13 @@ export function Layout({ children }: { children: ReactNode }) {
       <AddressGuard />
       <WrongChainBar />
       <header className="nx-bar">
-        <HeaderMonshi />
-        <Link href="/" className="nx-word" aria-label="Monpad home">
-          MON<span>PAD</span>
+        <Link href="/" className="nx-brand" aria-label="Monpad home">
+          <span className="nx-face" aria-hidden>
+            <img src="/meshy/monshi-face.png" alt="" />
+          </span>
+          <span className="nx-word">
+            MON<span>PAD</span>
+          </span>
         </Link>
         <nav className="nx-nav mp-desktop-nav">
           {PRIMARY_NAV.map((n) => (
@@ -102,109 +103,41 @@ export function Layout({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      <main style={{ flex: 1, paddingBottom: 80 }}>{children}</main>
+      <main style={{ flex: 1, paddingBottom: 108 }}>{children}</main>
 
-      <nav
-        className="mp-mobile-nav"
-        style={{
-          position: 'fixed',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          zIndex: 40,
-          background: 'rgba(18, 14, 36, 0.95)',
-          backdropFilter: 'blur(10px)',
-          WebkitBackdropFilter: 'blur(10px)',
-          borderTop: '1px solid var(--bd, rgba(139, 92, 246, 0.15))',
-          display: 'grid',
-          gridTemplateColumns: admin ? 'repeat(6, 1fr)' : 'repeat(5, 1fr)',
-        }}
-      >
+      <nav className="mp-dock" aria-label="Primary">
         {PRIMARY_NAV.filter((n) => !n.desktopOnly).map((n) => {
           const Icon = n.icon;
           const active = router.pathname === n.href;
           return (
-            <Link
-              key={n.href}
-              href={n.href}
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 2,
-                padding: '8px 0',
-                fontSize: 11,
-                textDecoration: 'none',
-                color: active ? 'var(--p, #A855F7)' : 'rgba(220, 215, 240, 0.5)',
-              }}
-            >
-              <Icon size={20} />
-              {n.label}
+            <Link key={n.href} href={n.href} className={active ? 'mp-dock-item mp-dock-on' : 'mp-dock-item'}>
+              <Icon size={18} />
+              <span>{n.label}</span>
             </Link>
           );
         })}
         {address ? (
-          <Link
-            href={`/profile/${address}`}
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: 2,
-              padding: '8px 0',
-              fontSize: 11,
-              textDecoration: 'none',
-              color: onProfile ? 'var(--p, #A855F7)' : 'rgba(220, 215, 240, 0.5)',
-            }}
-          >
-            <User size={20} />
-            Profile
+          <Link href={`/profile/${address}`} className={onProfile ? 'mp-dock-item mp-dock-on' : 'mp-dock-item'}>
+            <User size={18} />
+            <span>You</span>
           </Link>
         ) : (
-          <button
-            type="button"
-            onClick={() => openConnectModal?.()}
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: 2,
-              padding: '8px 0',
-              fontSize: 11,
-              background: 'transparent',
-              border: 'none',
-              cursor: 'pointer',
-              color: 'rgba(220, 215, 240, 0.5)',
-              fontFamily: 'inherit',
-            }}
-          >
-            <User size={20} />
-            Profile
+          <button type="button" className="mp-dock-item" onClick={() => openConnectModal?.()}>
+            <User size={18} />
+            <span>You</span>
           </button>
         )}
         {admin && (
-          <Link
-            href="/admin"
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: 2,
-              padding: '8px 0',
-              fontSize: 11,
-              textDecoration: 'none',
-              color: onAdmin ? 'var(--p, #A855F7)' : 'rgba(220, 215, 240, 0.5)',
-            }}
-          >
-            <Shield size={20} />
-            Admin
+          <Link href="/admin" className={onAdmin ? 'mp-dock-item mp-dock-on' : 'mp-dock-item'}>
+            <Shield size={18} />
+            <span>Admin</span>
           </Link>
         )}
       </nav>
 
       <style jsx global>{`
         @media (min-width: 768px) {
-          .mp-mobile-nav {
+          .mp-dock {
             display: none !important;
           }
           main {

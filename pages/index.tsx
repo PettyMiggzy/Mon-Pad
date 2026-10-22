@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import LiveTicker from '@/components/LiveTicker';
 import MonshiBurnCounter from '@/components/MonshiBurnCounter';
@@ -9,12 +8,10 @@ import { type TokenSummary } from '@/lib/api';
 import { listV3Tokens, getV3CardStats } from '@/lib/chainV3';
 import { MOCK_MODE, v3Configured } from '@/lib/constants';
 import { mockTokens } from '@/lib/mocks';
-import { DEMO_BOARD, demoBannerCopy, pickCrown } from '@/lib/demo';
+import { DEMO_BOARD, pickCrown } from '@/lib/demo';
 import { fmtMon } from '@/lib/format';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
-
-const HeroConsole = dynamic(() => import('@/components/HeroConsole'), { ssr: false });
 
 type FilterKey = 'all' | 'trending' | 'new' | 'hot';
 
@@ -171,47 +168,50 @@ export default function Home() {
         <link key="canonical" rel="canonical" href={canonical} />
       </Head>
 
-      {demo && (
-        <div className="mp-demo-banner" role="status">
-          {demoBannerCopy()}
-        </div>
-      )}
-
-      {/* Hero — one composition: brand + line + CTA + Monshi */}
-      <section className="mp-hero" aria-label="Monpad">
-        <div className="mp-hero-glow" aria-hidden />
-        <div className="mp-hero-inner">
-          <div className="mp-hero-copy">
-            <p className="mp-hero-kicker">Monad · launches</p>
-            <h1 className="mp-hero-title">
-              Mon<span className="mp-brand-accent">pad</span>
-            </h1>
-            <p className="mp-hero-sub">You&apos;re smart. Drive.</p>
-            <div className="mp-hero-actions">
-              <Link href="/create" className="mp-create-btn">
-                Launch a token
+      <section className="pad-stage" aria-label="Monpad">
+        <img className="pad-stage-monshi" src="/meshy/monshi-mascot.png" alt="Monshi" />
+        <div className="pad-stage-copy">
+          <h1>
+            You&apos;re smart.
+            <br />
+            Drive.
+          </h1>
+          <p>Fair launches on Monad. Every trade burns Monshi.</p>
+          <div className="pad-stage-actions">
+            <Link href="/create" className="mp-create-btn">
+              Launch a token
+            </Link>
+            {crown ? (
+              <Link href={`/token/${crown.address}`} className="pad-crown-chip">
+                Crown ${crown.symbol}
               </Link>
-              <a href="#board" className="mp-hero-secondary">
-                Browse board
-              </a>
-            </div>
+            ) : null}
           </div>
-          <HeroConsole />
         </div>
       </section>
 
       <LiveTicker maxItems={28} />
 
+      <div className="pad-rail-wrap">
+        <div className="pad-rail" aria-label="Tokens">
+          {visible.slice(0, 12).map((t) => (
+            <Link key={t.address} href={`/token/${t.address}`} className="pad-rail-card">
+              <span
+                className="pad-rail-av"
+                style={t.imageUrl ? { backgroundImage: `url(${t.imageUrl})` } : undefined}
+              >
+                {t.imageUrl ? null : t.symbol.slice(0, 1)}
+              </span>
+              <span className="pad-rail-sym">${t.symbol}</span>
+              <span className="pad-rail-name">{t.name}</span>
+              <span className="pad-rail-stat">{fmtMon(t.volume24hMon || t.monRaisedNet)} MON</span>
+            </Link>
+          ))}
+        </div>
+      </div>
+
       <div className="mp-shell mp-strip-row">
         <MonshiBurnCounter compact />
-        {crown ? (
-          <Link href={`/token/${crown.address}`} className="mp-crown">
-            <span className="mp-crown-label">Monshi&apos;s Crown</span>
-            <span className="mp-crown-name">{crown.name}</span>
-            <span className="mp-crown-sym">${crown.symbol}</span>
-            <span className="mp-crown-stat">{fmtMon(crown.volume24hMon || crown.monRaisedNet)} MON</span>
-          </Link>
-        ) : null}
       </div>
 
       {!configured && !demo && (
