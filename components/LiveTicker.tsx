@@ -32,12 +32,10 @@ export default function LiveTicker({ maxItems = 20 }: Props) {
 
   return (
     <div
+      className="pad-ticker"
       style={{
         width: '100%',
-        height: 30,
-        background: 'var(--bg-strip, rgba(20, 16, 42, 0.85))',
-        borderTop: '1px solid var(--bd, rgba(139, 92, 246, 0.15))',
-        borderBottom: '1px solid var(--bd, rgba(139, 92, 246, 0.15))',
+        height: 34,
         overflow: 'hidden',
         position: 'relative',
         display: 'flex',

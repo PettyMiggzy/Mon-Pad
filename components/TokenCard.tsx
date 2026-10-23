@@ -82,11 +82,12 @@ export default function TokenCard({ token, index = 0, dense = false }: Props) {
           flexDirection: 'column',
           minWidth: dense ? 0 : 180,
           padding: dense ? 8 : 12,
-          borderRadius: dense ? 10 : 12,
-          background: 'var(--bg-card, rgba(28, 24, 56, 0.6))',
+          borderRadius: dense ? 12 : 14,
+          background: 'linear-gradient(180deg, rgba(28,18,48,0.75), rgba(12,8,22,0.88))',
           border: '1px solid var(--bd, rgba(139, 92, 246, 0.15))',
           cursor: 'pointer',
           overflow: 'hidden',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
         }}
       >
         {/* Image / placeholder */}

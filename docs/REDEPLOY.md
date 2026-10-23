@@ -53,3 +53,12 @@ Redeploy the frontend. Old test factory `0x45Fb…` is superseded — board show
 3. Board + token page load logos via `GET /api/token-meta?addresses=…`
 
 If upload fails with “Image storage not configured”, the Supabase env vars are missing on Vercel.
+
+## RPC (server-only)
+
+```
+RPC_URL=https://rpc.monad.xyz
+RPC_URL_FALLBACK=https://monad-mainnet.g.alchemy.com/v2/<YOUR_KEY>
+```
+
+`/api/rpc` uses primary then fallback. Never set `NEXT_PUBLIC_RPC_*` — that ships the key to browsers.

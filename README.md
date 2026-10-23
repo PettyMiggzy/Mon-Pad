@@ -105,6 +105,12 @@ npx hardhat test test/v3-flow.js
 
 Mainnet deploy still gated on **two clean audit passes** + E2E bots. See `DEPLOY-V2.md` / `GO-LIVE-CHECKLIST.md` for ops (verify wallets before mainnet).
 
+### Storage + clean board
+
+Same as the original bond pad: token PFPs go to Supabase (`/api/upload` → bucket `images`, `/api/token-meta` → table `token_meta`). Probe: `/api/v1/storage`.
+
+Board tokens come from the **on-chain factory**. To wipe junk launches, deploy a new Factory/Graduator and set `NEXT_PUBLIC_FACTORY_V3` + `NEXT_PUBLIC_GRADUATOR_V3` on Vercel — see **[`docs/REDEPLOY.md`](./docs/REDEPLOY.md)**. Until then defaults are zero (empty board).
+
 ---
 
 ## Brand

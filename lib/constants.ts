@@ -11,7 +11,9 @@ export {
   PROTOCOL_BURN_MONSHI_BPS,
   PROTOCOL_PLATFORM_BPS,
   CREATOR_SALE_SHARE_BPS,
+  CREATOR_PAYOUT_BPS,
   PROTOCOL_TRADE_SKIM_BPS,
+  LP_FEE_SPLIT_COPY,
 } from './fees';
 
 export const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as const;
@@ -110,15 +112,14 @@ export const V3_TOTAL_SUPPLY = 1_000_000_000n;
 
 // --- Chain (SPEC: Monad mainnet) -----------------------------------------
 export const MONAD_CHAIN_ID = 143 as const;
-// RPC routing — the QuickNode URL is kept SERVER-SIDE only (RPC_URL) and never
-// shipped to the browser. In the browser, all RPC goes through the same-origin
-// /api/rpc proxy; on the server we hit the real endpoint directly (faster, no
-// self-proxy loop). process.env.RPC_URL is non-public so it is stripped from the
-// client bundle. Do NOT set NEXT_PUBLIC_RPC_URL/_FALLBACK/_WSS (those would leak).
+// RPC routing — metered endpoints stay SERVER-SIDE only (RPC_URL + optional
+// RPC_URL_FALLBACK). In the browser, all RPC goes through the same-origin
+// /api/rpc proxy (primary → Alchemy/backup failover). On the server we hit the
+// real endpoint directly. Do NOT set NEXT_PUBLIC_RPC_* (those would leak keys).
 export const MONAD_RPC_URL =
   typeof window !== 'undefined'
     ? `${window.location.origin}/api/rpc`
-    : process.env.RPC_URL || 'https://rpc.monad.xyz';
+    : (process.env.RPC_URL || 'https://rpc.monad.xyz');
 export const MONAD_EXPLORER = 'https://monadscan.com';
 
 // --- Tokenomics constants from SPEC --------------------------------------
@@ -143,7 +144,14 @@ export const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL || '';
 // token poll only runs against a dedicated indexer. Without one set, the app
 // reads everything on-chain and the ticker stays quiet (no 404 spam).
 export const INDEXER_URL = process.env.NEXT_PUBLIC_INDEXER_URL || '';
-export const MOCK_MODE = process.env.NEXT_PUBLIC_MOCK_MODE === '1';
+// Auto-demo when factory is unset so UI review isn't an empty board.
+// Force off with NEXT_PUBLIC_MOCK_MODE=0 once FACTORY_V3 is live.
+const _factoryEnv = (process.env.NEXT_PUBLIC_FACTORY_V3 ?? ZERO_ADDRESS).toLowerCase();
+const _mockOff = process.env.NEXT_PUBLIC_MOCK_MODE === '0' || process.env.NEXT_PUBLIC_MOCK_MODE === 'false';
+const _mockOn = process.env.NEXT_PUBLIC_MOCK_MODE === '1' || process.env.NEXT_PUBLIC_MOCK_MODE === 'true';
+export const MOCK_MODE = _mockOff
+  ? false
+  : _mockOn || _factoryEnv === ZERO_ADDRESS.toLowerCase() || !_factoryEnv || _factoryEnv === '0x';
 
 // --- Bonding curve constants (mirrors MonPadCurveV2.sol lines 142-144) ---
 export const CURVE = {

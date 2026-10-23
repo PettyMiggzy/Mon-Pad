@@ -3,10 +3,22 @@
 // on-chain `Trade` events (no indexer required). Chart uses lightweight-charts
 // (loaded client-side only to avoid SSR `window` access).
 
+import dynamic from 'next/dynamic';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Address } from 'viem';
 import { getV3Trades, tradesToCandles, getV3Holders, type V3Trade, type V3Holder } from '@/lib/chainV3';
 import { MONAD_EXPLORER } from '@/lib/constants';
+import { isDemoAddress } from '@/lib/demo';
+import { mockV3Trades } from '@/lib/mocks';
+
+const TokenChart3D = dynamic(() => import('@/components/TokenChart3D'), {
+  ssr: false,
+  loading: () => (
+    <div style={{ height: 380, display: 'grid', placeItems: 'center', color: '#888', fontSize: 13 }}>
+      Booting 3D chart…
+    </div>
+  ),
+});
 
 const TIMEFRAMES: { label: string; sec: number }[] = [
   { label: '1m', sec: 60 },
@@ -33,6 +45,7 @@ export default function V3TokenActivity({ curve, symbol, token, refreshKey }: { 
   const [trades, setTrades] = useState<V3Trade[]>([]);
   const [loading, setLoading] = useState(true);
   const [tf, setTf] = useState(300);
+  const [chartMode, setChartMode] = useState<'2d' | '3d'>('3d');
   // Chart is always shown; the lower panel toggles between the live trade feed and holders.
   const [lowerTab, setLowerTab] = useState<'trades' | 'holders'>('trades');
   const [holders, setHolders] = useState<V3Holder[] | null>(null);
@@ -40,6 +53,10 @@ export default function V3TokenActivity({ curve, symbol, token, refreshKey }: { 
   // Lazy-load holders only when that panel is opened (the scan is heavier).
   useEffect(() => {
     if (lowerTab !== 'holders' || !token) return;
+    if (isDemoAddress(token)) {
+      setHolders([]);
+      return;
+    }
     let cancelled = false;
     setHolders(null);
     getV3Holders(token, curve ? [curve] : [])
@@ -49,6 +66,11 @@ export default function V3TokenActivity({ curve, symbol, token, refreshKey }: { 
   }, [lowerTab, token, curve, refreshKey]);
 
   useEffect(() => {
+    if (token && isDemoAddress(token)) {
+      setTrades(mockV3Trades(token));
+      setLoading(false);
+      return;
+    }
     if (!curve) return;
     let cancelled = false;
     let timer: any;
@@ -64,7 +86,7 @@ export default function V3TokenActivity({ curve, symbol, token, refreshKey }: { 
     timer = setInterval(load, 15000); // poll for fresh trades (paused when tab hidden)
     return () => { cancelled = true; clearInterval(timer); };
     // refreshKey bumps after a trade → reload immediately instead of waiting for the poll.
-  }, [curve, refreshKey]);
+  }, [curve, refreshKey, token]);
 
   const candles = useMemo(() => tradesToCandles(trades, tf), [trades, tf]);
 
@@ -74,16 +96,22 @@ export default function V3TokenActivity({ curve, symbol, token, refreshKey }: { 
     <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
       {/* ── Price chart ─────────────────────────────────────────── */}
       <div style={{ ...panel, padding: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 12, fontWeight: 700, color: '#cbd5e1', letterSpacing: 0.3 }}>PRICE CHART</span>
           <span style={{ fontSize: 11, color: '#666' }}>MON / {symbol || 'token'}</span>
+          <div style={{ display: 'inline-flex', gap: 4, marginLeft: 4 }}>
+            <button type="button" onClick={() => setChartMode('3d')} style={modeStyle(chartMode === '3d')}>3D</button>
+            <button type="button" onClick={() => setChartMode('2d')} style={modeStyle(chartMode === '2d')}>2D</button>
+          </div>
           <div style={{ flex: 1 }} />
           {TIMEFRAMES.map((f) => (
-            <button key={f.sec} onClick={() => setTf(f.sec)} style={tfStyle(tf === f.sec)}>{f.label}</button>
+            <button key={f.sec} type="button" onClick={() => setTf(f.sec)} style={tfStyle(tf === f.sec)}>{f.label}</button>
           ))}
         </div>
         {loading ? (
           <div style={{ padding: 48, textAlign: 'center', color: '#888', fontSize: 13 }}>Loading on-chain activity…</div>
+        ) : chartMode === '3d' ? (
+          <TokenChart3D data={candles} height={380} />
         ) : trades.length === 0 ? (
           <div style={{ padding: 48, textAlign: 'center', color: '#888', fontSize: 13 }}>No trades yet — be the first.</div>
         ) : (
@@ -236,4 +264,17 @@ function tabStyle(active: boolean): React.CSSProperties {
 }
 function tfStyle(active: boolean): React.CSSProperties {
   return { padding: '4px 8px', background: active ? 'rgba(167,139,250,0.25)' : 'transparent', color: active ? 'var(--brand,#A78BFA)' : '#888', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 4, cursor: 'pointer', fontSize: 11 };
+}
+function modeStyle(active: boolean): React.CSSProperties {
+  return {
+    padding: '4px 10px',
+    background: active ? 'linear-gradient(135deg, rgba(181,123,255,0.35), rgba(255,77,154,0.25))' : 'rgba(255,255,255,0.04)',
+    color: active ? '#fff' : '#888',
+    border: `1px solid ${active ? 'rgba(181,123,255,0.55)' : 'rgba(255,255,255,0.08)'}`,
+    borderRadius: 6,
+    cursor: 'pointer',
+    fontSize: 11,
+    fontWeight: 800,
+    letterSpacing: '0.06em',
+  };
 }

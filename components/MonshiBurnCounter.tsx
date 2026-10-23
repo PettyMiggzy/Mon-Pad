@@ -18,9 +18,15 @@ function fmtBurn(n: number): string {
  * Circulating supply ticks down as more MONSHI lands in the dead address;
  * total burned ticks up beside it. Polls on-chain every ~10s.
  */
-type Props = { compact?: boolean };
+type Props = {
+  compact?: boolean;
+  /** Drop outer shell padding so the counter can sit flush in a parent grid cell. */
+  embedded?: boolean;
+  /** Fires when the on-chain burn total increases. */
+  onBurn?: () => void;
+};
 
-export default function MonshiBurnCounter({ compact = false }: Props) {
+export default function MonshiBurnCounter({ compact = false, embedded = false, onBurn }: Props) {
   const [burned, setBurned] = useState(0);
   const [circulating, setCirculating] = useState(0);
   const [displayBurned, setDisplayBurned] = useState(0);
@@ -28,6 +34,8 @@ export default function MonshiBurnCounter({ compact = false }: Props) {
   const [ready, setReady] = useState(false);
   const [pulse, setPulse] = useState(false);
   const prevBurned = useRef(0);
+  const onBurnRef = useRef(onBurn);
+  onBurnRef.current = onBurn;
 
   useEffect(() => {
     let cancelled = false;
@@ -40,6 +48,7 @@ export default function MonshiBurnCounter({ compact = false }: Props) {
         setReady(true);
         if (prevBurned.current > 0 && s.burnedWhole > prevBurned.current + 1e-6) {
           setPulse(true);
+          onBurnRef.current?.();
           setTimeout(() => setPulse(false), 1200);
         }
         prevBurned.current = s.burnedWhole;
@@ -81,26 +90,31 @@ export default function MonshiBurnCounter({ compact = false }: Props) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4 }}
       aria-live="polite"
-      style={{
-        maxWidth: compact ? 1440 : 1280,
-        margin: '0 auto',
-        padding: compact ? '0 12px 8px' : '0 16px 14px',
-      }}
+      style={
+        embedded
+          ? { height: '100%' }
+          : {
+              maxWidth: compact ? 1440 : 1280,
+              margin: '0 auto',
+              padding: compact ? '0 12px 8px' : '0 16px 14px',
+            }
+      }
     >
       <div
         style={{
           position: 'relative',
           overflow: 'hidden',
-          borderRadius: compact ? 10 : 14,
+          height: embedded ? '100%' : undefined,
+          borderRadius: compact || embedded ? 14 : 14,
           border: '1px solid rgba(236, 72, 153, 0.35)',
           background:
             'linear-gradient(120deg, rgba(236,72,153,0.12) 0%, rgba(20,16,42,0.85) 45%, rgba(124,58,237,0.18) 100%)',
-          padding: compact ? '8px 12px' : '14px 18px',
+          padding: embedded ? '14px 16px' : compact ? '8px 12px' : '14px 18px',
           display: 'flex',
           flexWrap: 'wrap',
           alignItems: 'center',
           justifyContent: 'space-between',
-          gap: compact ? 8 : 12,
+          gap: compact && !embedded ? 8 : 12,
           boxShadow: pulse ? '0 0 28px rgba(236,72,153,0.45)' : '0 0 18px rgba(236,72,153,0.15)',
           transition: 'box-shadow 0.4s ease',
         }}

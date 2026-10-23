@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { LP_FEE_SPLIT_COPY } from '@/lib/fees';
 import Head from 'next/head';
 import { ArrowRight, Shield, Coins, TrendingUp, Lock, Sparkles, MessageCircle, BookOpen } from 'lucide-react';
 
@@ -8,20 +9,20 @@ const FAQ = [
     a: "No. Holding at least 1,000,000 MONSHI gives you 50% off the creation fee (250 MON instead of 500), but everything works without it.",
   },
   {
-    q: "What if my token doesn't graduate?",
-    a: "It keeps trading on the bonding curve forever. There's no time limit and no failed-launch refund — buys and sells route through the curve until graduation happens.",
+    q: "Where does the token trade?",
+    a: "In a Uniswap V3 pool from the launch transaction. Buys and sells hit the DEX immediately, and the pair is on DexScreener from block one.",
   },
   {
     q: "Can the team rug me?",
-    a: "No. At graduation the liquidity pool's LP NFT is burned, so it's locked permanently — creators can't withdraw it. They only ever earn trading fees (0.5% of every sell, forever).",
+    a: "Liquidity sits in the Uniswap V3 position. Creators earn the LP fee split. They do not get a withdraw button for the pool.",
   },
   {
     q: "What does a creator earn?",
-    a: "The creator slice of every trade (1% of buys, 0.5% of sells) on the curve and after graduation, plus a 41,700 MON (≈$800) reward when the token graduates. Creators can also route fees/tax into buyback-and-burn or LP.",
+    a: "70% of LP fees, with 10% to the platform, 10% buying and burning MONSHI, and 10% burning the project token. Creators can also route extra tax into buyback or LP.",
   },
   {
     q: "How is this different from Pump.fun?",
-    a: "Pump.fun is on Solana with its own AMM. Mon-Pad is on Monad with real Uniswap V3 graduation and permanently locked liquidity. Creators earn fees forever (not just pre-graduation) and get built-in buyback-burn and add-to-LP tools.",
+    a: "Pump.fun uses its own curve. Monpad launches on Monad straight into Uniswap V3, so the pair is on the DEX and DexScreener from block one. Bots and agents are welcome.",
   },
   {
     q: "How is this different from nad.fun?",
@@ -35,10 +36,10 @@ const FAQ = [
 
 const LAUNCH_STEPS = [
   { n: 1, title: 'Connect your wallet', body: 'MetaMask, Rabby, or any wallet that supports Monad mainnet (chainId 143).' },
-  { n: 2, title: 'Pay 500 MON creation fee', body: '100 MON seeds your curve as starting liquidity; the rest funds the platform treasury.' },
+  { n: 2, title: 'Pay 500 MON creation fee', body: '100 MON seeds the Uniswap V3 pool; the rest funds the platform treasury.' },
   { n: 3, title: 'Fill in token details', body: 'Name, symbol, description, image, socials (Twitter, Telegram, website — all optional).' },
   { n: 4, title: 'Make your dev buy (optional)', body: 'Between 0 and 2% of supply. Signals commitment. Standard is roughly 1–2%.' },
-  { n: 5, title: 'Confirm transaction', body: 'One tx creates the token, sets up the bonding curve, and credits your dev buy.' },
+  { n: 5, title: 'Confirm transaction', body: 'One transaction creates the token, seeds the Uniswap V3 pool, and fills your dev-bot buy.' },
   { n: 6, title: 'Trading goes live instantly', body: 'Your token has its own page at /token/<address> for anyone to buy and sell.' },
 ];
 
@@ -47,9 +48,9 @@ export default function HowItWorks() {
     <div className="max-w-5xl mx-auto px-4 py-12">
       <Head>
         <title>How Mon-Pad works | Fair launch on Monad</title>
-        <meta key="description" name="description" content="How Mon-Pad works: bonding curve, graduation to Uniswap V3, fair launch with no pre-sale or team allocation on Monad." />
+        <meta key="description" name="description" content="How MONPAD works: launch straight into a Uniswap V3 pool on Monad. LP fees pay the creator, the platform, and two burns." />
         <meta key="og:title" property="og:title" content="How Mon-Pad works" />
-        <meta key="og:description" property="og:description" content="Fair launch token platform on Monad. Learn how the bonding curve and graduation work." />
+        <meta key="og:description" property="og:description" content="Launch on Monad into Uniswap V3 from block one." />
         <meta key="og:url" property="og:url" content="https://www.monpad.net/how-it-works" />
         <meta key="twitter:title" name="twitter:title" content="How Mon-Pad works" />
         <meta key="twitter:description" name="twitter:description" content="Fair launch token platform on Monad." />
@@ -75,7 +76,7 @@ export default function HowItWorks() {
       <header className="text-center mb-16">
         <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">How Mon-Pad works</h1>
         <p className="text-base md:text-lg text-white/70 max-w-2xl mx-auto leading-relaxed">
-          Everything you need to know to launch, trade, and graduate a token on Monad.
+          Everything you need to know to launch and trade a token on Monad.
         </p>
       </header>
 
@@ -84,10 +85,10 @@ export default function HowItWorks() {
         <h2 className="text-3xl font-bold text-white mb-6">What is Mon-Pad?</h2>
         <div className="space-y-4 text-base text-white/70 leading-relaxed">
           <p>
-            Mon-Pad is a fair-launch token platform on the Monad blockchain. No pre-sale, no team allocation, no insider unlocks — everyone buys from the same bonding curve from block one.
+            MONPAD is a fair-launch token platform on Monad. No pre-sale, no team allocation, no insider unlocks. The launch transaction puts the token in a Uniswap V3 pool.
           </p>
           <p>
-            When a token raises enough MON, it &quot;graduates&quot; to a real Uniswap V3 liquidity pool. The LP is locked forever, the creator earns sell fees in perpetuity, and the token trades like any other on-chain asset.
+            From that block the pair is on the DEX and DexScreener. Creators earn LP fees. Every trade also burns MONSHI and a slice of the project token.
           </p>
         </div>
       </section>
@@ -115,11 +116,10 @@ export default function HowItWorks() {
         </div>
       </section>
 
-      {/* Section 3: The bonding curve */}
       <section className="mt-16">
-        <h2 className="text-3xl font-bold text-white mb-6">The bonding curve</h2>
+        <h2 className="text-3xl font-bold text-white mb-6">The pool</h2>
         <p className="text-base text-white/70 leading-relaxed mb-6">
-          Price rises as more MON is added to the curve, and drops when MON is removed. The curve uses constant-product math (x·y=k) with virtual reserves to prevent snipe-bots from buying everything at launch.
+          Price is the Uniswap V3 pool. Bots and agents can trade the block the pool exists.
         </p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="bg-card border border-border rounded-2xl p-5 text-center">
@@ -127,14 +127,14 @@ export default function HowItWorks() {
             <div className="text-2xl font-bold text-brand-purple">1B tokens</div>
           </div>
           <div className="bg-card border border-border rounded-2xl p-5 text-center">
-            <div className="text-xs text-white/50 uppercase tracking-wide mb-1">Virtual reserve</div>
-            <div className="text-2xl font-bold text-brand-purple">180K MON</div>
-            <div className="text-xs text-white/50 mt-1">anti-snipe</div>
+            <div className="text-xs text-white/50 uppercase tracking-wide mb-1">Pool</div>
+            <div className="text-2xl font-bold text-brand-purple">Uniswap V3</div>
+            <div className="text-xs text-white/50 mt-1">1% fee tier</div>
           </div>
           <div className="bg-card border border-border rounded-2xl p-5 text-center">
-            <div className="text-xs text-white/50 uppercase tracking-wide mb-1">Graduation target</div>
-            <div className="text-2xl font-bold text-brand-purple">260K MON</div>
-            <div className="text-xs text-white/50 mt-1">≈ $5,000 net of fees</div>
+            <div className="text-xs text-white/50 uppercase tracking-wide mb-1">LP fees</div>
+            <div className="text-2xl font-bold text-brand-purple">LP split</div>
+            <div className="text-xs text-white/50 mt-1">{LP_FEE_SPLIT_COPY}</div>
           </div>
         </div>
       </section>
@@ -153,19 +153,14 @@ export default function HowItWorks() {
             </thead>
             <tbody className="text-white/80">
               <tr className="border-t border-border">
-                <td className="px-4 py-3 font-medium">Buy</td>
-                <td className="px-4 py-3">2%</td>
-                <td className="px-4 py-3">1% creator + 1% platform buffer</td>
-              </tr>
-              <tr className="border-t border-border">
-                <td className="px-4 py-3 font-medium">Sell</td>
-                <td className="px-4 py-3">2%</td>
-                <td className="px-4 py-3">1% platform + 0.5% creator + 0.5% MONSHI buyback &amp; burn</td>
+                <td className="px-4 py-3 font-medium">LP fees</td>
+                <td className="px-4 py-3">1% pool</td>
+                <td className="px-4 py-3">{LP_FEE_SPLIT_COPY}</td>
               </tr>
               <tr className="border-t border-border">
                 <td className="px-4 py-3 font-medium">Token creation</td>
                 <td className="px-4 py-3">500 MON</td>
-                <td className="px-4 py-3">100 MON seeds curve liquidity; remainder to treasury (50% off for MONSHI holders)</td>
+                <td className="px-4 py-3">Seeds the Uniswap V3 position. MONSHI holders can get the creation discount.</td>
               </tr>
               <tr className="border-t border-border">
                 <td className="px-4 py-3 font-medium">Creator tax (optional)</td>
@@ -177,28 +172,10 @@ export default function HowItWorks() {
         </div>
       </section>
 
-      {/* Section 5: Graduation */}
       <section className="mt-16">
-        <h2 className="text-3xl font-bold text-white mb-6">Graduation</h2>
-        <p className="text-base text-white/70 leading-relaxed mb-6">
-          When raised MON hits <strong className="text-white">260,000 MON net of fees</strong> (≈ $5,000), the token graduates automatically. Three things happen in one transaction:
-        </p>
-        <ol className="space-y-3 mb-6">
-          <li className="flex gap-3 items-start">
-            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-brand-purple/10 text-brand-purple flex items-center justify-center font-bold text-xs mt-0.5">1</span>
-            <span className="text-white/70 leading-relaxed">Remaining curve tokens + MON migrate to a real Uniswap V3 LP.</span>
-          </li>
-          <li className="flex gap-3 items-start">
-            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-brand-purple/10 text-brand-purple flex items-center justify-center font-bold text-xs mt-0.5">2</span>
-            <span className="text-white/70 leading-relaxed">The LP NFT is locked forever (no rug possible).</span>
-          </li>
-          <li className="flex gap-3 items-start">
-            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-brand-purple/10 text-brand-purple flex items-center justify-center font-bold text-xs mt-0.5">3</span>
-            <span className="text-white/70 leading-relaxed">Creator receives a <strong className="text-white">41,700 MON graduation reward</strong> (≈ $800), and the treasury takes 10,400 MON (≈ $200) — both claimable via the Token page.</span>
-          </li>
-        </ol>
+        <h2 className="text-3xl font-bold text-white mb-6">Fees</h2>
         <p className="text-base text-white/70 leading-relaxed">
-          After graduation, the token trades on Uniswap V3 like any other Monad token. The creator still earns 0.5% of every sell forever (no expiry).
+          {LP_FEE_SPLIT_COPY}. The pool fee tier is 1% on Uniswap V3. That split is the product. There is no second curve fee.
         </p>
       </section>
 
@@ -232,7 +209,7 @@ export default function HowItWorks() {
             <Shield className="text-brand-purple flex-shrink-0 mt-1" size={28} />
             <div className="space-y-3 text-base text-white/70 leading-relaxed">
               <p>
-                Reviewed across multiple audit rounds and source-verified on the Monad explorer. The graduation LP is burned (locked permanently) — creators cannot withdraw it. Treasury, buyback, and platform wallets are visible on-chain, and economic parameters change only through a 24-hour timelock with 2-step ownership.
+                Reviewed across multiple audit rounds and source-verified on the Monad explorer. Liquidity lives in the Uniswap V3 position. Treasury, buyback, and platform wallets are visible on-chain, and economic parameters change only through a 24-hour timelock with 2-step ownership.
               </p>
               <p>
                 Read the contract source and audit notes on the <Link href="/docs" className="text-brand-purple hover:underline">Docs page</Link>.
@@ -300,7 +277,7 @@ export default function HowItWorks() {
       <section className="mt-16 mb-8 text-center">
         <h2 className="text-3xl font-bold text-white mb-4">Ready to launch?</h2>
         <p className="text-base text-white/70 mb-6 max-w-2xl mx-auto">
-          Fair launch. Pure curve. Real money.
+          Fair launch. Real pool. Real money.
         </p>
         <div className="flex flex-wrap justify-center gap-3">
           <Link href="/create" className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-brand-purple hover:bg-brand-purple/90 text-white font-semibold transition-colors">

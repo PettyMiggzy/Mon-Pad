@@ -37,8 +37,7 @@ export default function AdminPage() {
       <HubSection />
       <BugReportsSection />
       <div style={{ marginTop: 32, padding: 16, background: 'rgba(255,255,255,0.03)', borderRadius: 8, fontSize: 12, color: '#888' }}>
-        {/* TODO: timelocked admin controls */}
-        TODO: timelocked admin controls (proposeSet*, executeSet*), force-distribute buttons, stats charts. v1 admin is read-only state + bug reports.
+        Admin controls ride the timelock. This view is read-only state and bug reports.
       </div>
     </div>
   );
