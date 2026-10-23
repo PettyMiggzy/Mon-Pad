@@ -1690,3 +1690,6 @@ h1, h2, h3, .pad-display { font-family: var(--font-display), 'Russo One', sans-s
   .pad-hero-burn { padding-bottom: 96px; }
   .pad-hero-copy h1 { font-size: 44px; min-height: 0; max-width: 11ch; }
 }
+
+/* Home sidebar: stack the panels (the older .pad-rail rule is a horizontal scroller and clipped the 2nd panel). */
+.pad-layout > .pad-rail { display: flex; flex-direction: column; gap: 12px; overflow: visible; padding: 0; scroll-snap-type: none; min-width: 0; }
