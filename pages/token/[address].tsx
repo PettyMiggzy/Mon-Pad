@@ -7,6 +7,7 @@ import { parseEther, formatEther, type Address } from 'viem';
 import { motion } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import { coinMood } from '@/lib/mood';
+import { isDemoAddress } from '@/lib/demo';
 import { Flame, Share2, ExternalLink, Copy, Wrench, Zap, Shield, Wallet, Link2 } from 'lucide-react';
 import { curveV3Abi, tokenAbi } from '@/lib/abis';
 import V3TokenActivity from '@/components/V3TokenActivity';
@@ -102,6 +103,9 @@ export default function TokenPage() {
   const symbol = demoTok?.symbol || (meta.data?.[1]?.result as string) || '';
 
   const [tokenMeta, setTokenMeta] = useState<{ image_url?: string; description?: string; twitter?: string; telegram?: string; website?: string; created_at?: string } | null>(null);
+  const isDemo = isDemoAddress(addr);
+  const sp = demoTok?.sparkline;
+  const demoChange = isDemo && sp && sp.length > 1 ? ((sp[sp.length - 1] - sp[0]) / sp[0]) * 100 : undefined;
   const [livingGlb, setLivingGlb] = useState<string | null>(null);
   useEffect(() => {
     if (!addr) return;
@@ -181,8 +185,11 @@ export default function TokenPage() {
 
   const effMon = reserves ? reserves.vm + reserves.rm : 0n;
   const effTok = reserves ? reserves.vt - (SUPPLY - reserves.rt) : 0n;
-  const priceMon = effMon > 0n && effTok > 0n ? Number(formatEther(effMon)) / Number(formatEther(effTok)) : 0;
-  const mcapMon = priceMon * 1_000_000_000;
+  const realPriceMon = effMon > 0n && effTok > 0n ? Number(formatEther(effMon)) / Number(formatEther(effTok)) : 0;
+  // Demo tokens have no pool: show their sample numbers so the page matches the board tile.
+  const demoMcap = isDemoAddress(addr) && demoTok ? Number(formatEther(BigInt(demoTok.marketCapMon))) : 0;
+  const priceMon = demoMcap > 0 ? demoMcap / 1_000_000_000 : realPriceMon;
+  const mcapMon = demoMcap > 0 ? demoMcap : realPriceMon * 1_000_000_000;
 
   const [monUsd, setMonUsd] = useState(0);
   useEffect(() => {
@@ -213,7 +220,7 @@ export default function TokenPage() {
       >
         {livingGlb && !prefersReducedMotion() && (
           <div style={{ marginBottom: 12 }}>
-            <LivingCoin glb={livingGlb} mood={coinMood({ change: stats.change })} height={240} />
+            <LivingCoin glb={livingGlb} mood={coinMood({ change: demoChange ?? stats.change })} height={240} />
           </div>
         )}
         <div className="td-hero-main">
@@ -251,8 +258,8 @@ export default function TokenPage() {
           <HeaderStat label="Mcap" value={`${fmtNum(mcapMon)} MON`} sub={monUsd ? `$${fmtNum(mcapMon * monUsd)}` : undefined} />
           <HeaderStat
             label="Change"
-            value={`${stats.change >= 0 ? '+' : ''}${stats.change.toFixed(1)}%`}
-            color={stats.change > 0 ? '#3DFF9A' : stats.change < 0 ? '#FF5C7A' : undefined}
+            value={`${(demoChange ?? stats.change) >= 0 ? '+' : ''}${(demoChange ?? stats.change).toFixed(1)}%`}
+            color={(demoChange ?? stats.change) > 0 ? '#3DFF9A' : (demoChange ?? stats.change) < 0 ? '#FF5C7A' : undefined}
           />
           <HeaderStat label="Vol" value={`${fmtNum(stats.vol)} MON`} />
         </div>
@@ -279,6 +286,8 @@ export default function TokenPage() {
           <StatsCard priceMon={priceMon} mcapMon={mcapMon} stats={stats} monUsd={monUsd} />
         </main>
         <aside className="td-aside">
+          {isDemo && <div className="td-desc"><b>Demo token.</b> Sample data to preview living coins. Trading is off.</div>}
+          <div style={isDemo ? { opacity: 0.45, pointerEvents: 'none' } : undefined} aria-disabled={isDemo}>
           <TradePanel
             token={addr}
             curve={curve}
@@ -289,6 +298,7 @@ export default function TokenPage() {
             balance={balance}
             onTraded={refreshAfterTrade}
           />
+          </div>
           {wallet && balance > 0n && (
             <div className="td-hold">
               You hold <b>{Number(formatEther(balance)).toLocaleString(undefined, { maximumFractionDigits: 2 })}</b> ${symbol}

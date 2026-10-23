@@ -1,30 +1,9 @@
 import type { TokenSummary, Trade, Candle, Comment, Profile, BugReport, TopEarner, Holder } from './api';
 
 const ROSTER: { name: string; symbol: string; hue: string }[] = [
-  { name: 'Monshi', symbol: 'MONSHI', hue: '7c3aed' },
-  { name: 'Street Heat', symbol: 'HEAT', hue: 'db2777' },
-  { name: 'Pad King', symbol: 'PAD', hue: '8b5cf6' },
-  { name: 'Violet Rush', symbol: 'VLT', hue: 'a855f7' },
-  { name: 'Lambo Dreams', symbol: 'LAMBO', hue: 'ec4899' },
-  { name: 'Moon Dust', symbol: 'DUST', hue: 'c026d3' },
-  { name: 'Purple Ape', symbol: 'PAPE', hue: '9333ea' },
-  { name: 'Cyan Fang', symbol: 'FANG', hue: '06b6d4' },
-  { name: 'Monad Cat', symbol: 'MCAT', hue: '6366f1' },
-  { name: 'Pepe King', symbol: 'PEPEK', hue: '22c55e' },
-  { name: 'Burn Baby', symbol: 'BURN', hue: 'f43f5e' },
-  { name: 'Drive Hard', symbol: 'DRIVE', hue: 'f97316' },
-  { name: 'Smart Money', symbol: 'SMART', hue: 'eab308' },
-  { name: 'Dead Wallet', symbol: 'DEAD', hue: '64748b' },
-  { name: 'Curve Queen', symbol: 'CURVE', hue: 'd946ef' },
-  { name: 'Gas Goblin', symbol: 'GOB', hue: '14b8a6' },
-  { name: 'Alpha Drop', symbol: 'ALPHA', hue: '3b82f6' },
-  { name: 'Night Market', symbol: 'NITE', hue: '4c1d95' },
-  { name: 'Toxic Flow', symbol: 'TOX', hue: '84cc16' },
-  { name: 'Rogue Ping', symbol: 'PING', hue: 'f472b6' },
-  { name: 'Liquid Knife', symbol: 'KNIFE', hue: '0ea5e9' },
-  { name: 'Crown Jewel', symbol: 'CROWN', hue: 'fbbf24' },
-  { name: 'Wick God', symbol: 'WICK', hue: 'ef4444' },
-  { name: 'Youre Smart', symbol: 'YSD', hue: 'ff4d9a' },
+  { name: 'Monshi Zoomies', symbol: 'ZOOM', hue: '7c3aed' }, // trends up -> happy / cheering
+  { name: 'Milk Baron', symbol: 'MILK', hue: 'db2777' },      // trends down -> droops
+  { name: 'Burn Baby', symbol: 'BURN', hue: 'f43f5e' },       // flat -> idle
 ];
 
 function hexPad(n: number, len: number): string {
@@ -56,7 +35,7 @@ function genSpark(i: number): number[] {
 }
 
 export const SAMPLE: TokenSummary[] = ROSTER.map((r, i) => {
-  const monRaised = Math.min(240_000, 8_000 + i * 9_500);
+  const monRaised = 30_000 + i * 22_000;
   const vol = 1_200 + i * 640 + ((i * 97) % 900);
   const mcap = 40_000 + i * 18_500 + ((i * 41) % 12_000);
   return {
@@ -69,7 +48,7 @@ export const SAMPLE: TokenSummary[] = ROSTER.map((r, i) => {
     marketCapMon: String(BigInt(mcap) * 10n ** 18n),
     volume24hMon: String(BigInt(vol) * 10n ** 18n),
     monRaisedNet: String(BigInt(monRaised) * 10n ** 18n),
-    graduated: i > 20,
+    graduated: false,
     createdAt: Math.floor(Date.now() / 1000) - i * 2700,
   };
 });

@@ -10,6 +10,12 @@ const mockFlag = process.env.NEXT_PUBLIC_MOCK_MODE === '1' || process.env.NEXT_P
 /** True when we should paint the board with seeded demo tokens. */
 export const DEMO_BOARD = mockFlag;
 
+/**
+ * Labelled preview: while the board has NO real launches, show 3 sample tokens so people can see
+ * the living-coin flow. They vanish as soon as a real token exists. Turn off with NEXT_PUBLIC_DEMO_PREVIEW=0.
+ */
+export const DEMO_PREVIEW = process.env.NEXT_PUBLIC_DEMO_PREVIEW !== '0';
+
 export function isDemoAddress(addr?: string | null): boolean {
   if (!addr) return false;
   const a = addr.toLowerCase();
