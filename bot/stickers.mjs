@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Monshi's animated stickers: preview them in a chat, or publish them as a Telegram sticker pack.
 //
-//   TELEGRAM_BOT_TOKEN=... node bot/stickers.mjs preview --chat=<chat id>
+//   TELEGRAM_BOT_TOKEN=... node bot/stickers.mjs preview --chat=<chat id> [--only=celebrate,wave]
 //   TELEGRAM_BOT_TOKEN=... node bot/stickers.mjs publish --owner=<your telegram user id> [--name=monshi] [--title="Monshi"]
 //
 // `preview` sends each sticker to one chat (your DM) so you can look at them first.
@@ -20,7 +20,8 @@ const cmd = process.argv[2];
 
 // one emoji per pose so each sticker shows up when someone types it
 const EMOJI = { celebrate: '🎉', wave: '👋', dance: '🕺', facepalm: '🤦', hype: '🙌', angry: '😡', happy: '😺', sleepy: '😴' };
-const files = fs.readdirSync(DIR).filter((f) => f.endsWith('.webm')).sort();
+const only = arg('only') ? arg('only').split(',') : null; // e.g. --only=celebrate,wave
+const files = fs.readdirSync(DIR).filter((f) => f.endsWith('.webm')).sort().filter((f) => !only || only.includes(f.replace(/^monshi-/, '').replace(/\.webm$/, '')));
 const poseOf = (f) => f.replace(/^monshi-/, '').replace(/\.webm$/, '');
 if (!files.length) { console.error('No stickers in', DIR, '- run node bot/video/render-stickers.mjs'); process.exit(1); }
 

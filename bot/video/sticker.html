@@ -13,7 +13,9 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 
-const SIZE = Number(new URLSearchParams(location.search).get('size') || 512);
+const QS = new URLSearchParams(location.search);
+const SIZE = Number(QS.get('size') || 512);
+const CY = Number(QS.get('cy') || 0.5), CZ = Number(QS.get('cz') || 6.4); // zoom for the pose lab
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
 renderer.setSize(SIZE, SIZE); renderer.setPixelRatio(1); renderer.setClearColor(0x000000, 0);
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
@@ -21,7 +23,7 @@ document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
-camera.position.set(0, 0.5, 6.4); camera.lookAt(0, 0.5, 0);
+camera.position.set(0, CY, CZ); camera.lookAt(0, CY, 0);
 
 scene.add(new THREE.AmbientLight(0xffffff, 1.0));
 const key = new THREE.DirectionalLight(0xfff1e0, 2.6); key.position.set(2.5, 4, 5); scene.add(key);
@@ -50,18 +52,18 @@ const POSES = {
   celebrate: (w) => {
     const hop = Math.abs(Math.sin(w)) * 0.36;
     root.position.y = -1.2 + hop; root.rotation.y = Math.sin(w) * 0.25;
-    set('RightArm', 0, 0, -2.6 + Math.sin(2 * w) * 0.14); set('LeftArm', 0, 0, 2.6 - Math.sin(2 * w) * 0.14);
+    set('RightArm', 0, -1.2, -2.6 + Math.sin(2 * w) * 0.14); set('LeftArm', 0, 1.2, 2.6 - Math.sin(2 * w) * 0.14); // y = twist, so the palms face each other
     set('Spine01', -0.1, Math.sin(w) * 0.1, 0); set('Head', -0.1, Math.sin(w) * 0.2, Math.sin(2 * w) * 0.06);
   },
   wave: (w) => {
     root.rotation.y = Math.sin(w) * 0.12; root.position.y = -1.2 + Math.abs(Math.sin(2 * w)) * 0.03;
-    set('RightArm', 0, 0, -2.25); set('RightForeArm', 0, 0, -0.5 + Math.sin(4 * w) * 0.55);
+    set('RightArm', 0, -0.9, -2.25); set('RightForeArm', 0, 0, -0.5 + Math.sin(4 * w) * 0.55);
     set('LeftArm', 0, 0, 0.2); set('Spine01', 0, Math.sin(w) * 0.1, Math.sin(w) * 0.04); set('Head', 0, Math.sin(w) * 0.18, Math.sin(w) * 0.1 - 0.05);
   },
   dance: (w) => {
     root.position.y = -1.2 + Math.abs(Math.sin(2 * w)) * 0.12; root.rotation.y = Math.sin(w) * 0.5; root.rotation.z = Math.sin(2 * w) * 0.04;
     const a = Math.sin(2 * w);
-    set('RightArm', 0, 0, -1.6 - a * 1.0); set('LeftArm', 0, 0, 1.6 - a * 1.0);
+    set('RightArm', 0, -0.5 - a * 0.4, -1.6 - a * 1.0); set('LeftArm', 0, 0.5 - a * 0.4, 1.6 - a * 1.0);
     set('Spine01', 0, Math.sin(2 * w) * 0.25, Math.sin(2 * w) * 0.08); set('Head', 0.05 + Math.sin(4 * w) * 0.08, -Math.sin(2 * w) * 0.3, Math.sin(2 * w) * 0.12);
     set('RightUpLeg', Math.sin(2 * w + 1) * 0.18, 0, 0); set('LeftUpLeg', -Math.sin(2 * w + 1) * 0.18, 0, 0);
   },
@@ -74,8 +76,8 @@ const POSES = {
   hype: (w) => {
     const p = Math.abs(Math.sin(w));
     root.position.y = -1.2 + p * 0.05; root.rotation.y = Math.sin(w) * 0.2;
-    set('RightArm', 0, 0, -1.0); set('RightForeArm', 0, 0, -1.9 - p * 0.25);
-    set('LeftArm', 0, 0, 1.0); set('LeftForeArm', 0, 0, 1.9 + p * 0.25);
+    set('RightArm', 0, -0.7, -1.0); set('RightForeArm', 0, 0, -1.9 - p * 0.25);
+    set('LeftArm', 0, 0.7, 1.0); set('LeftForeArm', 0, 0, 1.9 + p * 0.25);
     set('Spine01', -0.08, Math.sin(w) * 0.06, 0); set('Head', -0.1, Math.sin(w) * 0.2, 0);
   },
   angry: (w) => {

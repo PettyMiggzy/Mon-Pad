@@ -8,7 +8,7 @@ const server = http.createServer((req, res) => { const f = decodeURIComponent(ne
 await new Promise((r) => server.listen(0, r));
 const b = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH, args: ['--no-sandbox', '--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const pg = await b.newPage({ viewport: { width: 512, height: 512 } });
-await pg.goto(`http://localhost:${server.address().port}/bot/video/sticker.html`);
+await pg.goto(`http://localhost:${server.address().port}/bot/video/sticker.html${process.env.LAB_QS || ''}`);
 await pg.waitForFunction(() => window.ready === true, null, { timeout: 120000 });
 const cfgs = JSON.parse(process.argv[3]); const outDir = path.dirname(process.argv[2]);
 let i = 0; for (const [name, cfg] of Object.entries(cfgs)) { await pg.evaluate((c) => window.custom(c), cfg); await pg.screenshot({ path: path.join(outDir, `.lab-${String(i++).padStart(2, '0')}-${name}.png`), omitBackground: true }); }

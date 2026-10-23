@@ -160,8 +160,8 @@ function setT(t) {
   monshi.position.y = -1.25 + air - crouch * 0.1;
   monshi.scale.set(1 + crouch * 0.05, 1 - crouch * 0.09, 1 + crouch * 0.05);
   monshi.rotation.y = Math.sin(t * 2.2) * 0.28;
-  pose('RightArm', 0, 0, -(2.6 * armsUp) + wave);
-  pose('LeftArm', 0, 0, (2.6 * armsUp) - wave);
+  pose('RightArm', 0, -1.2 * armsUp, -(2.6 * armsUp) + wave); // y = twist so the palms face each other
+  pose('LeftArm', 0, 1.2 * armsUp, (2.6 * armsUp) - wave);
   pose('RightForeArm', 0, 0, -0.25 * armsUp);
   pose('LeftForeArm', 0, 0, 0.25 * armsUp);
   pose('Spine01', -0.1 * armsUp + crouch * 0.18, Math.sin(t * 2.2) * 0.12, 0);
