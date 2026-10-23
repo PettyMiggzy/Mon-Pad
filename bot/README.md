@@ -118,7 +118,7 @@ Tx · DS · WEB · X · TG                (X / TG come from the token's saved so
 ✅ DEX PAID                            (when the token has an approved DexScreener profile)
 
 [ 🔎 Monadscan ] [ 📊 DexScreener ]    green
-[ 📈 Get Monpad Trending ]
+[ 🤖 Trade with your AI ]
 [ 🟣 Buy on Monpad ]                  blue
 ```
-Each piece is fetched with a short timeout and left out if unavailable, so an alert is never delayed or lost. Holder position needs an RPC node that keeps recent state (your Alchemy URL does). `GET_TRENDING_URL` sets where "Get Monpad Trending" points.
+Each piece is fetched with a short timeout and left out if unavailable, so an alert is never delayed or lost. Holder position needs an RPC node that keeps recent state (your Alchemy URL does). `AI_URL` sets where "Trade with your AI" points (default `${SITE}/ai`).

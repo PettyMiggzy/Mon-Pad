@@ -237,15 +237,15 @@ function emojiWall(usd, tier) {
 // Telegram button colours (Bot API 9.4+): "success" green, "primary" blue, "danger" red. BUTTON_STYLES=off disables.
 const STYLES_ON = (process.env.BUTTON_STYLES || 'on') !== 'off';
 const styled = (btn, style) => (STYLES_ON && style ? { ...btn, style } : btn);
-const GET_TRENDING_URL = process.env.GET_TRENDING_URL || `${SITE}/docs`;
+const AI_URL = process.env.AI_URL || `${SITE}/ai`;
 
-// Buttons: [Monadscan | DexScreener] green, [Get Monpad Trending], [Buy on Monpad] blue.
+// Buttons: [Monadscan | DexScreener] green, [Trade with your AI], [Buy on Monpad] blue.
 function buyButtons(info, enr, tx) {
   const row1 = [styled({ text: '🔎 Monadscan', url: tx ? `${EXPLORER}/tx/${tx}` : EXPLORER }, 'success')];
   if (enr?.listed && enr.pairUrl) row1.push(styled({ text: '📊 DexScreener', url: enr.pairUrl }, 'success'));
   return { reply_markup: { inline_keyboard: [
     row1,
-    [{ text: '📈 Get Monpad Trending', url: GET_TRENDING_URL }],
+    [{ text: '🤖 Trade with your AI', url: AI_URL }],
     [styled({ text: '🟣 Buy on Monpad', url: `${SITE}/token/${info.token}` }, 'primary')],
   ] } };
 }
