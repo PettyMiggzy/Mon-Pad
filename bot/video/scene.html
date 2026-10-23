@@ -23,9 +23,9 @@ const q = new URLSearchParams(location.search);
 const SIZE = Number(q.get('size') || 720);
 const TIER = q.get('tier') || 'small';
 const CFG = {
-  small: { text: 'GREAT BUY', coins: 26, confetti: 60, bloom: 0.45, bg: ['#2a1250', '#0a0614'], accent: 0xff4d9a, accent2: 0xb57bff, shake: 0, ring: 0xb57bff },
-  big:   { text: 'HUGE BUY',  coins: 48, confetti: 110, bloom: 0.55, bg: ['#4a1260', '#12041a'], accent: 0xff2d88, accent2: 0xffb02e, shake: 0.01, ring: 0xff4d9a },
-  whale: { text: 'WHALE BUY', coins: 80, confetti: 170, bloom: 0.65, bg: ['#5a2a05', '#1a0a02'], accent: 0xffc23a, accent2: 0xff4d9a, shake: 0.03, ring: 0xffc23a },
+  small: { text: 'GREAT BUY', coins: 26, confetti: 60, bloom: 0.45, bg: ['#2a1250', '#0a0614'], accent: 0xff4d9a, accent2: 0xb57bff, shake: 0, ring: 0xb57bff, fill: [0x9a4dff, 0xff4d9a], edge: 0xffffff },
+  big:   { text: 'HUGE BUY',  coins: 48, confetti: 110, bloom: 0.55, bg: ['#4a1260', '#12041a'], accent: 0xff2d88, accent2: 0xffb02e, shake: 0.01, ring: 0xff4d9a, fill: [0xff4d9a, 0x9a4dff], edge: 0xffffff },
+  whale: { text: 'WHALE BUY', coins: 80, confetti: 170, bloom: 0.65, bg: ['#5a2a05', '#1a0a02'], accent: 0xffc23a, accent2: 0xff4d9a, shake: 0.03, ring: 0xffc23a, fill: [0xffc23a, 0xff7a2e], edge: 0x3a0f6a },
 }[TIER];
 const DURATION = 3.2;
 
@@ -92,7 +92,7 @@ conf.instanceColor.needsUpdate = true;
 const monshi = new THREE.Group(); scene.add(monshi);
 const bones = {}; const rest = {};
 const BONES = ['Head', 'neck', 'Spine', 'Spine01', 'Spine02', 'RightArm', 'RightForeArm', 'LeftArm', 'LeftForeArm', 'RightUpLeg', 'LeftUpLeg'];
-let textMesh;
+let textGroup; const letters = [];
 
 const loader = new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
 const gltf = await loader.loadAsync('/public/models/monshi.glb');
@@ -109,11 +109,34 @@ for (const n of BONES) { const o = model.getObjectByName(n); if (o) { bones[n] =
 
 const font = await new FontLoader().loadAsync('/bot/video/RussoOne-buy.typeface.json');
 {
-  const geo = new TextGeometry(CFG.text, { font, size: 0.52, depth: 0.16, curveSegments: 10, bevelEnabled: true, bevelThickness: 0.025, bevelSize: 0.02, bevelSegments: 4 });
-  geo.computeBoundingBox(); const w = geo.boundingBox.max.x - geo.boundingBox.min.x; geo.translate(-w / 2, 0, 0);
-  textMesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: CFG.accent, metalness: 0.7, roughness: 0.25, emissive: CFG.accent, emissiveIntensity: 0.55 }));
-  textMesh.position.set(0, 2.05, 0.3);
-  scene.add(textMesh);
+  // puffy, chunky letters in Monshi's colours with a white "sticker" outline; they drop in one at a time
+  const size = 0.62, k = size / font.data.resolution;
+  const chars = [...CFG.text];
+  const adv = chars.map((ch) => (font.data.glyphs[ch]?.ha ?? 600) * k);
+  const total = adv.reduce((x, y) => x + y, 0) + (chars.length - 1) * 0.03;
+  textGroup = new THREE.Group(); textGroup.position.set(0, 2.1, 0.3); scene.add(textGroup);
+  let x = -total / 2;
+  chars.forEach((ch, i) => {
+    if (ch !== ' ') {
+      const geo = new TextGeometry(ch, { font, size, depth: 0.3, curveSegments: 12, bevelEnabled: true, bevelThickness: 0.07, bevelSize: 0.055, bevelSegments: 8 });
+      geo.computeBoundingBox(); const bb = geo.boundingBox;
+      const cx = (bb.max.x + bb.min.x) / 2, cy = (bb.max.y + bb.min.y) / 2, cz = (bb.max.z + bb.min.z) / 2;
+      geo.translate(-cx, -cy, -cz);
+      const f = i / Math.max(1, chars.length - 1);
+      const col = new THREE.Color(CFG.fill[0]).lerp(new THREE.Color(CFG.fill[1]), f);
+      const fillMat = new THREE.MeshPhysicalMaterial({ color: col, metalness: 0.15, roughness: 0.22, clearcoat: 1, clearcoatRoughness: 0.15, emissive: col, emissiveIntensity: 0.1 });
+      const mesh = new THREE.Mesh(geo, fillMat);
+      const outline = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: CFG.edge, side: THREE.BackSide }));
+      outline.scale.setScalar(1.09);
+      const holder = new THREE.Group(); holder.add(outline, mesh);
+      holder.position.set(x + (bb.max.x - bb.min.x) / 2 + bb.min.x - 0, 0, 0);
+      holder.position.x = x + (adv[i]) / 2;
+      holder.scale.setScalar(0.0001);
+      textGroup.add(holder);
+      letters.push({ holder, t0: 0.42 + i * 0.065, ph: i * 0.9 });
+    }
+    x += adv[i] + 0.03;
+  });
 }
 
 // post
@@ -146,14 +169,20 @@ function setT(t) {
   pose('RightUpLeg', -crouch * 0.4, 0, 0);
   pose('LeftUpLeg', -crouch * 0.4, 0, 0);
 
-  // ---- text pop + float
-  if (textMesh) {
-    const s = t < 0.45 ? 0.001 : 1 + Math.sin(clamp01((t - 0.45) / 0.35) * Math.PI) * 0.25 * (t < 0.8 ? 1 : 0);
-    const grow = ease((t - 0.45) / 0.3);
-    textMesh.scale.setScalar(Math.max(0.001, grow * (s > 1 ? s : 1)));
-    textMesh.position.y = 2.05 + Math.sin(t * 3) * 0.04;
-    textMesh.rotation.y = Math.sin(t * 1.7) * 0.18;
-    textMesh.material.emissiveIntensity = 0.5 + Math.sin(t * 9) * 0.18;
+  // ---- letters: drop in with a bounce, then wobble like inflated sticker letters
+  if (textGroup) {
+    const bounce = (x) => { const n1 = 7.5625, d1 = 2.75; if (x < 1 / d1) return n1 * x * x; if (x < 2 / d1) return n1 * (x -= 1.5 / d1) * x + 0.75; if (x < 2.5 / d1) return n1 * (x -= 2.25 / d1) * x + 0.9375; return n1 * (x -= 2.625 / d1) * x + 0.984375; };
+    for (const L of letters) {
+      const u = (t - L.t0) / 0.55;
+      if (u <= 0) { L.holder.scale.setScalar(0.0001); continue; }
+      const p = clamp01(u);
+      const sc = 1 + (u > 1 ? Math.sin((t - L.t0 - 0.55) * 8 + L.ph) * 0.04 : 0);
+      L.holder.scale.setScalar(Math.max(0.001, sc));
+      L.holder.position.y = (1 - bounce(p)) * 1.5 + Math.sin(t * 3 + L.ph) * 0.045;
+      L.holder.rotation.z = (1 - p) * 0.6 * (L.ph % 2 > 1 ? 1 : -1) + Math.sin(t * 2.4 + L.ph) * 0.05;
+      L.holder.rotation.y = Math.sin(t * 1.6 + L.ph) * 0.2;
+    }
+    textGroup.position.y = 2.1;
   }
 
   // ---- shockwave

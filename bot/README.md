@@ -87,3 +87,10 @@ Every buy alert is now a short 3D clip of Monshi (rigged model, coin rain, confe
 5. Check with `pm2 logs monpad-bot`, and `--test-alert` to see the look.
 
 Never paste the bot token into chats or commit it. If it was shared anywhere, revoke it in @BotFather (`/revoke`) and put the new one in `.env`.
+
+## Monshi stickers (animated, transparent, no text)
+Eight 3D Monshi stickers: `celebrate`, `wave`, `dance`, `facepalm`, `hype`, `angry`, `happy`, `sleepy` (`assets/stickers/monshi-*.webm`). Each is a 2-second seamless loop, 512x512, transparent background with a white outline, WebM/VP9, under 256 KB, which are Telegram's rules for video stickers.
+
+- **Look at them first:** `TELEGRAM_BOT_TOKEN=... node stickers.mjs preview --chat=<your chat id>` sends them to one chat.
+- **Publish a public pack:** `TELEGRAM_BOT_TOKEN=... node stickers.mjs publish --owner=<your telegram user id> [--name=monshi]`. The pack link is `t.me/addstickers/<name>_by_<botusername>`. Publishing is public, so only do it when you are happy with them.
+- **Re-render or add poses:** poses live in `video/sticker.html` (`POSES`); `node video/render-stickers.mjs [pose ...]` renders them (`SHEET=1` makes a preview sheet instead). Needs `playwright-core` and `ffmpeg`.
