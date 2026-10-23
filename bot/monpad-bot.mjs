@@ -250,7 +250,7 @@ function buyButtons(info, enr, tx) {
   ] } };
 }
 
-// 3D buy videos (bot/assets/buy-{small,big,whale}.mp4, made by bot/video/render.mjs). The first send uploads
+// Buy clips (bot/assets/buy-{small,big,whale}.mp4, made by bot/video/gif/render.py). The first send uploads
 // the file; Telegram's file_id is cached in video-cache.json so every later alert is instant.
 const ASSETS = new URL('./assets/', import.meta.url);
 const VIDEO_CACHE = new URL('./video-cache.json', import.meta.url);
