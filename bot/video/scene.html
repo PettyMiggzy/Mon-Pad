@@ -1,0 +1,211 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>html,body{margin:0;background:#000;overflow:hidden}canvas{display:block}</style>
+<script type="importmap">
+{ "imports": { "three": "/node_modules/three/build/three.module.js", "three/addons/": "/node_modules/three/examples/jsm/" } }
+</script>
+</head>
+<body>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { FontLoader } from 'three/addons/loaders/FontLoader.js';
+import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+const q = new URLSearchParams(location.search);
+const SIZE = Number(q.get('size') || 720);
+const TIER = q.get('tier') || 'small';
+const CFG = {
+  small: { text: 'GREAT BUY', coins: 26, confetti: 60, bloom: 0.45, bg: ['#2a1250', '#0a0614'], accent: 0xff4d9a, accent2: 0xb57bff, shake: 0, ring: 0xb57bff },
+  big:   { text: 'HUGE BUY',  coins: 48, confetti: 110, bloom: 0.55, bg: ['#4a1260', '#12041a'], accent: 0xff2d88, accent2: 0xffb02e, shake: 0.01, ring: 0xff4d9a },
+  whale: { text: 'WHALE BUY', coins: 80, confetti: 170, bloom: 0.65, bg: ['#5a2a05', '#1a0a02'], accent: 0xffc23a, accent2: 0xff4d9a, shake: 0.03, ring: 0xffc23a },
+}[TIER];
+const DURATION = 3.2;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(SIZE, SIZE);
+renderer.setPixelRatio(1);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
+
+// seeded random so every render is identical
+let seed = 1337;
+const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+
+// background gradient
+{
+  const c = document.createElement('canvas'); c.width = c.height = 512;
+  const g = c.getContext('2d'); const grd = g.createRadialGradient(256, 330, 20, 256, 300, 360);
+  grd.addColorStop(0, CFG.bg[0]); grd.addColorStop(1, CFG.bg[1]);
+  g.fillStyle = grd; g.fillRect(0, 0, 512, 512);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  scene.background = tex;
+}
+
+// lights
+scene.add(new THREE.AmbientLight(0xffffff, 0.9));
+const key = new THREE.DirectionalLight(0xfff1e0, 2.6); key.position.set(2.5, 4, 5); scene.add(key);
+const rimL = new THREE.PointLight(CFG.accent, 60, 14); rimL.position.set(-3.2, 1.5, -1.5); scene.add(rimL);
+const rimR = new THREE.PointLight(CFG.accent2, 50, 14); rimR.position.set(3.4, 0.5, -1); scene.add(rimR);
+const fill = new THREE.PointLight(0xffffff, 18, 12); fill.position.set(0, 0.5, 4.5); scene.add(fill);
+
+// floor glow + shockwave ring
+const floor = new THREE.Mesh(new THREE.CircleGeometry(2.4, 64), new THREE.MeshBasicMaterial({ color: CFG.ring, transparent: true, opacity: 0.14 }));
+floor.rotation.x = -Math.PI / 2; floor.position.y = -1.25; scene.add(floor);
+const ring = new THREE.Mesh(new THREE.RingGeometry(0.92, 1.0, 96), new THREE.MeshBasicMaterial({ color: CFG.ring, transparent: true, opacity: 0, side: THREE.DoubleSide }));
+ring.rotation.x = -Math.PI / 2; ring.position.y = -1.24; scene.add(ring);
+
+// coins
+const coinGeo = new THREE.CylinderGeometry(0.17, 0.17, 0.045, 32);
+const coins = new THREE.InstancedMesh(coinGeo, new THREE.MeshStandardMaterial({ color: 0xffc23a, metalness: 0.4, roughness: 0.35, emissive: 0xb86a00, emissiveIntensity: 0.28 }), CFG.coins);
+coins.frustumCulled = false;
+scene.add(coins);
+const coinData = Array.from({ length: CFG.coins }, () => ({
+  x: (rnd() - 0.5) * 5.2, z: (rnd() - 0.5) * 2.4 - 0.2, y0: 3.2 + rnd() * 3.6, v: 1.6 + rnd() * 1.6, spin: 4 + rnd() * 8, ph: rnd() * 6.28, t0: 0.25 + rnd() * 1.6,
+}));
+
+// confetti
+const confGeo = new THREE.PlaneGeometry(0.07, 0.045);
+const conf = new THREE.InstancedMesh(confGeo, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }), CFG.confetti);
+conf.frustumCulled = false;
+scene.add(conf);
+const palette = [0xd8387f, 0x9a63e0, 0xe0a82a, 0x2fd982, 0xdddddd, 0x58bfe0].map((c) => new THREE.Color(c));
+const confData = Array.from({ length: CFG.confetti }, (_, i) => {
+  const a = rnd() * Math.PI * 2, sp = 1.2 + rnd() * 2.6;
+  conf.setColorAt(i, palette[i % palette.length]);
+  return { vx: Math.cos(a) * sp * 0.8, vy: 2.2 + rnd() * 2.6, vz: Math.sin(a) * sp * 0.5, rot: rnd() * 10, rs: 3 + rnd() * 9 };
+});
+conf.instanceColor.needsUpdate = true;
+
+// monshi
+const monshi = new THREE.Group(); scene.add(monshi);
+const bones = {}; const rest = {};
+const BONES = ['Head', 'neck', 'Spine', 'Spine01', 'Spine02', 'RightArm', 'RightForeArm', 'LeftArm', 'LeftForeArm', 'RightUpLeg', 'LeftUpLeg'];
+let textMesh;
+
+const loader = new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
+const gltf = await loader.loadAsync('/public/models/monshi.glb');
+const model = gltf.scene;
+model.traverse((o) => { if (o.isMesh) o.frustumCulled = false; });
+{
+  const box = new THREE.Box3().setFromObject(model); const size = box.getSize(new THREE.Vector3());
+  const s = 2.35 / size.y; model.scale.setScalar(s); model.updateMatrixWorld(true);
+  const b2 = new THREE.Box3().setFromObject(model); const c = b2.getCenter(new THREE.Vector3());
+  model.position.set(-c.x, -b2.min.y, -c.z);
+}
+monshi.add(model); monshi.position.y = -1.25;
+for (const n of BONES) { const o = model.getObjectByName(n); if (o) { bones[n] = o; rest[n] = o.quaternion.clone(); } }
+
+const font = await new FontLoader().loadAsync('/bot/video/RussoOne-buy.typeface.json');
+{
+  const geo = new TextGeometry(CFG.text, { font, size: 0.52, depth: 0.16, curveSegments: 10, bevelEnabled: true, bevelThickness: 0.025, bevelSize: 0.02, bevelSegments: 4 });
+  geo.computeBoundingBox(); const w = geo.boundingBox.max.x - geo.boundingBox.min.x; geo.translate(-w / 2, 0, 0);
+  textMesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: CFG.accent, metalness: 0.7, roughness: 0.25, emissive: CFG.accent, emissiveIntensity: 0.55 }));
+  textMesh.position.set(0, 2.05, 0.3);
+  scene.add(textMesh);
+}
+
+// post
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(SIZE, SIZE), CFG.bloom, 0.5, 0.92));
+composer.addPass(new OutputPass());
+
+const ease = (x) => 1 - Math.pow(1 - Math.min(1, Math.max(0, x)), 3);
+const clamp01 = (x) => Math.min(1, Math.max(0, x));
+const E = new THREE.Euler(), Q = new THREE.Quaternion();
+function pose(name, x, y, z) { const b = bones[name]; if (!b) return; E.set(x, y, z); Q.setFromEuler(E); b.quaternion.copy(rest[name]).multiply(Q); }
+const dummy = new THREE.Object3D();
+
+function setT(t) {
+  // ---- monshi: crouch, jump, arms up, bounce
+  const crouch = Math.sin(clamp01(t / 0.38) * Math.PI) * (t < 0.38 ? 1 : 0);
+  const air = t > 0.38 ? Math.abs(Math.sin((t - 0.38) * 5.2)) * 0.42 * (1 - clamp01((t - 0.38) / 2.9) * 0.55) : 0;
+  const armsUp = ease((t - 0.2) / 0.35);
+  const wave = Math.sin(t * 13) * 0.12 * armsUp;
+  monshi.position.y = -1.25 + air - crouch * 0.1;
+  monshi.scale.set(1 + crouch * 0.05, 1 - crouch * 0.09, 1 + crouch * 0.05);
+  monshi.rotation.y = Math.sin(t * 2.2) * 0.28;
+  pose('RightArm', 0, 0, -(2.6 * armsUp) + wave);
+  pose('LeftArm', 0, 0, (2.6 * armsUp) - wave);
+  pose('RightForeArm', 0, 0, -0.25 * armsUp);
+  pose('LeftForeArm', 0, 0, 0.25 * armsUp);
+  pose('Spine01', -0.1 * armsUp + crouch * 0.18, Math.sin(t * 2.2) * 0.12, 0);
+  pose('Head', -0.12 * armsUp, Math.sin(t * 2.6) * 0.25, Math.sin(t * 5) * 0.05);
+  pose('RightUpLeg', -crouch * 0.4, 0, 0);
+  pose('LeftUpLeg', -crouch * 0.4, 0, 0);
+
+  // ---- text pop + float
+  if (textMesh) {
+    const s = t < 0.45 ? 0.001 : 1 + Math.sin(clamp01((t - 0.45) / 0.35) * Math.PI) * 0.25 * (t < 0.8 ? 1 : 0);
+    const grow = ease((t - 0.45) / 0.3);
+    textMesh.scale.setScalar(Math.max(0.001, grow * (s > 1 ? s : 1)));
+    textMesh.position.y = 2.05 + Math.sin(t * 3) * 0.04;
+    textMesh.rotation.y = Math.sin(t * 1.7) * 0.18;
+    textMesh.material.emissiveIntensity = 0.5 + Math.sin(t * 9) * 0.18;
+  }
+
+  // ---- shockwave
+  const rt = (t - 0.38) / 0.9;
+  ring.material.opacity = rt > 0 && rt < 1 ? 0.8 * (1 - rt) : 0;
+  ring.scale.setScalar(1 + clamp01(rt) * 3.4);
+  floor.material.opacity = 0.12 + Math.max(0, Math.sin(t * 6)) * 0.06;
+
+  // ---- coins
+  for (let i = 0; i < CFG.coins; i++) {
+    const d = coinData[i]; const tt = t - d.t0;
+    if (tt < 0) { dummy.position.set(0, -50, 0); dummy.scale.setScalar(0.0001); }
+    else {
+      const y = d.y0 - d.v * tt - 0.5 * 3.2 * tt * tt;
+      dummy.position.set(d.x + Math.sin(tt * 2 + d.ph) * 0.15, Math.max(y, -1.1), d.z);
+      dummy.rotation.set(tt * d.spin, d.ph, tt * d.spin * 0.6);
+      dummy.scale.setScalar(y < -1.1 ? 0.0001 : 1);
+    }
+    dummy.updateMatrix(); coins.setMatrixAt(i, dummy.matrix);
+  }
+  coins.instanceMatrix.needsUpdate = true;
+
+  // ---- confetti burst from Monshi's chest
+  const ct = t - 0.42;
+  for (let i = 0; i < CFG.confetti; i++) {
+    const d = confData[i];
+    if (ct < 0) { dummy.position.set(0, -50, 0); dummy.scale.setScalar(0.0001); }
+    else {
+      dummy.position.set(d.vx * ct, 0.2 + d.vy * ct - 0.5 * 4.2 * ct * ct, d.vz * ct + 0.4);
+      dummy.rotation.set(d.rot + ct * d.rs, ct * d.rs * 0.7, 0);
+      dummy.scale.setScalar(dummy.position.y < -1.2 ? 0.0001 : 2.6);
+    }
+    dummy.updateMatrix(); conf.setMatrixAt(i, dummy.matrix);
+  }
+  conf.instanceMatrix.needsUpdate = true;
+
+  // ---- camera: push in, drift, shake on impact
+  const p = t / DURATION;
+  const shake = CFG.shake * Math.max(0, 1 - Math.abs(t - 0.45) * 3.5);
+  camera.position.set(Math.sin(p * 1.4 - 0.7) * 0.7 + Math.sin(t * 90) * shake, 0.3 + p * 0.1 + Math.cos(t * 83) * shake, 8.3 - p * 1.1);
+  camera.lookAt(0, 0.55, 0);
+
+  // lights breathe
+  rimL.intensity = 55 + Math.sin(t * 7) * 15;
+  rimR.intensity = 45 + Math.cos(t * 6) * 12;
+
+  composer.render();
+}
+window.setT = setT;
+window.DURATION = DURATION;
+window.ready = true;
+setT(0);
+</script>
+</body>
+</html>

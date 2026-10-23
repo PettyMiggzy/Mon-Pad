@@ -100,8 +100,9 @@ const seenTx = new Set(Array.isArray(state.seenTx) ? state.seenTx : []);
 let gradInitialized = false;   // skip backfill spam on the very first pool discovery pass
 
 // ── Telegram ─────────────────────────────────────────────────────────────
+const TG_API = process.env.TG_API || 'https://api.telegram.org'; // override only for tests
 async function tg(method, body) {
-  const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${method}`, {
+  const res = await fetch(`${TG_API}/bot${TELEGRAM_BOT_TOKEN}/${method}`, {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
   });
   const j = await res.json().catch(() => ({}));
@@ -217,17 +218,51 @@ function buyTier(usd) {
 function emojiWall(usd, tier) {
   return tier.emoji.repeat(Math.max(1, Math.min(40, Math.floor(usd / tier.unit))));
 }
-// Inline buttons: Buy on Mon-Pad + Chart (DexScreener when listed, else Mon-Pad) + Txn.
+// Telegram button colours (Bot API 9.4+): "success" green, "primary" blue, "danger" red. BUTTON_STYLES=off disables.
+const STYLES_ON = (process.env.BUTTON_STYLES || 'on') !== 'off';
+const styled = (btn, style) => (STYLES_ON && style ? { ...btn, style } : btn);
+
+// Inline buttons: Buy on Monpad (green) + Chart (blue) + Txn.
 function buyButtons(info, enr, tx) {
-  const rows = [[{ text: '🟣 Buy on Mon-Pad', url: `${SITE}/token/${info.token}` }]];
+  const rows = [[styled({ text: '🟢 Buy on Monpad', url: `${SITE}/token/${info.token}` }, 'success')]];
   const r2 = [enr?.listed && enr.pairUrl
-    ? { text: '📊 Chart (DexScreener)', url: enr.pairUrl }
-    : { text: '📈 Chart (Mon-Pad)', url: `${SITE}/token/${info.token}` }];
+    ? styled({ text: '📊 Chart (DexScreener)', url: enr.pairUrl }, 'primary')
+    : styled({ text: '📈 Chart (Monpad)', url: `${SITE}/token/${info.token}` }, 'primary')];
   if (tx) r2.push({ text: '🔎 Txn', url: `${EXPLORER}/tx/${tx}` });
   rows.push(r2);
   return { reply_markup: { inline_keyboard: rows } };
 }
-async function announceBuy(info, mon, usd, tokensOut, trader, tx, enr) {
+
+// 3D buy videos (bot/assets/buy-{small,big,whale}.mp4, made by bot/video/render.mjs). The first send uploads
+// the file; Telegram's file_id is cached in video-cache.json so every later alert is instant.
+const ASSETS = new URL('./assets/', import.meta.url);
+const VIDEO_CACHE = new URL('./video-cache.json', import.meta.url);
+const videoCache = loadJson(VIDEO_CACHE, {});
+const videoFor = (usd) => (usd >= 5000 ? 'whale' : usd >= 1000 ? 'big' : 'small');
+
+async function sendBuyVideo(chatId, kind, caption, extra = {}) {
+  const base = { chat_id: chatId, caption, parse_mode: 'HTML', ...extra };
+  if (videoCache[kind]) {
+    const r = await tg('sendAnimation', { ...base, animation: videoCache[kind] });
+    if (r.ok) return r;
+    delete videoCache[kind]; // stale file_id: fall through and upload again
+  }
+  const file = new URL(`buy-${kind}.mp4`, ASSETS);
+  if (!fs.existsSync(file)) return { ok: false };
+  const form = new FormData();
+  for (const [k, v] of Object.entries(base)) form.append(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
+  form.append('width', '720'); form.append('height', '720'); form.append('duration', '3');
+  form.append('animation', new Blob([fs.readFileSync(file)], { type: 'video/mp4' }), `buy-${kind}.mp4`);
+  const res = await fetch(`${TG_API}/bot${TELEGRAM_BOT_TOKEN}/sendAnimation`, { method: 'POST', body: form });
+  const j = await res.json().catch(() => ({}));
+  if (j.ok) {
+    const id = j.result?.animation?.file_id || j.result?.video?.file_id;
+    if (id) { videoCache[kind] = id; saveJson(VIDEO_CACHE, videoCache); }
+  } else console.error('telegram error: sendAnimation', j.description || res.status);
+  return j;
+}
+
+function buyCaption(info, mon, usd, tokensOut, trader, enr) {
   const tier = buyTier(usd);
   const lines = [
     `${tier.emoji} <b>${esc(info.name || info.symbol)}</b> ($${esc(info.symbol)}) — ${tier.label} BUY`,
@@ -242,7 +277,27 @@ async function announceBuy(info, mon, usd, tokensOut, trader, tx, enr) {
     lines.push(mc);
   }
   lines.push(`👤 <a href="${EXPLORER}/address/${trader}">${short(trader)}</a>`);
-  await send(lines.join('\n'), buyButtons(info, enr, tx));
+  return lines.join('\n');
+}
+
+async function announceBuy(info, mon, usd, tokensOut, trader, tx, enr) {
+  const caption = buyCaption(info, mon, usd, tokensOut, trader, enr);
+  const extra = buyButtons(info, enr, tx);
+  const r = await sendBuyVideo(TELEGRAM_CHAT_ID, videoFor(usd), caption, extra);
+  if (!r.ok) await send(caption, extra); // never lose an alert if the video fails
+}
+
+// node monpad-bot.mjs --test-alert=whale [--chat=<id>]   posts one sample alert and exits (no chain access needed)
+async function runTestAlert(arg, chatArg) {
+  const kind = (arg.split('=')[1] || 'small');
+  const usd = { small: 120, big: 1800, whale: 8200 }[kind] ?? 120;
+  const chat = chatArg ? chatArg.split('=')[1] : TELEGRAM_CHAT_ID;
+  const info = { name: 'Monshi Zoomies', symbol: 'ZOOM', token: '0x0000000000000000000000000000000000000001' };
+  const enr = { marketCapUsd: 184000, priceChangeH24: 12.4, listed: false };
+  const caption = buyCaption(info, usd / 0.02, usd, 1_250_000, '0x5db7CA9d2CE3f414B3fd94EC0FcaF9F3Ab1A575f', enr);
+  const extra = buyButtons(info, enr, '0x' + 'ab'.repeat(32));
+  const r = await sendBuyVideo(chat, videoFor(usd), caption, extra);
+  console.log(r.ok ? `sample ${kind} alert sent` : `failed: ${r.description || 'see log'}`);
 }
 
 // ── Trending ───────────────────────────────────────────────────────────────
@@ -503,6 +558,8 @@ async function tick() {
 
 // ── Boot ─────────────────────────────────────────────────────────────────
 async function main() {
+  const testArg = process.argv.find((a) => a.startsWith('--test-alert'));
+  if (testArg) { await runTestAlert(testArg, process.argv.find((a) => a.startsWith('--chat='))); return; }
   console.log(`monpad-bot → chat ${TELEGRAM_CHAT_ID} | factory ${FACTORY_V3} | min buy $${MIN_BUY_USD}`);
   console.log(BOOST_CONTRACT ? `boost contract ${BOOST_CONTRACT} (MONSHI-paid, tiered)` : 'boost contract: (not set — paid trending disabled)');
   await refreshTokens();

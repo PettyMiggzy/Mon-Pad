@@ -64,3 +64,26 @@ Set `BOOST_CONTRACT` and `BOOST_MON_PER_HOUR` in `.env`.
 ## State
 `state.json` (git-ignored) holds the last scanned block so restarts resume without
 double-posting. Delete it to re-baseline from `MAX_CATCHUP_BLOCKS` back.
+
+## Buy alerts: 3D video + coloured buttons
+Every buy alert is now a short 3D clip of Monshi (rigged model, coin rain, confetti, 3D "GREAT BUY / HUGE BUY / WHALE BUY" text) with a green **Buy on Monpad** button and a blue **Chart** button.
+
+| Buy size | Video |
+|---|---|
+| under $1,000 | `assets/buy-small.mp4` (GREAT BUY) |
+| $1,000 to $4,999 | `assets/buy-big.mp4` (HUGE BUY) |
+| $5,000 and up | `assets/buy-whale.mp4` (WHALE BUY) |
+
+- The first alert of each size uploads the file; Telegram's `file_id` is cached in `video-cache.json` (git-ignored) so later alerts send instantly. If a video ever fails to send, the alert falls back to plain text, so a buy is never missed.
+- **Coloured buttons** use Telegram's button `style` (`success` green, `primary` blue, `danger` red; Bot API 9.4+). Set `BUTTON_STYLES=off` to turn them off.
+- **Preview without any chain access:** `node monpad-bot.mjs --test-alert=whale --chat=<your chat id>` sends one sample alert (`small`, `big` or `whale`) and exits.
+- **Re-render the videos** (after changing the scene in `video/scene.html`): `npm i --no-save playwright-core && node video/render.mjs` (needs `ffmpeg` and the repo's `node_modules`). Output is deterministic.
+
+## Getting the bot running on the server
+1. `git pull`, then `cd bot && npm install` (the bot needs Node 24).
+2. Create `bot/.env` from `.env.example`: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (the group's `-100…` id), `RPC_URL`, `FACTORY_V3` (or the new launcher addresses once deployed).
+3. **Add the bot to the group as an admin** (a bot that is not in the group gets "chat not found").
+4. `pm2 start monpad-bot.mjs --name monpad-bot --update-env && pm2 save`
+5. Check with `pm2 logs monpad-bot`, and `--test-alert` to see the look.
+
+Never paste the bot token into chats or commit it. If it was shared anywhere, revoke it in @BotFather (`/revoke`) and put the new one in `.env`.
