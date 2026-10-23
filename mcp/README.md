@@ -14,10 +14,10 @@ MCP server for **Monpad Uniswap V4** launches on Monad. Agents can list launches
 | `monpad_get_token` | read | Price, liquidity, volume, creator tax |
 | `monpad_trending` | read | Rank by recent swap volume |
 | `monpad_launch_token` | write | `launch()` on MonpadHookLauncher |
-| `monpad_buy` | write | MON → token via V4 trader helper |
-| `monpad_sell` | write | Token → MON via V4 trader helper |
+| `monpad_buy` | write | Payable `buyExactIn` on **MonpadV4Router** (`minTokensOut` required) |
+| `monpad_sell` | write | `sellExactIn` on **MonpadV4Router** (`minMonOut` required) |
 
-**Write tools default to `dryRun: true`** (simulate only). Pass `"dryRun": false` to broadcast.
+**Write tools default to `dryRun: true`** (simulate only; **no private key needed**). Pass `"dryRun": false` and set `MONPAD_PRIVATE_KEY` to broadcast. Buys always simulate before send.
 
 There is **no bonding curve** — tokens launch straight into a V4 pool with `MonpadHook`.
 
@@ -28,8 +28,8 @@ cd mcp && npm install
 export RPC_URL=https://rpc.monad.xyz
 export MONPAD_LAUNCHER=0x…   # required when deployed
 export MONPAD_HOOK=0x…
-export MONPAD_V4_TRADER=0x…  # required for buy/sell (swap helper contract)
-export MONPAD_PRIVATE_KEY=0x…  # burner only; writes only
+export MONPAD_V4_ROUTER=0x…  # MonpadV4Router (not TestV4Trader)
+export MONPAD_PRIVATE_KEY=0x…  # burner only; required when dryRun=false
 npm start
 ```
 
@@ -41,7 +41,7 @@ npx -y @monpad/mcp
 
 ### Config file
 
-`config.json` ships with **empty** `launcher` / `hook` / `v4Trader`. Env vars override. If launcher/hook are unset, read tools that need them return: **contracts not deployed yet**.
+`config.json` ships with **empty** `launcher` / `hook` / `v4Router`. Env vars override. If launcher/hook are unset, read tools that need them return: **contracts not deployed yet**.
 
 ## Claude Desktop
 
@@ -55,8 +55,7 @@ npx -y @monpad/mcp
         "RPC_URL": "https://rpc.monad.xyz",
         "MONPAD_LAUNCHER": "",
         "MONPAD_HOOK": "",
-        "MONPAD_V4_TRADER": "",
-        "MONPAD_PRIVATE_KEY": ""
+        "MONPAD_V4_ROUTER": ""
       }
     }
   }
@@ -75,7 +74,7 @@ npx -y @monpad/mcp
         "RPC_URL": "https://rpc.monad.xyz",
         "MONPAD_LAUNCHER": "0x…",
         "MONPAD_HOOK": "0x…",
-        "MONPAD_V4_TRADER": "0x…",
+        "MONPAD_V4_ROUTER": "0x…",
         "MAX_MON_PER_TX": "5",
         "MAX_MON_PER_DAY": "20"
       }
@@ -99,12 +98,13 @@ FORK_RPC=https://rpc.monad.xyz npm test
 |---|---|
 | `MONPAD_LAUNCHER` | MonpadHookLauncher |
 | `MONPAD_HOOK` | MonpadHook |
-| `MONPAD_V4_TRADER` | On-chain V4 swap helper (`buy`/`sell`) |
+| `MONPAD_V4_ROUTER` | `MonpadV4Router` (payable buy + slippage) |
 | `MONPAD_POOL_MANAGER` | Default: Monad V4 PoolManager |
 | `MONPAD_STATE_VIEW` | Default: Monad StateView |
 | `MONSHI` | MONSHI token |
-| `MONPAD_PRIVATE_KEY` | Burner wallet (writes only) |
-| `MAX_MON_PER_TX` | Default `5` |
-| `MAX_MON_PER_DAY` | Default `20` |
+| `MONPAD_PRIVATE_KEY` | Burner wallet (`dryRun=false` only) |
+| `MONPAD_SIMULATE_ADDRESS` | Optional `from` for dry-run |
+| `MAX_MON_PER_TX` | Default `5` (buys + sell proceeds) |
+| `MAX_MON_PER_DAY` | Default `20` (MON spent + sell proceeds) |
 
 See `CONTRACT-UV4.md` in the repo root for protocol details.

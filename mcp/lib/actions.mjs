@@ -1,14 +1,15 @@
 import { randomBytes } from 'node:crypto';
-import { formatEther, parseEther, encodeFunctionData, parseAbiItem } from 'viem';
-import { launcherAbi, hookAbi, stateViewAbi, v4TraderAbi, erc20Abi } from './abis.mjs';
-import { loadConfig, requireLauncher, requireV4Trader } from './config.mjs';
-import { getPublicClient, getWalletClient } from './clients.mjs';
+import { formatEther, parseEther, parseAbiItem } from 'viem';
+import { launcherAbi, hookAbi, stateViewAbi, v4RouterAbi, erc20Abi } from './abis.mjs';
+import { loadConfig, requireLauncher, requireV4Router } from './config.mjs';
+import { getPublicClient, getWalletClient, getSimulateAccountRef } from './clients.mjs';
 import { DEAD, poolKeyForToken, monPerToken } from './pool.mjs';
+import { assertMonFlowAllowed, safetyLimitsForSpec } from './safety.mjs';
+import { writeContractAndWait } from './tx.mjs';
 
 const swapEvent = parseAbiItem(
   'event Swap(bytes32 indexed id, address indexed sender, int128 amount0, int128 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick, uint24 fee)',
 );
-import { assertMonSpendAllowed, recordMonSpend, safetyLimitsForSpec } from './safety.mjs';
 
 const BASE_FEE_BPS = 100;
 const VOLUME_BLOCKS = Number(process.env.MONPAD_VOLUME_BLOCKS || '5000');
@@ -45,7 +46,7 @@ export async function getSpec() {
       poolManager: config.contracts.poolManager,
       stateView: config.contracts.stateView,
       monshi: config.contracts.monshi,
-      v4Trader: config.contracts.v4Trader || null,
+      v4Router: config.contracts.v4Router || null,
       platform,
     },
     contractsReady: Boolean(launcherAddr && hookAddr),
@@ -57,7 +58,6 @@ export async function getSpec() {
       creatorTaxDestination: '100% buys and burns the launched token (never paid to creator)',
     },
     safety: safetyLimitsForSpec(),
-    rpcUrl: config.rpcUrl.replace(/\/\/[^@]+@/, '//***@'),
   });
 }
 
@@ -190,7 +190,7 @@ export async function getToken({ token }) {
 
 export async function trending({ limit = 10, windowBlocks = VOLUME_BLOCKS } = {}) {
   const config = loadConfig();
-  const { launcher, hook } = requireLauncher(config);
+  const { launcher } = requireLauncher(config);
   const client = getPublicClient(config);
   const n = Number(await client.readContract({ address: launcher, abi: launcherAbi, functionName: 'tokenCount' }));
   const block = await client.getBlockNumber();
@@ -226,29 +226,27 @@ export async function launchToken(args) {
   const creationFee = await client.readContract({ address: launcher, abi: launcherAbi, functionName: 'creationFee' });
   const dev = args.devBuyMon ? parseEther(args.devBuyMon) : 0n;
   const value = creationFee + dev;
-  if (!dryRun) assertMonSpendAllowed(value);
+  if (!dryRun) assertMonFlowAllowed(value);
 
-  const salt =
-    args.salt && args.salt.startsWith('0x')
-      ? args.salt
-      : `0x${randomBytes(32).toString('hex')}`;
+  const salt = args.salt ?? `0x${randomBytes(32).toString('hex')}`;
   const creatorTaxBps = args.creatorTaxBps ?? 0;
 
-  const w = getWalletClient(config);
+  const account = dryRun ? getSimulateAccountRef() : getWalletClient(config).account;
   const txArgs = {
     address: launcher,
     abi: launcherAbi,
     functionName: 'launch',
     args: [args.name, args.symbol, salt, creatorTaxBps],
     value,
-    account: w.account,
+    account,
   };
 
   if (dryRun) {
-    const { result, request } = await client.simulateContract({ ...txArgs, account: w.account });
+    const { result, request } = await client.simulateContract(txArgs);
     return ok({
       dryRun: true,
       simulated: true,
+      simulateFrom: account.address,
       result,
       request: { to: request.address, value: value.toString(), data: request.data },
       creationFeeMon: formatEther(creationFee),
@@ -258,8 +256,8 @@ export async function launchToken(args) {
     });
   }
 
-  const hash = await w.writeContract(txArgs);
-  recordMonSpend(value);
+  const w = getWalletClient(config);
+  const { hash } = await writeContractAndWait(w, client, { ...txArgs, account: w.account }, { monToRecord: value });
   return ok({
     dryRun: false,
     hash,
@@ -281,129 +279,144 @@ export async function buy(args) {
   const dryRun = args.dryRun !== false;
   const config = loadConfig();
   requireLauncher(config);
-  const trader = requireV4Trader(config);
+  const router = requireV4Router(config);
   const monIn = parseEther(args.monIn);
-  if (!dryRun) assertMonSpendAllowed(monIn);
+  const minTokensOut = BigInt(args.minTokensOut);
+  if (!dryRun) assertMonFlowAllowed(monIn);
 
   const key = await poolKeyForLaunchToken(args.token, config);
-  const w = getWalletClient(config);
   const client = getPublicClient(config);
+  const account = dryRun ? getSimulateAccountRef() : getWalletClient(config).account;
 
-  const buyCall = {
-    address: trader,
-    abi: v4TraderAbi,
-    functionName: 'buy',
-    args: [key, monIn],
-    account: w.account,
+  const txArgs = {
+    address: router,
+    abi: v4RouterAbi,
+    functionName: 'buyExactIn',
+    args: [key, minTokensOut],
+    value: monIn,
+    account,
   };
 
+  const { result, request } = await client.simulateContract(txArgs);
+  const tokensOut = result;
+
   if (dryRun) {
-    const { result, request } = await client.simulateContract({
-      ...buyCall,
-      stateOverride: [{ address: trader, balance: monIn * 2n }],
-    });
     return ok({
       dryRun: true,
       simulated: true,
-      tokensOut: result?.toString?.() ?? result,
-      request: {
-        steps: [
-          { action: 'fund_trader', to: trader, value: monIn.toString() },
-          { action: 'buy', to: request.address, data: request.data },
-        ],
-      },
+      simulateFrom: account.address,
+      tokensOut: tokensOut?.toString?.() ?? tokensOut,
+      request: { to: request.address, value: monIn.toString(), data: request.data },
       token: args.token,
       monIn: args.monIn,
+      minTokensOut: args.minTokensOut,
     });
   }
 
-  const fundHash = await w.sendTransaction({ to: trader, value: monIn, account: w.account });
-  const hash = await w.writeContract(buyCall);
-  recordMonSpend(monIn);
-  return ok({ dryRun: false, fundHash, hash, token: args.token, monIn: args.monIn });
+  const w = getWalletClient(config);
+  const { hash } = await writeContractAndWait(
+    w,
+    client,
+    { ...txArgs, account: w.account },
+    { monToRecord: monIn },
+  );
+  return ok({
+    dryRun: false,
+    hash,
+    tokensOut: tokensOut?.toString?.() ?? tokensOut,
+    token: args.token,
+    monIn: args.monIn,
+    minTokensOut: args.minTokensOut,
+  });
 }
 
 export async function sell(args) {
   const dryRun = args.dryRun !== false;
   const config = loadConfig();
   requireLauncher(config);
-  const trader = requireV4Trader(config);
+  const router = requireV4Router(config);
   const tokensIn = BigInt(args.tokensIn);
+  const minMonOut = BigInt(args.minMonOut);
   const key = await poolKeyForLaunchToken(args.token, config);
-  const w = getWalletClient(config);
   const client = getPublicClient(config);
+  const account = dryRun ? getSimulateAccountRef() : getWalletClient(config).account;
 
-  const allowance = await client.readContract({
-    address: args.token,
-    abi: erc20Abi,
-    functionName: 'allowance',
-    args: [w.account.address, trader],
-  });
+  const sellSim = {
+    address: router,
+    abi: v4RouterAbi,
+    functionName: 'sellExactIn',
+    args: [key, tokensIn, minMonOut],
+    account,
+  };
 
-  const calls = [];
-  if (allowance < tokensIn) {
-    calls.push({
-      to: args.token,
-      data: encodeFunctionData({
-        abi: erc20Abi,
-        functionName: 'approve',
-        args: [trader, tokensIn],
-      }),
-    });
-  }
-  calls.push({
-    to: trader,
-    data: encodeFunctionData({
-      abi: v4TraderAbi,
-      functionName: 'sell',
-      args: [key, tokensIn],
-    }),
-  });
-
-  if (dryRun) {
-    if (allowance < tokensIn) {
-      await client.simulateContract({
+  let needsApprove = false;
+  if (!dryRun || account.address) {
+    try {
+      const allowance = await client.readContract({
         address: args.token,
         abi: erc20Abi,
-        functionName: 'approve',
-        args: [trader, tokensIn],
-        account: w.account,
+        functionName: 'allowance',
+        args: [account.address, router],
       });
+      needsApprove = allowance < tokensIn;
+    } catch {
+      needsApprove = true;
     }
-    const { result, request } = await client.simulateContract({
-      address: trader,
-      abi: v4TraderAbi,
-      functionName: 'sell',
-      args: [key, tokensIn],
-      account: w.account,
-    });
-    return ok({
-      dryRun: true,
-      simulated: true,
-      nativeOut: result?.toString?.() ?? result,
-      needsApprove: allowance < tokensIn,
-      request: { to: request.address, data: request.data },
-      token: args.token,
-      tokensIn: args.tokensIn,
-    });
   }
 
-  let approveHash;
-  if (allowance < tokensIn) {
-    approveHash = await w.writeContract({
+  if (needsApprove && !dryRun) {
+    const w = getWalletClient(config);
+    await writeContractAndWait(w, client, {
       address: args.token,
       abi: erc20Abi,
       functionName: 'approve',
-      args: [trader, tokensIn],
+      args: [router, tokensIn],
       account: w.account,
     });
+  } else if (needsApprove && dryRun) {
+    await client.simulateContract({
+      address: args.token,
+      abi: erc20Abi,
+      functionName: 'approve',
+      args: [router, tokensIn],
+      account,
+    });
   }
-  const hash = await w.writeContract({
-    address: trader,
-    abi: v4TraderAbi,
-    functionName: 'sell',
-    args: [key, tokensIn],
-    account: w.account,
+
+  const { result, request } = await client.simulateContract(sellSim);
+  const nativeOut = result;
+
+  if (!dryRun) {
+    assertMonFlowAllowed(nativeOut);
+  }
+
+  if (dryRun) {
+    return ok({
+      dryRun: true,
+      simulated: true,
+      simulateFrom: account.address,
+      nativeOut: nativeOut?.toString?.() ?? nativeOut,
+      needsApprove,
+      request: { to: request.address, data: request.data },
+      token: args.token,
+      tokensIn: args.tokensIn,
+      minMonOut: args.minMonOut,
+    });
+  }
+
+  const w = getWalletClient(config);
+  const { hash } = await writeContractAndWait(
+    w,
+    client,
+    { ...sellSim, account: w.account },
+    { monToRecord: nativeOut },
+  );
+  return ok({
+    dryRun: false,
+    hash,
+    nativeOut: nativeOut?.toString?.() ?? nativeOut,
+    token: args.token,
+    tokensIn: args.tokensIn,
+    minMonOut: args.minMonOut,
   });
-  return ok({ dryRun: false, hash, approveHash: approveHash || null, token: args.token, tokensIn: args.tokensIn });
 }

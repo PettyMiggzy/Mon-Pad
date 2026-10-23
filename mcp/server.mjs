@@ -4,11 +4,12 @@
  *
  *   npx @monpad/mcp   OR   node mcp/server.mjs
  *
- * Writes use MONPAD_PRIVATE_KEY only. Default dryRun=true on launch/buy/sell.
+ * Writes use MONPAD_PRIVATE_KEY only when dryRun=false. Default dryRun=true.
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
+import { addressSchema, bytes32Schema } from './lib/schemas.mjs';
 import {
   getSpec,
   getMonshiBurn,
@@ -22,7 +23,7 @@ import {
 
 const server = new McpServer({
   name: 'monpad',
-  version: '0.2.0',
+  version: '0.2.1',
 });
 
 server.tool('monpad_get_spec', 'Monpad V4 fee policy, contract addresses, and safety limits.', {}, async () => getSpec());
@@ -44,7 +45,7 @@ server.tool(
 server.tool(
   'monpad_get_token',
   'V4 pool token: price, liquidity, approximate MON volume, creator tax from launcher/hook.',
-  { token: z.string().describe('Token contract address') },
+  { token: addressSchema.describe('Token contract address') },
   async ({ token }) => getToken({ token }),
 );
 
@@ -58,17 +59,17 @@ server.tool(
   async ({ limit, windowBlocks }) => trending({ limit, windowBlocks }),
 );
 
-const dryRunSchema = z.boolean().optional().describe('Simulate only (default true)');
+const dryRunSchema = z.boolean().optional().describe('Simulate only (default true; no private key required)');
 
 server.tool(
   'monpad_launch_token',
-  'Launch a token into a Uniswap V4 Monpad pool. Requires MONPAD_PRIVATE_KEY. dryRun defaults to true.',
+  'Launch a token into a Uniswap V4 Monpad pool. dryRun defaults to true (no key). Set dryRun=false + MONPAD_PRIVATE_KEY to send.',
   {
     name: z.string().min(1).max(32),
     symbol: z.string().min(1).max(10),
     creatorTaxBps: z.number().int().min(0).max(500).optional().describe('Extra creator tax 0–500 (0–5%)'),
     devBuyMon: z.string().optional().describe('Optional dev buy MON (counts toward spend limits)'),
-    salt: z.string().optional().describe('bytes32 salt; random if omitted'),
+    salt: bytes32Schema.optional().describe('bytes32 salt; random if omitted'),
     dryRun: dryRunSchema,
   },
   async (args) => launchToken(args),
@@ -76,10 +77,11 @@ server.tool(
 
 server.tool(
   'monpad_buy',
-  'Buy token with native MON via configured V4 trader. Requires MONPAD_PRIVATE_KEY. dryRun defaults to true.',
+  'One payable tx: MON → token via MonpadV4Router.buyExactIn. Requires minTokensOut. Simulated before send when dryRun=false.',
   {
-    token: z.string().describe('Token to buy'),
+    token: addressSchema.describe('Token to buy'),
     monIn: z.string().describe('MON to spend, e.g. "0.5"'),
+    minTokensOut: z.string().describe('Minimum tokens out (wei); reverts on-chain if not met'),
     dryRun: dryRunSchema,
   },
   async (args) => buy(args),
@@ -87,10 +89,11 @@ server.tool(
 
 server.tool(
   'monpad_sell',
-  'Sell token for native MON via configured V4 trader. Requires MONPAD_PRIVATE_KEY. dryRun defaults to true.',
+  'Token → MON via MonpadV4Router.sellExactIn. Requires minMonOut. Sell proceeds count toward MAX_MON_PER_DAY.',
   {
-    token: z.string().describe('Token to sell'),
+    token: addressSchema.describe('Token to sell'),
     tokensIn: z.string().describe('Token amount in wei'),
+    minMonOut: z.string().describe('Minimum native MON out (wei)'),
     dryRun: dryRunSchema,
   },
   async (args) => sell(args),

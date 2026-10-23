@@ -11,7 +11,7 @@ const ENV_MAP = {
   poolManager: 'MONPAD_POOL_MANAGER',
   stateView: 'MONPAD_STATE_VIEW',
   monshi: 'MONSHI',
-  v4Trader: 'MONPAD_V4_TRADER',
+  v4Router: 'MONPAD_V4_ROUTER',
   platform: 'MONPAD_PLATFORM',
 };
 
@@ -31,6 +31,13 @@ export function loadConfig() {
   const contracts = { ...file.contracts };
   for (const [key, envName] of Object.entries(ENV_MAP)) {
     if (process.env[envName]?.trim()) contracts[key] = process.env[envName].trim();
+  }
+  // Legacy env name — do not document; map to router if v4Router unset
+  if (!contracts.v4Router && process.env.MONPAD_V4_TRADER?.trim()) {
+    contracts.v4Router = process.env.MONPAD_V4_TRADER.trim();
+  }
+  if (!contracts.v4Router && contracts.v4Trader) {
+    contracts.v4Router = contracts.v4Trader;
   }
 
   cached = {
@@ -53,12 +60,12 @@ export function requireLauncher(config = loadConfig()) {
   return { launcher, hook };
 }
 
-export function requireV4Trader(config = loadConfig()) {
-  const trader = config.contracts.v4Trader;
-  if (!trader) {
+export function requireV4Router(config = loadConfig()) {
+  const router = config.contracts.v4Router;
+  if (!router) {
     throw new Error(
-      'contracts not deployed yet — set MONPAD_V4_TRADER to a V4 swap helper (e.g. TestV4Trader on a fork) for buy/sell',
+      'contracts not deployed yet — set MONPAD_V4_ROUTER to the Monpad V4 swap router for buy/sell',
     );
   }
-  return trader;
+  return router;
 }

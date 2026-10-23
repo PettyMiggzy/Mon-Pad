@@ -24,9 +24,9 @@ export const stateViewAbi = parseAbi([
   'function getLiquidity(bytes32 id) view returns (uint128)',
 ]);
 
-export const v4TraderAbi = parseAbi([
-  'function buy((address currency0, address currency1, uint24 fee, int24 tickSpacing, address hooks) key, uint256 nativeIn) returns (uint256 tokensOut)',
-  'function sell((address currency0, address currency1, uint24 fee, int24 tickSpacing, address hooks) key, uint256 tokensIn) returns (uint256 nativeOut)',
+export const v4RouterAbi = parseAbi([
+  'function buyExactIn((address currency0, address currency1, uint24 fee, int24 tickSpacing, address hooks) key, uint256 minTokensOut) payable returns (uint256 tokensOut)',
+  'function sellExactIn((address currency0, address currency1, uint24 fee, int24 tickSpacing, address hooks) key, uint256 tokensIn, uint256 minMonOut) returns (uint256 monOut)',
 ]);
 
 export const erc20Abi = parseAbi([

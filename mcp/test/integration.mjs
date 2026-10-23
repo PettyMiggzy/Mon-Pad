@@ -7,7 +7,6 @@ import { execSync, spawn } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { privateKeyToAccount } from 'viem/accounts';
 import { getPublicClient } from '../lib/clients.mjs';
 import { resetConfigCache } from '../lib/config.mjs';
 import { getSpec, listLaunches, getToken, buy, launchToken } from '../lib/actions.mjs';
@@ -89,13 +88,12 @@ async function main() {
     process.env.MONPAD_CHAIN_ID = '143';
     process.env.MONPAD_LAUNCHER = deployed.launcher;
     process.env.MONPAD_HOOK = deployed.hook;
-    process.env.MONPAD_V4_TRADER = deployed.v4Trader;
+    process.env.MONPAD_V4_ROUTER = deployed.v4Router;
     process.env.MONPAD_POOL_MANAGER = deployed.poolManager;
     process.env.MONPAD_STATE_VIEW = deployed.stateView;
     process.env.MONSHI = deployed.monshi;
 
-    const testPk = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
-    process.env.MONPAD_PRIVATE_KEY = testPk;
+    process.env.MONPAD_SIMULATE_ADDRESS = deployed.deployer;
     resetConfigCache();
 
     const spec = JSON.parse((await getSpec()).content[0].text);
@@ -109,10 +107,12 @@ async function main() {
     if (!tokenInfo.poolId) throw new Error('missing poolId');
 
     const client = getPublicClient();
-    const account = privateKeyToAccount(testPk);
-    const nonceBefore = await client.getTransactionCount({ address: account.address });
+    const simulateFrom = deployed.deployer;
+    const nonceBefore = await client.getTransactionCount({ address: simulateFrom });
 
-    const dryBuy = JSON.parse((await buy({ token: deployed.sampleToken, monIn: '1', dryRun: true })).content[0].text);
+    const dryBuy = JSON.parse(
+      (await buy({ token: deployed.sampleToken, monIn: '1', minTokensOut: '0', dryRun: true })).content[0].text,
+    );
     if (!dryBuy.dryRun || !dryBuy.simulated) throw new Error('buy dryRun should simulate');
 
     const dryLaunch = JSON.parse(
@@ -120,7 +120,7 @@ async function main() {
     );
     if (!dryLaunch.dryRun) throw new Error('launch dryRun expected');
 
-    const nonceAfter = await client.getTransactionCount({ address: account.address });
+    const nonceAfter = await client.getTransactionCount({ address: simulateFrom });
     if (nonceAfter !== nonceBefore) throw new Error('dryRun must not broadcast transactions');
 
     console.log('ok: read tools + dryRun (no txs sent)');

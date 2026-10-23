@@ -1,5 +1,5 @@
 /**
- * Deploy Monpad UV4 stack + TestV4Trader on a Hardhat fork. Run from hardhat-test:
+ * Deploy Monpad UV4 stack + MonpadV4Router on a Hardhat fork. Run from hardhat-test:
  *   FORK_RPC=https://rpc.monad.xyz npx hardhat run ../mcp/test/fork-deploy.cjs
  */
 const path = require('path');
@@ -27,10 +27,9 @@ async function main() {
     startTick: uv4StartTick(250000),
     creationFee: ethers.parseEther('100'),
   });
-  const traderFactory = await ethers.getContractFactory('TestV4Trader');
-  const trader = await traderFactory.deploy(POOL_MANAGER);
-  await trader.waitForDeployment();
-  await setBalance(await trader.getAddress(), ethers.parseEther('5000000'));
+  const routerFactory = await ethers.getContractFactory('MonpadV4Router');
+  const router = await routerFactory.deploy(POOL_MANAGER);
+  await router.waitForDeployment();
 
   const salt = ethers.zeroPadValue(ethers.toBeHex(1), 32);
   const tx = await launcher.launch('MCP Test', 'MCPT', salt, 0, { value: ethers.parseEther('100') });
@@ -41,7 +40,7 @@ async function main() {
     JSON.stringify({
       launcher: await launcher.getAddress(),
       hook: await hook.getAddress(),
-      v4Trader: await trader.getAddress(),
+      v4Router: await router.getAddress(),
       poolManager: POOL_MANAGER,
       stateView: STATE_VIEW,
       monshi: MONSHI,
