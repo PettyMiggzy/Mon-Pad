@@ -25,7 +25,7 @@ import {MonpadHook} from "./MonpadHook.sol";
 
 /// @title MonpadHookLauncher (Uniswap V4 + hook)
 /// @notice One transaction launches a token into a REAL Uniswap V4 pool (native MON pair) whose swap fee is
-///         enforced by MonpadHook: 1% plus a creator-chosen tax (0 to 10%), charged on every swap from any router.
+///         enforced by MonpadHook: 1% plus a creator-chosen tax (0 to 5%), charged on every swap from any router.
 ///         The whole supply sits in one single-sided position owned by this contract. There is NO function that
 ///         removes liquidity, so it is locked by construction.
 ///
@@ -48,7 +48,7 @@ contract MonpadHookLauncher is Ownable2Step, ReentrancyGuard, IUnlockCallback {
     uint16 public constant BURN_MONSHI_BPS = 1000; // burn-token slice is the remainder
     uint16 public constant BPS = 10_000;
     uint16 public constant BASE_FEE_BPS = 100; // 1% base fee on every swap
-    uint16 public constant MAX_CREATOR_TAX_BPS = 1000; // creator may add up to 10% on top
+    uint16 public constant MAX_CREATOR_TAX_BPS = 500; // creator may add up to 5% on top (6% total fee max)
 
     uint256 public constant SUPPLY = 1_000_000_000 ether;
     int24 public constant TICK_SPACING = 200;

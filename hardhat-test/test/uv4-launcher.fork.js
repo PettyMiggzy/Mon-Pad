@@ -145,8 +145,8 @@ const stateViewAbi = [
     expect((await launcher.claimable(creator.address, ethers.ZeroAddress)) - before).to.be.lt((f * 7000n) / 10000n / 2n);
   });
 
-  it("rejects a creator tax above 10%", async function () {
-    await expect(launcher.connect(creator).launch("T", "T", nextSalt(), 1001, { value: E(100) })).to.be.revertedWith("tax too high");
+  it("rejects a creator tax above 5%", async function () {
+    await expect(launcher.connect(creator).launch("T", "T", nextSalt(), 501, { value: E(100) })).to.be.revertedWith("tax too high");
   });
 
   it("native and token claims pay out and nothing is created or lost", async function () {

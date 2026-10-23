@@ -14,7 +14,7 @@ This supersedes the Uniswap V3 launcher in `contracts/v4/` (see `CONTRACT-V4.md`
 The launcher owns the position forever and has **no function that removes liquidity**, so liquidity is locked by construction.
 
 ## The fee, enforced inside the pool
-`MonpadHook` sets the swap fee on **every** swap in the pool to `1% + creatorTax` (creatorTax 0 to 10%, chosen at launch and fixed forever). It does this in the pool's own `beforeSwap`, so any router, aggregator or contract that swaps in this pool pays it. There is no token-level tax, so the token stays a plain ERC-20 and works everywhere.
+`MonpadHook` sets the swap fee on **every** swap in the pool to `1% + creatorTax` (creatorTax 0 to 5%, chosen at launch and fixed forever). It does this in the pool's own `beforeSwap`, so any router, aggregator or contract that swaps in this pool pays it. There is no token-level tax, so the token stays a plain ERC-20 and works everywhere.
 
 Only the launcher can create a pool that uses the hook (`beforeInitialize` checks the sender), so nobody can pre-create a launch's pool to grief it.
 
@@ -32,7 +32,7 @@ The creator tax can only deflate the token; the creator cannot take it out or ch
 - `buybackMonshi(max, minOut)`: **keeper only** (set by the owner). The keeper supplies `minOut` from an off-chain price, so a sandwich cannot extract more. It works against a hookless native-MON/MONSHI V4 pool that the owner points to after a 48-hour delay.
 
 ## What the tests prove (15, fork of Monad mainnet, real PoolManager)
-Hook at a mined address with exactly the right flags; launch seeds a real single-sided native pool with the whole supply and nothing left; an outsider cannot create a pool with our hook; the 1% fee is charged and split 70/10/10/10 exactly; a 5% creator tax makes the pool charge 6% and sends the extra to buy-and-burn, not the creator; tax above 10% is rejected; claims pay out and the contract's balance covers every claim and reserve; token buyback refuses when spot is far from the reference and after a big move, then works; dev buy is capped at 5%; the MONSHI buyback is keeper-only with a min-out (tested with a stand-in token); the owner has no withdraw or liquidity-removal function; pausing launches doesn't stop harvest or claims.
+Hook at a mined address with exactly the right flags; launch seeds a real single-sided native pool with the whole supply and nothing left; an outsider cannot create a pool with our hook; the 1% fee is charged and split 70/10/10/10 exactly; a 5% creator tax makes the pool charge 6% and sends the extra to buy-and-burn, not the creator; tax above 5% is rejected; claims pay out and the contract's balance covers every claim and reserve; token buyback refuses when spot is far from the reference and after a big move, then works; dev buy is capped at 5%; the MONSHI buyback is keeper-only with a min-out (tested with a stand-in token); the owner has no withdraw or liquidity-removal function; pausing launches doesn't stop harvest or claims.
 
 A launch costs about **870k gas** (the Uniswap V3 version cost about 8.4M).
 
@@ -47,7 +47,7 @@ A launch costs about **870k gas** (the Uniswap V3 version cost about 8.4M).
 4. **Aggregator and front-end support for V4 and hooks** (Monorail, DexScreener) is unverified; DexScreener indexing of V4 on Monad needs checking before launch.
 5. **Keeper needed:** harvest and the buybacks only run when someone calls them. Run a bot.
 6. **Trust points:** owner (can pause new launches, change the platform address, creation fee and keeper, and re-point the MONSHI pool after 48h) and keeper (MONSHI buybacks only; cannot take funds). Use a multisig as owner.
-7. Creator tax up to 10% makes the total fee 11%: the UI must show it clearly before anyone buys.
+7. A creator tax of up to 5% makes the total fee up to 6%: the UI must show it clearly before anyone buys.
 8. Untested: very high volume, extreme price ranges, interaction with every router, gas under Monad's fee model, long-run accounting. **Needs an independent audit.**
 
 ## Still to do (frontend and bot are not wired to this yet)
