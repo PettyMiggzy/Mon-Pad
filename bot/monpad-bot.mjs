@@ -73,6 +73,7 @@ const factoryAbi = [
 const erc20Abi = [
   parseAbiItem('function symbol() view returns (string)'),
   parseAbiItem('function name() view returns (string)'),
+  parseAbiItem('function balanceOf(address) view returns (uint256)'),
 ];
 const curveAbi = [
   parseAbiItem('function graduated() view returns (bool)'),
@@ -176,6 +177,7 @@ async function enrichToken(info) {
       source: 'dexscreener', listed: true, priceUsd,
       marketCapUsd: Number(pair.marketCap) || Number(pair.fdv) || priceUsd * TOTAL_SUPPLY,
       priceChangeH24: pair.priceChange?.h24 ?? null,
+      liquidityUsd: Number(pair.liquidity?.usd) || 0, volumeH24: Number(pair.volume?.h24) || 0,
       pairUrl: pair.url || `https://dexscreener.com/monad/${pair.pairAddress}`,
     };
   }
@@ -235,16 +237,17 @@ function emojiWall(usd, tier) {
 // Telegram button colours (Bot API 9.4+): "success" green, "primary" blue, "danger" red. BUTTON_STYLES=off disables.
 const STYLES_ON = (process.env.BUTTON_STYLES || 'on') !== 'off';
 const styled = (btn, style) => (STYLES_ON && style ? { ...btn, style } : btn);
+const GET_TRENDING_URL = process.env.GET_TRENDING_URL || `${SITE}/docs`;
 
-// Inline buttons: Buy on Monpad (green) + Chart (blue) + Txn.
+// Buttons: [Monadscan | DexScreener] green, [Get Monpad Trending], [Buy on Monpad] blue.
 function buyButtons(info, enr, tx) {
-  const rows = [[styled({ text: '🟢 Buy on Monpad', url: `${SITE}/token/${info.token}` }, 'success')]];
-  const r2 = [enr?.listed && enr.pairUrl
-    ? styled({ text: '📊 Chart (DexScreener)', url: enr.pairUrl }, 'primary')
-    : styled({ text: '📈 Chart (Monpad)', url: `${SITE}/token/${info.token}` }, 'primary')];
-  if (tx) r2.push({ text: '🔎 Txn', url: `${EXPLORER}/tx/${tx}` });
-  rows.push(r2);
-  return { reply_markup: { inline_keyboard: rows } };
+  const row1 = [styled({ text: '🔎 Monadscan', url: tx ? `${EXPLORER}/tx/${tx}` : EXPLORER }, 'success')];
+  if (enr?.listed && enr.pairUrl) row1.push(styled({ text: '📊 DexScreener', url: enr.pairUrl }, 'success'));
+  return { reply_markup: { inline_keyboard: [
+    row1,
+    [{ text: '📈 Get Monpad Trending', url: GET_TRENDING_URL }],
+    [styled({ text: '🟣 Buy on Monpad', url: `${SITE}/token/${info.token}` }, 'primary')],
+  ] } };
 }
 
 // 3D buy videos (bot/assets/buy-{small,big,whale}.mp4, made by bot/video/render.mjs). The first send uploads
@@ -276,26 +279,99 @@ async function sendBuyVideo(chatId, kind, caption, extra = {}) {
   return j;
 }
 
-function buyCaption(info, mon, usd, tokensOut, trader, enr) {
+// ── Alert extras: rank, holder position, socials, DEX PAID ─────────────────
+const getJson = async (url, ms = 2500) => { try { const r = await fetch(url, { signal: AbortSignal.timeout(ms) }); return r.ok ? await r.json() : null; } catch { return null; } };
+const safeUrl = (u) => { const t = String(u || '').trim(); return /^https:\/\/[^\s"<>]+$/i.test(t) ? t : ''; };
+const asX = (u) => { const t = String(u || '').trim(); if (!t) return ''; if (/^https?:/i.test(t)) return safeUrl(t); return /^@?[A-Za-z0-9_]{1,15}$/.test(t) ? `https://x.com/${t.replace(/^@/, '')}` : ''; };
+const asTg = (u) => { const t = String(u || '').trim(); if (!t) return ''; if (/^https?:/i.test(t)) return safeUrl(t); return /^@?[A-Za-z0-9_]{4,32}$/.test(t) ? `https://t.me/${t.replace(/^@/, '')}` : ''; };
+
+const socialCache = new Map(); // token(lower) -> { v, at }
+async function tokenSocials(token) {
+  const k = token.toLowerCase(); const hit = socialCache.get(k);
+  if (hit && Date.now() - hit.at < 600_000) return hit.v;
+  const d = await getJson(`${SITE}/api/token-meta?addresses=${token}`);
+  const m = Array.isArray(d) ? d[0] : null;
+  const v = { web: safeUrl(m?.website), x: asX(m?.twitter), tg: asTg(m?.telegram) };
+  socialCache.set(k, { v, at: Date.now() });
+  return v;
+}
+const paidCache = new Map();
+async function isDexPaid(token) { // DexScreener "enhanced token info" order that was approved
+  const k = token.toLowerCase(); const hit = paidCache.get(k);
+  if (hit && Date.now() - hit.at < 900_000) return hit.v;
+  const d = await getJson(`https://api.dexscreener.com/orders/v1/monad/${token}`);
+  const v = Array.isArray(d) && d.some((o) => o?.type === 'tokenProfile' && o?.status === 'approved');
+  paidCache.set(k, { v, at: Date.now() });
+  return v;
+}
+// "New Holder" or "+X% Holder" from the buyer's balance in the block before the buy (needs a node with that state).
+async function holderPosition(info, trader, tokensOut, block) {
+  if (!block || !trader) return '';
+  try {
+    const prev = await client.readContract({ address: info.token, abi: erc20Abi, functionName: 'balanceOf', args: [trader], blockNumber: BigInt(block) - 1n });
+    const p = Number(formatEther(prev));
+    if (p <= 0) return 'New Holder';
+    const pct = (tokensOut / p) * 100;
+    return `Holder +${pct >= 100 ? Math.round(pct) : pct.toFixed(1)}%`;
+  } catch { return ''; }
+}
+function trendRank(tokenLower) { // rank by volume in the trending window; 0 = not ranked
+  const since = Math.floor(Date.now() / 1000) - TREND_WINDOW_SEC;
+  const vol = new Map();
+  for (const t of recentTrades) if (t.time >= since) vol.set(t.token, (vol.get(t.token) || 0) + t.usd);
+  const ranked = [...vol.entries()].sort((a, b) => b[1] - a[1]).map(([tk]) => tk);
+  const i = ranked.indexOf(tokenLower);
+  return i >= 0 && i < 10 ? i + 1 : 0;
+}
+async function gatherExtras(info, trader, tokensOut, block) {
+  const [position, socials, paid] = await Promise.all([holderPosition(info, trader, tokensOut, block), tokenSocials(info.token), isDexPaid(info.token)]);
+  return { position, socials, paid, rank: trendRank(info.token.toLowerCase()) };
+}
+
+function fmtPrice(p) {
+  if (!(p > 0)) return '—';
+  if (p >= 1) return `$${p.toFixed(4)}`;
+  const dec = Math.min(14, Math.max(4, 3 - Math.floor(Math.log10(p))));
+  return `$${p.toFixed(dec)}`;
+}
+
+// Caption layout (Monpad version of a classic buy-bot alert):
+//   🔥 #3 on Monpad Trending
+//   🐋 WHALE BUY · Name ($SYM)
+//   <spinning Monshi coins>          (more of them the bigger the buy)
+//   Tokens / Amount / Position / MCap / Price / Liquidity
+//   Tx · DS · WEB · X · TG          ✅ DEX PAID
+function buyCaption(info, mon, usd, tokensOut, trader, enr, x = {}) {
   const tier = buyTier(usd, tokensOut);
-  const lines = [
-    `${tier.emoji} <b>${esc(info.name || info.symbol)}</b> ($${esc(info.symbol)}) — ${tier.label} BUY`,
-    emojiWall(usd, tier),
-    ``,
-    `💵 <b>${fmtUsd(usd)}</b>  (${fmtMon(mon)} MON)`,
-    `🪙 Got: ${fmtMon(tokensOut)} $${esc(info.symbol)}`,
-  ];
+  const lines = [];
+  if (x.rank) lines.push(`🔥 <b>#${x.rank} on Monpad Trending</b>`);
+  lines.push(`${tier.emoji} <b>${tier.label} BUY</b> · <b>${esc(info.name || info.symbol)}</b> ($${esc(info.symbol)})`);
+  lines.push(emojiWall(usd, tier));
+  lines.push(`<b>Tokens:</b> ${fmtMon(tokensOut)} (${esc(info.symbol)})`);
+  lines.push(`<b>Amount:</b> ${fmtMon(mon)} MON (${fmtUsd(usd)})`);
+  lines.push(`<b>Buyer:</b> <a href="${EXPLORER}/address/${trader}">${short(trader)}</a>${x.position ? `  ·  ${esc(x.position)}` : ''}`);
   if (enr && enr.marketCapUsd > 0) {
-    let mc = `💰 MC: <b>${fmtUsd(enr.marketCapUsd)}</b>${enr.listed ? '' : ' (curve)'}`;
-    if (enr.priceChangeH24 != null) mc += `  ·  24h ${enr.priceChangeH24 >= 0 ? '▲' : '▼'} ${Math.abs(enr.priceChangeH24).toFixed(1)}%`;
+    let mc = `<b>MCap:</b> ${fmtUsd(enr.marketCapUsd)}`;
+    if (enr.priceChangeH24 != null) mc += `  ${enr.priceChangeH24 >= 0 ? '▲' : '▼'} ${Math.abs(enr.priceChangeH24).toFixed(1)}%`;
     lines.push(mc);
   }
-  lines.push(`👤 <a href="${EXPLORER}/address/${trader}">${short(trader)}</a>`);
+  if (enr && enr.priceUsd > 0) lines.push(`<b>Price:</b> ${fmtPrice(enr.priceUsd)}`);
+  if (enr?.listed && enr.liquidityUsd > 0) lines.push(`<b>Liquidity:</b> ${fmtUsd(enr.liquidityUsd)}  ·  <b>24h Vol:</b> ${fmtUsd(enr.volumeH24 || 0)}`);
+  const sc = x.socials || {};
+  const links = [x.tx ? `<a href="${EXPLORER}/tx/${x.tx}">Tx</a>` : `<a href="${EXPLORER}/address/${trader}">Wallet</a>`];
+  if (enr?.listed && enr.pairUrl) links.push(`<a href="${enr.pairUrl}">DS</a>`);
+  links.push(`<a href="${SITE}/token/${info.token}">WEB</a>`);
+  if (sc.x) links.push(`<a href="${sc.x}">X</a>`);
+  if (sc.tg) links.push(`<a href="${sc.tg}">TG</a>`);
+  if (sc.web) links.push(`<a href="${sc.web}">Site</a>`);
+  lines.push(links.join(' · '));
+  if (x.paid) lines.push('✅ <b>DEX PAID</b>');
   return lines.join('\n');
 }
 
-async function announceBuy(info, mon, usd, tokensOut, trader, tx, enr) {
-  const caption = buyCaption(info, mon, usd, tokensOut, trader, enr);
+async function announceBuy(info, mon, usd, tokensOut, trader, tx, enr, block) {
+  const x = { ...(await gatherExtras(info, trader, tokensOut, block).catch(() => ({}))), tx };
+  const caption = buyCaption(info, mon, usd, tokensOut, trader, enr, x);
   const extra = buyButtons(info, enr, tx);
   const r = await sendBuyVideo(TELEGRAM_CHAT_ID, videoFor(usd, tokensOut), caption, extra);
   if (!r.ok) await send(caption, extra); // never lose an alert if the video fails
@@ -308,8 +384,9 @@ async function runTestAlert(arg, chatArg) {
   const tokens = { small: 480_000, big: 2_600_000, whale: 12_500_000 }[kind] ?? 480_000;
   const chat = chatArg ? chatArg.split('=')[1] : TELEGRAM_CHAT_ID;
   const info = { name: 'Monshi Zoomies', symbol: 'ZOOM', token: '0x0000000000000000000000000000000000000001' };
-  const enr = { marketCapUsd: 184000, priceChangeH24: 12.4, listed: false };
-  const caption = buyCaption(info, usd / 0.02, usd, tokens, '0x5db7CA9d2CE3f414B3fd94EC0FcaF9F3Ab1A575f', enr);
+  const enr = { marketCapUsd: 184000, priceChangeH24: 12.4, listed: true, priceUsd: 0.000184, liquidityUsd: 61200, volumeH24: 39500, pairUrl: 'https://dexscreener.com/monad' };
+  const x = { tx: '0x' + 'ab'.repeat(32), rank: 3, position: kind === 'small' ? 'New Holder' : 'Holder +45%', paid: true, socials: { x: 'https://x.com/', tg: 'https://t.me/monshionmonad' } };
+  const caption = buyCaption(info, usd / 0.02, usd, tokens, '0x5db7CA9d2CE3f414B3fd94EC0FcaF9F3Ab1A575f', enr, x);
   const extra = buyButtons(info, enr, '0x' + 'ab'.repeat(32));
   const r = await sendBuyVideo(chat, videoFor(usd, tokens), caption, extra);
   console.log(r.ok ? `sample ${kind} alert sent` : `failed: ${r.description || 'see log'}`);
@@ -448,7 +525,7 @@ async function scanRange(from, to) {
       if (a.isBuy && dollars >= MIN_BUY_USD) {
         try {
           const enr = await enrichToken(info).catch(() => null);
-          await announceBuy(info, mon, dollars, tokensOut, a.trader, lg.transactionHash, enr);
+          await announceBuy(info, mon, dollars, tokensOut, a.trader, lg.transactionHash, enr, lg.blockNumber);
         } catch (e) { console.error('announce failed:', e.message); }
       }
     }
@@ -510,7 +587,7 @@ async function handleGradSwap(g, lg, usd) {
   try { const tx = await client.getTransaction({ hash: lg.transactionHash }); if (tx?.from) buyer = tx.from; } catch {}
   try {
     const enr = await enrichToken(g).catch(() => null);
-    await announceBuy(g, mon, dollars, Number(formatEther(tokensOut)), buyer, lg.transactionHash, enr);
+    await announceBuy(g, mon, dollars, Number(formatEther(tokensOut)), buyer, lg.transactionHash, enr, lg.blockNumber);
   } catch (e) { console.error('grad announce failed:', e.message); }
 }
 

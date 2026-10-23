@@ -110,3 +110,23 @@ The alert's emoji row uses Monshi's own **spinning coin** custom emoji (pack: ht
 - The emoji id lives in `assets/emoji.json` (or `MONSHI_EMOJI_ID`). With no id, the row falls back to normal emoji.
 - Telegram only shows custom emoji from a bot under certain conditions. They worked in a private chat; if they show as plain 🪙 in the group, the group needs the pack set as its emoji pack, or the bot needs a Fragment username. See the notes in the PR.
 - Re-render the emoji: `node video/render-emoji.mjs`, publish with `node stickers.mjs publish-emoji --owner=<your user id>`.
+
+## Alert layout
+```
+🔥 #3 on Monpad Trending              (shown when the token is in the top 10 by volume in the trending window)
+🐋 WHALE BUY · Monshi Zoomies ($ZOOM)
+<spinning Monshi coins, more for bigger buys>
+Tokens: 12,500,000 (ZOOM)
+Amount: 410 MON ($8.2k)
+Buyer: 0x5db7…A575  ·  New Holder    (or "Holder +45%", from the buyer's balance in the block before the buy)
+MCap: $184.0k  ▲ 12.4%
+Price: $0.000184
+Liquidity: $61.2k  ·  24h Vol: $39.5k  (when DexScreener lists the pair)
+Tx · DS · WEB · X · TG                (X / TG come from the token's saved socials on the site)
+✅ DEX PAID                            (when the token has an approved DexScreener profile)
+
+[ 🔎 Monadscan ] [ 📊 DexScreener ]    green
+[ 📈 Get Monpad Trending ]
+[ 🟣 Buy on Monpad ]                  blue
+```
+Each piece is fetched with a short timeout and left out if unavailable, so an alert is never delayed or lost. Holder position needs an RPC node that keeps recent state (your Alchemy URL does). `GET_TRENDING_URL` sets where "Get Monpad Trending" points.
