@@ -20,3 +20,6 @@ module.exports = { params };
 if (require.main === module) {
   console.log(JSON.stringify(params(process.env.START_MCAP_MON || 250000), null, 2));
 }
+
+// Uniswap V4 pools are native-MON / token, so the price is tokens per MON and the start tick is positive.
+module.exports.uv4StartTick = (startMcapMon) => -params(startMcapMon).startTick;

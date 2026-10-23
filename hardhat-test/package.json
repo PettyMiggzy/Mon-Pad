@@ -12,6 +12,7 @@
     "@nomicfoundation/hardhat-toolbox": "^4.0.0",
     "@openzeppelin/contracts": "^5.6.1",
     "@uniswap/v3-sdk": "^3.31.7",
+    "@uniswap/v4-core": "^1.0.2",
     "hardhat": "^2.28.6",
     "jsbi": "^4.3.2"
   },

@@ -1,3 +1,5 @@
+> **Superseded by `CONTRACT-UV4.md`** (Uniswap V4 + hook, which also enforces a creator-set tax). This file describes the Uniswap V3 version in `contracts/v4/`.
+
 # Monpad V4 contracts: DEX day one, no curve
 
 **Status: written and tested on a fork of Monad mainnet. NOT AUDITED. Do not put real value behind it before a professional audit.**

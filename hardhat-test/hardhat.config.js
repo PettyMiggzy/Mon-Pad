@@ -3,17 +3,30 @@ require("dotenv").config();
 
 module.exports = {
   solidity: {
-    version: "0.8.24",
-    settings: {
-      // Hardhat is now the canonical compiler for both test AND mainnet builds.
-      // Network config below. revertStrings:"default" preserves require messages
-      // for both test assertions and on-chain debugging.
-      optimizer: { enabled: true, runs: 1 },
-      viaIR: true,
-      evmVersion: "paris",
-      debug: { revertStrings: "default" },
-      metadata: { bytecodeHash: "none", appendCBOR: false },
-    },
+    // 0.8.24 for the original contracts; 0.8.26 for files that need it (the Uniswap V4 libraries). Same settings.
+    // Hardhat picks the compiler per file from its pragma.
+    compilers: [
+      {
+        version: "0.8.24",
+        settings: {
+          optimizer: { enabled: true, runs: 1 },
+          viaIR: true,
+          evmVersion: "paris",
+          debug: { revertStrings: "default" },
+          metadata: { bytecodeHash: "none", appendCBOR: false },
+        },
+      },
+      {
+        version: "0.8.26",
+        settings: {
+          optimizer: { enabled: true, runs: 1 },
+          viaIR: true,
+          evmVersion: "paris",
+          debug: { revertStrings: "default" },
+          metadata: { bytecodeHash: "none", appendCBOR: false },
+        },
+      },
+    ],
   },
   sourcify: { enabled: true },
   etherscan: {
