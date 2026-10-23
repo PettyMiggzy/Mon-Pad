@@ -9,8 +9,6 @@ W=H=512;N=72;FPS=24;P=192
 cat=Image.open('cat.png');S=1.0;cat=cat.resize((int(cat.width*S),int(cat.height*S)),Image.LANCZOS)
 CX=335  # candle centre x on screen
 catx=CX-int(305*S); caty=int(H*.5-cat.height*.42)
-COIN=[Image.open(f'coin/{i:03d}.png').convert('RGBA') for i in range(1,61)]
-CS={'small':110,'big':150,'whale':160}[tier]
 GREEN=(46,230,110);DK=(14,16,24)
 def bgbase():
     y=np.linspace(0,1,H)[:,None,None]
@@ -60,11 +58,6 @@ def frame(i):
     c=cat.rotate(rock,resample=Image.BICUBIC,center=(305*S,75*S),expand=False)
     # drop shadow glow
     im.alpha_composite(c,(int(catx+ox),int(caty+bob+oy)))
-    # Monshi coin spinning above, glow behind
-    cn=COIN[int(t*60)%60].resize((CS,CS),Image.LANCZOS)
-    cx=int(W*.17);cy=int(58+math.sin(ph*2)*8)
-    cg=Image.new('RGBA',(W,H),(0,0,0,0));ImageDraw.Draw(cg).ellipse([cx-CS*.7,cy-CS*.7,cx+CS*.7,cy+CS*.7],fill=(170,110,255,int(110*CFG['glow'])))
-    im.alpha_composite(cg.filter(ImageFilter.GaussianBlur(30)));im.alpha_composite(cn,(cx-CS//2,cy-CS//2))
     # particles
     pl=Image.new('RGBA',(W,H),(0,0,0,0));pd=ImageDraw.Draw(pl)
     for a,b,sp,r in parts:

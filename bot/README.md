@@ -66,20 +66,20 @@ Set `BOOST_CONTRACT` and `BOOST_MON_PER_HOUR` in `.env`.
 double-posting. Delete it to re-baseline from `MAX_CATCHUP_BLOCKS` back.
 
 ## Buy alerts: Monshi candle-climb clip + coloured buttons
-Every buy alert is a short 2D clip of the real Monshi art climbing a glowing green candle (no text, seamless loop), with the Monshi coin spinning above. It has a green **Buy on Monpad** button and a blue **Chart** button.
+Every buy alert is a short 2D clip of the real Monshi art climbing a glowing green candle (no text, seamless loop). The spinning coin emoji goes in the alert text, not the clip. It has a green **Buy on Monpad** button and a blue **Chart** button.
 
 | Buy size | Video |
 |---|---|
 | under $1,000 | `assets/buy-small.mp4` (slow climb) |
 | $1,000 and up | `assets/buy-big.mp4` (faster, shake, pulse ring) |
-| **10,000,000 tokens or more** (a WHALE) | `assets/buy-whale.mp4` (fastest, bigger coin, purple ring, coin shower) |
+| **10,000,000 tokens or more** (a WHALE) | `assets/buy-whale.mp4` (fastest, purple ring, gold coin shower) |
 
 A whale is decided by **tokens bought**, not dollars (`WHALE_TOKENS`, default 10,000,000 = 1% of a 1B supply).
 
 - The first alert of each size uploads the file; Telegram's `file_id` is cached in `video-cache.json` (git-ignored) so later alerts send instantly. If a video ever fails to send, the alert falls back to plain text, so a buy is never missed.
 - **Coloured buttons** use Telegram's button `style` (`success` green, `primary` blue, `danger` red; Bot API 9.4+). Set `BUTTON_STYLES=off` to turn them off.
 - **Preview without any chain access:** `node monpad-bot.mjs --test-alert=whale --chat=<your chat id>` sends one sample alert (`small`, `big` or `whale`) and exits.
-- **Re-render the clips:** `cd video/gif && python3 render.py small|big|whale` (needs Pillow, numpy, `ffmpeg`; the cutout is `cat.png`, made from the reference art by `cut.py`, the coin frames are in `coin/`). Copy the resulting `buy-*.mp4` into `assets/`.
+- **Re-render the clips:** `cd video/gif && python3 render.py small|big|whale` (needs Pillow, numpy, `ffmpeg`; the cutout is `cat.png`, made from the reference art by `cut.py`). Copy the resulting `buy-*.mp4` into `assets/`.
 
 ## Getting the bot running on the server
 1. `git pull`, then `cd bot && npm install` (the bot needs Node 24).
