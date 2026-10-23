@@ -209,15 +209,29 @@ async function refreshTokens() {
 }
 
 // ── Buy alerts (tiered by USD size) ──────────────────────────────────────────
-function buyTier(usd) {
-  if (usd >= 5000) return { emoji: '🐋', label: 'WHALE', unit: 250 };
-  if (usd >= 1000) return { emoji: '🦈', label: 'SHARK', unit: 100 };
-  if (usd >= 300)  return { emoji: '🐬', label: 'DOLPHIN', unit: 40 };
-  return { emoji: '🐟', label: 'FISH', unit: 15 };
+// A WHALE buy is WHALE_TOKENS tokens or more (default 10,000,000 = 1% of a 1B supply). Other sizes go by USD.
+const WHALE_TOKENS = Number(process.env.WHALE_TOKENS || '10000000');
+function buyTier(usd, tokens = 0) {
+  if (tokens >= WHALE_TOKENS) return { emoji: '🐋', label: 'WHALE', unit: 150, min: 25 };
+  if (usd >= 1000) return { emoji: '🦈', label: 'SHARK', unit: 80, min: 8 };
+  if (usd >= 300)  return { emoji: '🐬', label: 'DOLPHIN', unit: 35, min: 3 };
+  return { emoji: '🐟', label: 'FISH', unit: 12, min: 1 };
+}
+
+// Monshi's own spinning coin (custom emoji pack t.me/addemoji/monshi_spin_by_Monshizbot). The bigger the buy, the
+// more of them the alert posts. MONSHI_EMOJI_ID overrides assets/emoji.json; with neither, plain emoji are used.
+const EMOJI_CFG = loadJson(new URL('./assets/emoji.json', import.meta.url), {});
+const MONSHI_EMOJI_ID = process.env.MONSHI_EMOJI_ID || EMOJI_CFG.id || '';
+const MAX_WALL = 60;
+function wallCount(usd, tier) {
+  return Math.max(tier.min, Math.min(MAX_WALL, Math.floor(usd / tier.unit)));
 }
 function emojiWall(usd, tier) {
-  return tier.emoji.repeat(Math.max(1, Math.min(40, Math.floor(usd / tier.unit))));
+  const n = wallCount(usd, tier);
+  if (MONSHI_EMOJI_ID) return `<tg-emoji emoji-id="${MONSHI_EMOJI_ID}">${EMOJI_CFG.placeholder || '🪙'}</tg-emoji>`.repeat(n);
+  return tier.emoji.repeat(Math.min(40, n));
 }
+
 // Telegram button colours (Bot API 9.4+): "success" green, "primary" blue, "danger" red. BUTTON_STYLES=off disables.
 const STYLES_ON = (process.env.BUTTON_STYLES || 'on') !== 'off';
 const styled = (btn, style) => (STYLES_ON && style ? { ...btn, style } : btn);
@@ -238,7 +252,7 @@ function buyButtons(info, enr, tx) {
 const ASSETS = new URL('./assets/', import.meta.url);
 const VIDEO_CACHE = new URL('./video-cache.json', import.meta.url);
 const videoCache = loadJson(VIDEO_CACHE, {});
-const videoFor = (usd) => (usd >= 5000 ? 'whale' : usd >= 1000 ? 'big' : 'small');
+const videoFor = (usd, tokens = 0) => (tokens >= WHALE_TOKENS ? 'whale' : usd >= 1000 ? 'big' : 'small');
 
 async function sendBuyVideo(chatId, kind, caption, extra = {}) {
   const base = { chat_id: chatId, caption, parse_mode: 'HTML', ...extra };
@@ -263,7 +277,7 @@ async function sendBuyVideo(chatId, kind, caption, extra = {}) {
 }
 
 function buyCaption(info, mon, usd, tokensOut, trader, enr) {
-  const tier = buyTier(usd);
+  const tier = buyTier(usd, tokensOut);
   const lines = [
     `${tier.emoji} <b>${esc(info.name || info.symbol)}</b> ($${esc(info.symbol)}) — ${tier.label} BUY`,
     emojiWall(usd, tier),
@@ -283,7 +297,7 @@ function buyCaption(info, mon, usd, tokensOut, trader, enr) {
 async function announceBuy(info, mon, usd, tokensOut, trader, tx, enr) {
   const caption = buyCaption(info, mon, usd, tokensOut, trader, enr);
   const extra = buyButtons(info, enr, tx);
-  const r = await sendBuyVideo(TELEGRAM_CHAT_ID, videoFor(usd), caption, extra);
+  const r = await sendBuyVideo(TELEGRAM_CHAT_ID, videoFor(usd, tokensOut), caption, extra);
   if (!r.ok) await send(caption, extra); // never lose an alert if the video fails
 }
 
@@ -291,12 +305,13 @@ async function announceBuy(info, mon, usd, tokensOut, trader, tx, enr) {
 async function runTestAlert(arg, chatArg) {
   const kind = (arg.split('=')[1] || 'small');
   const usd = { small: 120, big: 1800, whale: 8200 }[kind] ?? 120;
+  const tokens = { small: 480_000, big: 2_600_000, whale: 12_500_000 }[kind] ?? 480_000;
   const chat = chatArg ? chatArg.split('=')[1] : TELEGRAM_CHAT_ID;
   const info = { name: 'Monshi Zoomies', symbol: 'ZOOM', token: '0x0000000000000000000000000000000000000001' };
   const enr = { marketCapUsd: 184000, priceChangeH24: 12.4, listed: false };
-  const caption = buyCaption(info, usd / 0.02, usd, 1_250_000, '0x5db7CA9d2CE3f414B3fd94EC0FcaF9F3Ab1A575f', enr);
+  const caption = buyCaption(info, usd / 0.02, usd, tokens, '0x5db7CA9d2CE3f414B3fd94EC0FcaF9F3Ab1A575f', enr);
   const extra = buyButtons(info, enr, '0x' + 'ab'.repeat(32));
-  const r = await sendBuyVideo(chat, videoFor(usd), caption, extra);
+  const r = await sendBuyVideo(chat, videoFor(usd, tokens), caption, extra);
   console.log(r.ok ? `sample ${kind} alert sent` : `failed: ${r.description || 'see log'}`);
 }
 

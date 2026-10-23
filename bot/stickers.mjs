@@ -53,7 +53,22 @@ if (cmd === 'preview') {
   for (const f of files) form.append(poseOf(f), blob(f), f);
   await call('createNewStickerSet', form);
   console.log(`published: https://t.me/addstickers/${name}`);
+} else if (cmd === 'publish-emoji') {
+  // the spinning Monshi coin as a CUSTOM EMOJI pack (100x100 video emoji)
+  const owner = arg('owner'); if (!owner) { console.error('--owner=<telegram user id> required'); process.exit(1); }
+  const me = await (await fetch(`${API}/bot${TOKEN}/getMe`)).json();
+  const name = `${arg('name') || 'monshi_spin'}_by_${me.result.username}`;
+  const file = path.join(path.dirname(fileURLToPath(import.meta.url)), 'assets/emoji/monshi-spin.webm');
+  const form = new FormData();
+  form.append('user_id', owner); form.append('name', name); form.append('title', arg('title') || 'Monshi Spin');
+  form.append('sticker_type', 'custom_emoji');
+  form.append('stickers', JSON.stringify([{ sticker: 'attach://spin', format: 'video', emoji_list: ['🪙'] }]));
+  form.append('spin', new Blob([fs.readFileSync(file)], { type: 'video/webm' }), 'monshi-spin.webm');
+  await call('createNewStickerSet', form);
+  const set = await (await fetch(`${API}/bot${TOKEN}/getStickerSet?name=${name}`)).json();
+  const id = set.result?.stickers?.[0]?.custom_emoji_id;
+  console.log(`published: https://t.me/addemoji/${name}\ncustom_emoji_id: ${id}`);
 } else {
-  console.error('usage: stickers.mjs preview --chat=<id> | publish --owner=<user id>');
+  console.error('usage: stickers.mjs preview --chat=<id> | publish --owner=<user id> | publish-emoji --owner=<user id>');
   process.exit(1);
 }

@@ -71,8 +71,10 @@ Every buy alert is now a short 3D clip of Monshi (rigged model, coin rain, confe
 | Buy size | Video |
 |---|---|
 | under $1,000 | `assets/buy-small.mp4` (GREAT BUY) |
-| $1,000 to $4,999 | `assets/buy-big.mp4` (HUGE BUY) |
-| $5,000 and up | `assets/buy-whale.mp4` (WHALE BUY) |
+| $1,000 and up | `assets/buy-big.mp4` (HUGE BUY) |
+| **10,000,000 tokens or more** (a WHALE) | `assets/buy-whale.mp4` (WHALE BUY) |
+
+A whale is decided by **tokens bought**, not dollars (`WHALE_TOKENS`, default 10,000,000 = 1% of a 1B supply).
 
 - The first alert of each size uploads the file; Telegram's `file_id` is cached in `video-cache.json` (git-ignored) so later alerts send instantly. If a video ever fails to send, the alert falls back to plain text, so a buy is never missed.
 - **Coloured buttons** use Telegram's button `style` (`success` green, `primary` blue, `danger` red; Bot API 9.4+). Set `BUTTON_STYLES=off` to turn them off.
@@ -94,3 +96,17 @@ Eight 3D Monshi stickers: `celebrate`, `wave`, `dance`, `facepalm`, `hype`, `ang
 - **Look at them first:** `TELEGRAM_BOT_TOKEN=... node stickers.mjs preview --chat=<your chat id>` sends them to one chat.
 - **Publish a public pack:** `TELEGRAM_BOT_TOKEN=... node stickers.mjs publish --owner=<your telegram user id> [--name=monshi]`. The pack link is `t.me/addstickers/<name>_by_<botusername>`. Publishing is public, so only do it when you are happy with them.
 - **Re-render or add poses:** poses live in `video/sticker.html` (`POSES`); `node video/render-stickers.mjs [pose ...]` renders them (`SHEET=1` makes a preview sheet instead). Needs `playwright-core` and `ffmpeg`.
+
+## Spinning Monshi emoji wall (scales with the buy)
+The alert's emoji row uses Monshi's own **spinning coin** custom emoji (pack: https://t.me/addemoji/monshi_spin_by_Monshizbot), and the bigger the buy, the more of them it posts:
+
+| Tier | Coins per alert |
+|---|---|
+| Fish (under $300) | 1 + 1 per $12 |
+| Dolphin ($300+) | at least 3, then 1 per $35 |
+| Shark ($1,000+) | at least 8, then 1 per $80 |
+| Whale (10M+ tokens) | at least 25, then 1 per $150 (max 60) |
+
+- The emoji id lives in `assets/emoji.json` (or `MONSHI_EMOJI_ID`). With no id, the row falls back to normal emoji.
+- Telegram only shows custom emoji from a bot under certain conditions. They worked in a private chat; if they show as plain 🪙 in the group, the group needs the pack set as its emoji pack, or the bot needs a Fragment username. See the notes in the PR.
+- Re-render the emoji: `node video/render-emoji.mjs`, publish with `node stickers.mjs publish-emoji --owner=<your user id>`.
