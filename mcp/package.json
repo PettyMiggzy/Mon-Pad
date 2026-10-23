@@ -1,13 +1,21 @@
 {
   "name": "@monpad/mcp",
-  "version": "0.1.0",
-  "description": "MCP server for Monpad — AI agents can discover, launch, buy, sell, and read Monchi burns",
+  "version": "0.2.0",
+  "description": "MCP server for Monpad Uniswap V4 — list, trade, and launch with dry-run by default",
   "type": "module",
   "bin": {
+    "@monpad/mcp": "./server.mjs",
     "monpad-mcp": "./server.mjs"
   },
+  "files": [
+    "server.mjs",
+    "config.json",
+    "lib/",
+    "README.md"
+  ],
   "scripts": {
-    "start": "node server.mjs"
+    "start": "node server.mjs",
+    "test": "node test/integration.mjs"
   },
   "engines": {
     "node": ">=18"
