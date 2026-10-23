@@ -268,7 +268,7 @@ async function sendBuyVideo(chatId, kind, caption, extra = {}) {
   if (!fs.existsSync(file)) return { ok: false };
   const form = new FormData();
   for (const [k, v] of Object.entries(base)) form.append(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
-  form.append('width', '1280'); form.append('height', '720'); form.append('duration', '5');
+  form.append('width', '1280'); form.append('height', '720'); form.append('duration', '7');
   form.append('animation', new Blob([fs.readFileSync(file)], { type: 'video/mp4' }), `buy-${kind}.mp4`);
   const res = await fetch(`${TG_API}/bot${TELEGRAM_BOT_TOKEN}/sendAnimation`, { method: 'POST', body: form });
   const j = await res.json().catch(() => ({}));
