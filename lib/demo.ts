@@ -1,16 +1,14 @@
 /**
- * Demo board — fills the UI while FACTORY_V3 is unset / wiped.
- * Auto-on when factory is zero, or when NEXT_PUBLIC_MOCK_MODE=1.
+ * Demo board — seeded fake tokens. ONLY on when NEXT_PUBLIC_MOCK_MODE=1.
+ * Never auto-on: a missing/empty factory must show an honest empty board, not fake tokens.
  */
 import type { TokenSummary } from './api';
 
 const ZERO = '0x0000000000000000000000000000000000000000';
-const factoryEnv = (process.env.NEXT_PUBLIC_FACTORY_V3 ?? ZERO).toLowerCase();
 const mockFlag = process.env.NEXT_PUBLIC_MOCK_MODE === '1' || process.env.NEXT_PUBLIC_MOCK_MODE === 'true';
 
 /** True when we should paint the board with seeded demo tokens. */
-export const DEMO_BOARD =
-  mockFlag || factoryEnv === ZERO || factoryEnv === '' || factoryEnv === '0x';
+export const DEMO_BOARD = mockFlag;
 
 export function isDemoAddress(addr?: string | null): boolean {
   if (!addr) return false;

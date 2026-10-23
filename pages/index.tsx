@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import Link from 'next/link';
 import LiveTicker from '@/components/LiveTicker';
 import HomeRail from '@/components/HomeRail';
 import { Hero } from '@/components/hero3d/Hero';
@@ -55,12 +56,11 @@ export default function Home() {
         const list = await listV3Tokens(120);
         if (cancelled) return;
 
-        // Factory live but empty → still show demo so UI isn't blank during cutover.
+        // Factory live but empty -> honest empty board (never fake tokens).
         if (!list.length) {
-          const mapped = await mockTokens(filter);
           if (cancelled) return;
-          setDemo(true);
-          setTokens(mapped);
+          setDemo(false);
+          setTokens([]);
           setLoading(false);
           return;
         }
@@ -130,9 +130,8 @@ export default function Home() {
         } catch { /* optional */ }
       } catch {
         if (!cancelled) {
-          const mapped = await mockTokens().catch(() => []);
-          setDemo(true);
-          setTokens(mapped);
+          setDemo(false);
+          setTokens([]);
           setLoading(false);
         }
       }
@@ -183,7 +182,7 @@ export default function Home() {
         <FeeSplit />
         <MostWanted token={crown} />
 
-        {!configured && !demo && <div className="pad-empty">Board is empty until the factory is live.</div>}
+        {demo && <div className="pad-empty">Demo board: these tokens are sample data, not real launches.</div>}
 
         <div id="board" className="pad-tabs">
           {FILTERS.map((f) => (
@@ -199,7 +198,11 @@ export default function Home() {
             {loading && visible.length === 0
               ? Array.from({ length: 6 }).map((_, i) => <TokenSkeleton key={i} />)
               : visible.map((token) => <TokenTile key={token.address} token={token} />)}
-            {!loading && visible.length === 0 && <div className="pad-empty">Nothing matches that search.</div>}
+            {!loading && visible.length === 0 && (
+              <div className="pad-empty">
+                {query.trim() ? 'Nothing matches that search.' : configured ? 'No launches yet. Be the first.' : 'Launches open when the factory goes live.'}
+              </div>
+            )}
           </div>
           <aside className="pad-rail">
             <HomeRail variant="hottest-24h" limit={8} />

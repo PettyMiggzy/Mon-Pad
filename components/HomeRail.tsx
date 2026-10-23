@@ -64,12 +64,8 @@ export default function HomeRail({ variant, limit = 8 }: Props) {
         // All rails read straight from chain — no backend dependency, no 404s.
         const list = await listV3Tokens(60);
         if (!list.length) {
-          const demo = await mockTokens();
-          let picked = [...demo];
-          if (variant === 'hottest-24h') picked.sort((a, b) => cmpBigDesc(a.volume24hMon, b.volume24hMon));
-          else picked.sort((a, b) => cmpBigDesc(a.monRaisedNet, b.monRaisedNet));
           if (cancelled) return;
-          setRows(picked.slice(0, limit));
+          setRows([]);
           return;
         }
         let picked = list;
