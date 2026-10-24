@@ -163,8 +163,9 @@ class Garage extends Phaser.Scene {
       r.on('pointerup', () => { this.tab = t; this.draw(); });
       return { t, r, l };
     });
-    // One RACE button: the race plays itself (autopilot). Each race gets a fresh random seed; ?seed=...&auto=1 still replays one.
-    button(this, W / 2, H - 110, 560, 120, 'RACE', 0x39ff88, () => { persist(); this.scene.start('race', { seed: (Math.random() * 1e9 | 0) >>> 0, autopilot: true }); });
+    // RACE plays itself (autopilot, fresh random seed; ?seed=...&auto=1 still replays one). DRIVE is a manual race.
+    button(this, W / 2 - 150, H - 110, 270, 120, 'RACE', 0x39ff88, () => { persist(); this.scene.start('race', { seed: (Math.random() * 1e9 | 0) >>> 0, autopilot: true }); });
+    button(this, W / 2 + 150, H - 110, 270, 120, 'DRIVE', 0xffd75e, () => { persist(); this.scene.start('race', {}); });
     this.toast = txt(this, W / 2, 232, '', 30, '#ffd75e').setAlpha(0).setDepth(50);
     this.puScroll = 0;
     this.puListTop = 392;
@@ -818,8 +819,8 @@ class Race extends Phaser.Scene {
     const newBest = !this.skipPersist && this.milkN > save.best;
     z(300, 'FINISH!', 100, '#39ff88'); z(440, '+' + this.milkN + ' MILK', 84, '#ffffff');
     if (!this.skipPersist) { z(560, 'WALLET  ' + save.milk, 44, '#ffd75e'); z(630, newBest ? 'NEW BEST!' : 'BEST  ' + save.best, 40, newBest ? '#39ff88' : '#d9ccff'); }
-    const again = () => this.scene.restart({ seed: (Math.random() * 1e9 | 0) >>> 0, autopilot: true, skipPersist: this.skipPersist });
-    const b1 = button(this, W / 2, 780, 520, 120, 'RACE AGAIN', 0x39ff88, again); const b2 = button(this, W / 2, 930, 520, 110, 'LOADOUT', 0x6a45f0, () => this.scene.start('garage'), '#ffffff');
+    const again = () => this.scene.restart(this.autopilot ? { seed: (Math.random() * 1e9 | 0) >>> 0, autopilot: true, skipPersist: this.skipPersist } : { skipPersist: this.skipPersist });
+    const b1 = button(this, W / 2, 780, 520, 120, this.autopilot ? 'RACE AGAIN' : 'DRIVE AGAIN', 0x39ff88, again); const b2 = button(this, W / 2, 930, 520, 110, 'LOADOUT', 0x6a45f0, () => this.scene.start('garage'), '#ffffff');
     [b1.r, b1.t, b2.r, b2.t].forEach((o) => o.setDepth(1002));
   }
   proj(z, x, camX) { const sc = CAM_D / z; return { sc, x: W / 2 + sc * (x - camX) * W / 2, y: HY + sc * CAM_H * H / 2 * .62, w: sc * ROAD * W / 2 }; }
