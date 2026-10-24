@@ -83,3 +83,13 @@ Two clean audit passes + E2E bots before calling fee logic production-final.
 | `pages/api/v1/spec.ts` | Public JSON policy |
 | `hardhat-test/contracts/v3/MonPadGraduatorV3.sol` | Uniswap V3 LP seed (`POOL_FEE = 10000`) |
 | `docs/PROTOCOL.md` | LP + Uniswap V3 fee notes |
+
+---
+
+## Cursor Cloud specific instructions
+
+- Node **24** (`.nvmrc`, `package.json` `engines`). Source nvm and `nvm use 24` before install or dev; the base image may still have Node 22 earlier on `PATH`.
+- Three dependency installs: `npm ci` at the repo root, `npm ci --prefix hardhat-test`, and `npm install --prefix mcp` (`mcp/` has no lockfile). `curve-testrig/` and `bot/` are optional and are not started (research rig, and the bot needs Telegram secrets).
+- Dev server: `RPC_URL=https://rpc.monad.xyz npm run dev -- --hostname 0.0.0.0 --port 3000`. Hello-world checks are `GET /api/v1/spec` (policy JSON) and `GET /api/v1/burn` (live Monshi burn from the public Monad RPC).
+- An unset `NEXT_PUBLIC_FACTORY_V3` is a valid empty board: the home copy is “Launches open when the factory goes live.” `/api/v1/storage` returns 503 until `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are set. WalletConnect stays limited until `NEXT_PUBLIC_WC_PROJECT_ID` is set.
+- Protocol tests need no RPC: `npm test` in `hardhat-test`. `npm run build` is the production build (`typescript.ignoreBuildErrors` is on). `npx tsc --noEmit` currently fails in `sdk/src/index.ts` on a pre-existing viem client type error.
