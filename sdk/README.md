@@ -103,7 +103,7 @@ No hardcoded platform wallet or Monpad contract addresses in `src/`. Resolution 
 2. Env (`MONPAD_LAUNCHER`, `MONPAD_HOOK`, `MONPAD_V4_ROUTER`, `MONPAD_QUOTE_ASSET`, …)
 3. `GET /api/v1/spec` (platform, monshi, dead, fees) + optional future `uv4` block (`launcher`, `hook`, `v4Router`, `quoteAsset`)
 
-Fees: every swap pays 1% plus the creator tax (0 to 5%). The base 1% splits 70% creator / 10% platform / 10% MONSHI burn / 10% token burn. On the USDC side these are paid and reserved in USDC; on the token side the creator and platform get 70% / 10% and the rest is burned. The creator tax is entirely buy-and-burn.
+Fees: every swap pays 1% plus the creator tax (0 to 5%). The base 1% splits 70% creator / 10% platform / 10% MONSHI / 10% token burn. On the USDC side the creator, platform and MONSHI shares are credited as claimable USDC and the token-burn share waits in a reserve for the permissionless buyback; on the token side the creator and platform get 70% / 10% and the rest is burned. The MONSHI share is credited to the launcher's `monshiWallet`, and the team converts it to MONSHI and burns it by hand (the contract does not swap it). The creator tax is entirely buy-and-burn of the launched token.
 
 ## Scripts
 

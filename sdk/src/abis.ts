@@ -15,8 +15,7 @@ export const launcherAbi = parseAbi([
   'function claimable(address account, address asset) view returns (uint256)',
   'function claim(address asset) returns (uint256)',
   'function harvest(address token)',
-  'function monshiReserve() view returns (uint256)',
-  'function monshiKeySet() view returns (bool)',
+  'function monshiWallet() view returns (address)',
   'function tokenReserve(address token) view returns (uint256)',
 ]);
 
