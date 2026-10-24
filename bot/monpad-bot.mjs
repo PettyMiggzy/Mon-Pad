@@ -648,21 +648,45 @@ async function tick() {
   } catch (e) { console.error('tick failed:', e.message); }
 }
 
-// ── /milk <wallet> — Munchy Kart milk balance (read from the site API) ────
+// ── /milk, /link — Munchy Kart milk balance (read from the site API) ──────
+const GAME_API_KEY = process.env.GAME_API_KEY || '';
+const gameHeaders = { 'content-type': 'application/json', 'x-game-key': GAME_API_KEY };
 let updateOffset = 0;
+async function reply(m, text) {
+  return tg('sendMessage', { chat_id: m.chat.id, text, parse_mode: 'HTML', reply_to_message_id: m.message_id });
+}
+async function handleMilk(m, wallet) {
+  if (wallet) {
+    const r = await fetch(`${SITE}/api/game/milk?wallet=${wallet.toLowerCase()}`);
+    const d = await r.json();
+    return reply(m, r.ok ? `🥛 <code>${esc(short(wallet))}</code> has <b>${fmtMon(Number(d.milk))}</b> milk` : `Couldn't read milk balance: ${esc(d.error || r.status)}`);
+  }
+  if (!GAME_API_KEY) return reply(m, 'Send <code>/milk 0x…</code> with a wallet address.');
+  const r = await fetch(`${SITE}/api/game/link?tg_id=${m.from.id}`, { headers: gameHeaders });
+  if (r.status === 404) return reply(m, 'Your Telegram is not linked yet. DM me <code>/link</code> to connect your wallet.');
+  const d = await r.json();
+  return reply(m, r.ok ? `🥛 You have <b>${fmtMon(Number(d.milk))}</b> milk (<code>${esc(short(d.wallet))}</code>)` : `Couldn't read milk balance: ${esc(d.error || r.status)}`);
+}
+async function handleLink(m) {
+  // Private chat only: a code posted in a group could be confirmed by someone else's wallet.
+  if (m.chat.type !== 'private') return reply(m, 'DM me <code>/link</code> to connect your wallet.');
+  if (!GAME_API_KEY) return reply(m, 'Linking is not set up yet.');
+  const r = await fetch(`${SITE}/api/game/link/code`, { method: 'POST', headers: gameHeaders, body: JSON.stringify({ tg_id: String(m.from.id) }) });
+  const d = await r.json();
+  if (!r.ok) return reply(m, `Couldn't make a code: ${esc(d.error || r.status)}`);
+  return reply(m, `Your link code is <b>${esc(d.code)}</b> (valid ${Math.round(d.expires_in / 60)} min).\nOpen ${esc(SITE)}/games/munchy-kart, connect your wallet, tap LINK TELEGRAM and enter the code.`);
+}
 async function pollCommands() {
   const j = await tg('getUpdates', { offset: updateOffset, timeout: 0, allowed_updates: ['message'] });
   for (const u of j.result || []) {
     updateOffset = u.update_id + 1;
     const m = u.message;
-    const match = /^\/milk(?:@\w+)?\s+(0x[0-9a-fA-F]{40})\s*$/.exec(m?.text || '');
-    if (!match) continue;
+    const text = m?.text || '';
     try {
-      const r = await fetch(`${SITE}/api/game/milk?wallet=${match[1].toLowerCase()}`);
-      const d = await r.json();
-      const text = r.ok ? `🥛 <code>${esc(short(match[1]))}</code> has <b>${fmtMon(Number(d.milk))}</b> milk` : `Couldn't read milk balance: ${esc(d.error || r.status)}`;
-      await tg('sendMessage', { chat_id: m.chat.id, text, parse_mode: 'HTML', reply_to_message_id: m.message_id });
-    } catch (e) { console.error('milk lookup failed:', e.message); }
+      const milk = /^\/milk(?:@\w+)?(?:\s+(0x[0-9a-fA-F]{40}))?\s*$/.exec(text);
+      if (milk) await handleMilk(m, milk[1]);
+      else if (/^\/link(?:@\w+)?\s*$/.test(text)) await handleLink(m);
+    } catch (e) { console.error('command failed:', e.message); }
   }
 }
 
