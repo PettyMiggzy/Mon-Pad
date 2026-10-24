@@ -6,8 +6,13 @@ import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "@uniswap/v4-core/src/types/BeforeSwapDelta.sol";
 import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
+import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol";
 import {LPFeeLibrary} from "@uniswap/v4-core/src/libraries/LPFeeLibrary.sol";
 import {StateLibrary} from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
+
+interface IMonpadLauncherConfig {
+    function quoteAsset() external view returns (address);
+}
 
 /// @title MonpadHook
 /// @notice Uniswap V4 hook that makes every Monpad pool charge the fee its launch chose: 1% plus the
@@ -61,6 +66,12 @@ contract MonpadHook {
         if (sender != launcher) revert NotLauncher(); // nobody else can create a pool that uses this hook
         if (feeUnits[key.toId()] == 0) revert NotConfigured();
         if (key.fee != LPFeeLibrary.DYNAMIC_FEE_FLAG) revert BadKey();
+        address quote = IMonpadLauncherConfig(launcher).quoteAsset();
+        address c0 = Currency.unwrap(key.currency0);
+        address c1 = Currency.unwrap(key.currency1);
+        if (c0 != quote && c1 != quote) revert BadKey();
+        address token = c0 == quote ? c1 : c0;
+        if (token == address(0) || token == quote) revert BadKey();
         return this.beforeInitialize.selector;
     }
 

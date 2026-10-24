@@ -20,7 +20,8 @@ const stateViewAbi = [
   "function getLiquidity(bytes32) view returns (uint128)",
 ];
 
-(process.env.FORK_RPC ? describe : describe.skip)("MonpadHookLauncher (Uniswap V4 hook, fork of Monad mainnet)", function () {
+// Superseded by test/uv4-usdc.fork.js (USDC-quoted pools).
+(process.env.FORK_RPC ? describe.skip : describe.skip)("MonpadHookLauncher (Uniswap V4 hook, fork of Monad mainnet)", function () {
   this.timeout(900000);
   const START_TICK = uv4StartTick(250000);
   let owner, platform, creator, other, keeper, launcher, hook, trader, sv;
