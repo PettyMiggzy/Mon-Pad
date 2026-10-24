@@ -135,11 +135,11 @@ class Garage extends Phaser.Scene {
       return { t, r, l };
     });
     this.seedVal = (Math.random() * 1e9 | 0) >>> 0;
-    this.seedTxt = txt(this, W / 2, H - 200, 'SEED  ' + this.seedVal, 26, '#9a8cd8');
+    this.seedTxt = txt(this, W / 2 - 60, H - 36, 'SEED  ' + this.seedVal, 24, '#9a8cd8');
     const bumpSeed = () => { this.seedVal = (Math.random() * 1e9 | 0) >>> 0; this.seedTxt.setText('SEED  ' + this.seedVal); };
-    button(this, W - 100, H - 200, 120, 52, 'NEW', 0x2a1370, bumpSeed, '#d9ccff');
-    button(this, W / 2, H - 110, 560, 120, 'RACE', 0x39ff88, () => { persist(); this.scene.start('race'); });
-    button(this, W / 2, H - 250, 560, 88, 'AUTO RACE', 0x6a45f0, () => { persist(); this.scene.start('race', { seed: this.seedVal, autopilot: true }); }, '#ffffff');
+    button(this, W - 100, H - 36, 120, 48, 'NEW', 0x2a1370, bumpSeed, '#d9ccff');
+    button(this, 250, H - 120, 360, 110, 'RACE', 0x39ff88, () => { persist(); this.scene.start('race'); });
+    button(this, 565, H - 120, 250, 110, 'AUTO', 0x6a45f0, () => { persist(); this.scene.start('race', { seed: this.seedVal, autopilot: true }); }, '#ffffff');
     this.toast = txt(this, W / 2, 232, '', 30, '#ffd75e').setAlpha(0).setDepth(50);
     this.draw();
     const qp = new URLSearchParams(location.search);
