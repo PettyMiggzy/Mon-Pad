@@ -454,7 +454,7 @@ class Race extends Phaser.Scene {
       this.shieldGfx.fillStyle(0x7dffb0, 0.07);
       this.shieldGfx.fillCircle(kx, ky - 115, 125);
     }
-    const k = clamp(Math.round(3 + this.lean * 3), 0, 6);
+    const k = clamp(Math.round(3 - this.lean * 3), 0, 6); // frames 0..6 run right-turn..left-turn, so lean +1 (steer right) must pick frame 0
     this.kartSpr.setTexture(`car${this.car.id}_${k}`).setPosition(kx, ky).setTint(this.boost > 0 ? 0xbfffe0 : 0xffffff);
   }
 }
