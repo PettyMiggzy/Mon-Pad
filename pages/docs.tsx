@@ -1,470 +1,253 @@
 import Link from 'next/link';
-import { ExternalLink, FileCode, Shield, MessageCircle, Sparkles, Wallet, Flame, Droplets, TrendingUp, Lock, Coins, Rocket, Bot, Code2 } from 'lucide-react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
-import {
-  FACTORY_V3, GRADUATOR_V3, WMON, MONSHI_TOKEN, UNISWAP_V3_NPM,
-  V3_CREATION_FEE_MON, V3_GRADUATION_TARGET_MON, V3_CREATOR_REWARD_MON, V3_TREASURY_CUT_MON,
-  V3_MAX_TRADE_TAX_BPS, V3_MAX_DEV_BUY_BPS,
-  MONPAD_PLATFORM_WALLET, PROTOCOL_BURN_TOKEN_BPS, PROTOCOL_BURN_MONSHI_BPS, PROTOCOL_PLATFORM_BPS,
-  DEAD_ADDRESS,
-} from '@/lib/constants';
+import { useState } from 'react';
+import { AlertTriangle, Bot, BookOpen, Code2, Coins, Flame, Layers, Lock, MessageCircle, Rocket, Shield, Terminal, Wallet } from 'lucide-react';
 
-const CURVE_IMPL = '0xf5184f2255797f5AD5fa92Ca273FdBb07EbaB623';
-const TOKEN_IMPL = '0x7B26281D9AA463452814453d946FE21898B3269e';
+/* Public documentation. Deliberately contains no wallet addresses: platform and treasury wallets are
+   readable on-chain from the verified contracts, and contract addresses are published here at launch. */
 
-const CHAIN_PARAMS = {
-  chainId: '0x8f',
-  chainIdDecimal: 143,
-  chainName: 'Monad Mainnet',
-  rpcUrl: 'https://rpc.monad.xyz',
-  explorerUrl: 'https://monadscan.com',
-  currency: { name: 'MON', symbol: 'MON', decimals: 18 },
-};
-
-const scan = (addr: string) => `${CHAIN_PARAMS.explorerUrl}/address/${addr}`;
-const n = (v: bigint | number) => Number(v).toLocaleString();
-const pct = (bps: number) => `${bps / 100}%`;
-
-const CONTRACTS = [
-  { name: 'Factory V3', addr: FACTORY_V3, purpose: 'Deploys token + curve per launch, holds economics, emits Launch' },
-  { name: 'Graduator V3', addr: GRADUATOR_V3, purpose: 'Seeds the Uniswap V3 pool and locks LP' },
-  { name: 'Curve (implementation)', addr: CURVE_IMPL, purpose: 'Bonding curve + protocol burn stack, EIP-1167 clone per token' },
-  { name: 'Token (implementation)', addr: TOKEN_IMPL, purpose: 'ERC-20, cloned per token (1B fixed supply)' },
-  { name: 'WMON', addr: WMON, purpose: 'Wrapped MON — quote asset in the DEX pool' },
-  { name: 'Uniswap V3 NPM', addr: UNISWAP_V3_NPM, purpose: 'Position manager for the DEX LP' },
-  { name: 'MONSHI', addr: MONSHI_TOKEN, purpose: 'Creation-fee discount perk + buyback-and-burn target' },
-  { name: 'Platform', addr: MONPAD_PLATFORM_WALLET, purpose: 'Protocol platform fee receiver (MON / quote only)' },
-  { name: 'Dead', addr: DEAD_ADDRESS, purpose: 'Protocol token burns + MONSHI burn sink' },
+const SECTIONS = [
+  { id: 'overview', label: 'Overview', icon: BookOpen },
+  { id: 'launch', label: 'How a launch works', icon: Rocket },
+  { id: 'fees', label: 'Fees', icon: Coins },
+  { id: 'trading', label: 'Trading', icon: Layers },
+  { id: 'chat', label: 'Launch by chat', icon: MessageCircle },
+  { id: 'agents', label: 'AI & MCP', icon: Bot },
+  { id: 'sdk', label: 'SDK', icon: Code2 },
+  { id: 'api', label: 'HTTP API', icon: Terminal },
+  { id: 'events', label: 'On-chain data', icon: Flame },
+  { id: 'security', label: 'Security & risks', icon: Shield },
+  { id: 'wallet', label: 'Wallet setup', icon: Wallet },
 ];
 
-const EVENTS = [
-  { sig: 'Launch(token, curve, creator, name, symbol, quoteToken, totalSupply, virtualMonReserve, virtualTokenReserve, createdAt)', from: 'Factory', use: 'Discover each new token + its curve clone' },
-  { sig: 'Trade(token, trader, isBuy, monAmount, tokenAmount, virtualMonReserve, virtualTokenReserve, realMonReserve, realTokenReserve, priceX18, tradedAt)', from: 'Curve', use: 'Every buy/sell — price + volume on-chain' },
-  { sig: 'Graduated(lpMon, creatorReward, treasuryCut)', from: 'Curve', use: 'Token bonded — liquidity on DEX' },
-  { sig: 'FeeCollected(label, to, amount)', from: 'Curve', use: 'Platform / MONSHI / token-burn legs' },
-  { sig: 'BuybackBurn(monIn, tokensBurned)', from: 'Curve', use: 'Project-token buyback-burn from creator fee/tax routing' },
+const MCP_TOOLS: [string, 'read' | 'write', string][] = [
+  ['monpad_list_launches', 'read', 'Recent launches, newest first.'],
+  ['monpad_get_token', 'read', 'Price, liquidity, creator tax and approximate volume for one token.'],
+  ['monpad_trending', 'read', 'Tokens ranked by swap volume over a recent window.'],
+  ['monpad_get_spec', 'read', 'Fee policy, safety limits and contract readiness.'],
+  ['monpad_get_monshi_burn', 'read', 'Live MONSHI burn counter.'],
+  ['monpad_launch_token', 'write', 'Launch a token, with an optional dev buy. Dry run by default.'],
+  ['monpad_buy', 'write', 'Buy with MON. Requires a minimum-out. Dry run by default.'],
+  ['monpad_sell', 'write', 'Sell for MON. Requires a minimum-out. Dry run by default.'],
 ];
+
+const SDK_METHODS: [string, string][] = [
+  ['createMonpad({ publicClient, walletClient?, addresses? })', 'Create a client. Read methods need only a public client. Writes need a wallet client.'],
+  ['monpad.listLaunches({ limit })', 'Recent launches with creator, creator tax, pool id, name and symbol.'],
+  ['monpad.getToken(token)', 'Price, liquidity, total swap fee, creator tax and volume for one token.'],
+  ['monpad.quoteBuy({ token, monIn })', 'Simulates a buy and returns the expected tokens out and the fee paid.'],
+  ['monpad.buy({ token, monIn, minTokensOut, deadline?, simulate? })', 'One payable transaction. Reverts if you would receive less than minTokensOut.'],
+  ['monpad.sell({ token, tokensIn, minMonOut, deadline?, simulate? })', 'Sells tokens for MON, with the same protections. Handles the approval if needed.'],
+  ['monpad.launch({ name, symbol, creatorTaxBps?, devBuyMon?, salt?, simulate? })', 'Deploys the token and its pool in one transaction. Creator tax 0 to 500 bps.'],
+  ['monpad.creatorEarnings(address)', 'Fees a creator can claim, per asset.'],
+  ['monpad.claim() / monpad.harvest(token)', 'Claim creator earnings, or trigger the fee split for a pool. Anyone can call harvest.'],
+  ['monpad.getMonshiBurned()', 'MONSHI held at the dead address.'],
+];
+
+function H2({ id, children }: { id: string; children: React.ReactNode }) {
+  return <h2 id={id} className="scroll-mt-24 text-2xl md:text-3xl font-bold text-white mt-14 mb-4">{children}</h2>;
+}
+const P = ({ children }: { children: React.ReactNode }) => <p className="text-white/75 leading-relaxed mb-4">{children}</p>;
+const Code = ({ children }: { children: string }) => (
+  <pre className="rounded-xl border border-white/10 bg-black/40 p-4 text-sm text-white/90 overflow-x-auto mb-4"><code>{children}</code></pre>
+);
+const Ic = ({ children }: { children: React.ReactNode }) => <code className="rounded bg-white/10 px-1.5 py-0.5 text-[0.9em] text-purple-200">{children}</code>;
 
 export default function Docs() {
   const router = useRouter();
   const canonical = `https://www.monpad.net${router.asPath.split('?')[0]}`;
-  const addMonadToWallet = async () => {
-    if (typeof window === 'undefined' || !(window as { ethereum?: { request: (args: { method: string; params: unknown[] }) => Promise<unknown> } }).ethereum) {
-      alert('No Web3 wallet detected. Install MetaMask or Rabby first.');
-      return;
-    }
-    try {
-      await (window as { ethereum: { request: (args: { method: string; params: unknown[] }) => Promise<unknown> } }).ethereum.request({
-        method: 'wallet_addEthereumChain',
-        params: [{
-          chainId: CHAIN_PARAMS.chainId,
-          chainName: CHAIN_PARAMS.chainName,
-          nativeCurrency: CHAIN_PARAMS.currency,
-          rpcUrls: [CHAIN_PARAMS.rpcUrl],
-          blockExplorerUrls: [CHAIN_PARAMS.explorerUrl],
-        }],
-      });
-    } catch (err) {
-      console.error('Add chain failed:', err);
-    }
-  };
-
+  const [open, setOpen] = useState(false);
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 16px 64px' }}>
+    <div className="max-w-6xl mx-auto px-4 py-10">
       <Head>
-        <title>Docs | Monpad — agents, bots, fees, contracts</title>
-        <meta key="description" name="description" content="Monpad docs: protocol burns, MONSHI, API, SDK, MCP for AI agents. Bots and snipers welcome." />
-        <meta key="og:title" property="og:title" content="Docs | Monpad" />
-        <meta key="og:description" property="og:description" content="Badass Monpad reference — fees, burns, agents, contracts." />
-        <meta key="og:image" property="og:image" content="https://www.monpad.net/meshy/docs-banner.png" />
-        <meta key="og:url" property="og:url" content={canonical} />
-        <meta key="twitter:title" name="twitter:title" content="Docs | Monpad" />
-        <meta key="twitter:description" name="twitter:description" content="Protocol, API, SDK, MCP — built for agents." />
+        <title>Docs | Monpad</title>
+        <meta key="description" name="description" content="How Monpad works: launches on Uniswap V4 with an enforced creator tax, fees, trading, launch by chat, AI and MCP, the SDK and the HTTP API." />
         <link key="canonical" rel="canonical" href={canonical} />
       </Head>
 
-      {/* Meshy hero */}
-      <header
-        style={{
-          position: 'relative',
-          margin: '0 -16px 28px',
-          minHeight: 280,
-          overflow: 'hidden',
-          borderBottom: '1px solid rgba(168,85,247,0.35)',
-        }}
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/meshy/docs-banner.png"
-          alt=""
-          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 30%' }}
-        />
-        <div
-          aria-hidden
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background:
-              'linear-gradient(90deg, rgba(5,3,8,0.92) 0%, rgba(5,3,8,0.55) 50%, rgba(5,3,8,0.75) 100%), linear-gradient(180deg, transparent 40%, #050308 100%)',
-          }}
-        />
-        <div style={{ position: 'relative', zIndex: 1, padding: '48px 16px 36px', maxWidth: 1100, margin: '0 auto' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/meshy/monshi-mascot.png"
-              alt="Monshi"
-              style={{ width: 96, height: 96, objectFit: 'contain', filter: 'drop-shadow(0 12px 28px rgba(124,58,237,0.55))' }}
-            />
-            <div style={{ flex: 1, minWidth: 220 }}>
-              <p style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--pink, #EC4899)', margin: 0 }}>
-                Monpad · docs
-              </p>
-              <h1 style={{ fontSize: 'clamp(28px, 5vw, 44px)', fontWeight: 900, letterSpacing: '-0.03em', color: '#fff', margin: '6px 0 0', lineHeight: 1.05 }}>
-                Built for traders.<br />Owned by agents.
-              </h1>
-              <p style={{ marginTop: 10, maxWidth: 520, fontSize: 14, color: 'rgba(220,215,240,0.75)', lineHeight: 1.5 }}>
-                Protocol burns, live Monshi FOMO, public API / SDK / MCP. Bots and agents are welcome.
-              </p>
-            </div>
-          </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 18 }}>
-            {[
-              { href: '/api/v1/spec', label: 'GET /api/v1/spec' },
-              { href: '/api/v1/burn', label: 'GET /api/v1/burn' },
-              { href: 'https://github.com/PettyMiggzy/Mon-Pad/blob/main/AGENTS.md', label: 'AGENTS.md' },
-            ].map((a) => (
-              <a
-                key={a.href}
-                href={a.href}
-                target={a.href.startsWith('http') ? '_blank' : undefined}
-                rel={a.href.startsWith('http') ? 'noopener noreferrer' : undefined}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '8px 12px',
-                  borderRadius: 8,
-                  border: '1px solid rgba(168,85,247,0.4)',
-                  background: 'rgba(168,85,247,0.15)',
-                  color: '#fff',
-                  fontSize: 12,
-                  fontWeight: 700,
-                  fontFamily: 'var(--mono, ui-monospace, monospace)',
-                  textDecoration: 'none',
-                }}
-              >
-                {a.label}
-                {a.href.startsWith('http') && <ExternalLink size={12} />}
-              </a>
-            ))}
-          </div>
-        </div>
+      <header className="mb-8">
+        <div className="text-sm text-white/55 mb-2">Documentation</div>
+        <h1 className="text-4xl md:text-5xl font-bold text-white mb-3">Build on and trade with Monpad</h1>
+        <p className="text-white/70 max-w-3xl leading-relaxed">
+          Everything you need to launch a token, trade it, or plug a bot or an AI into Monpad on Monad.
+        </p>
       </header>
 
-      {/* At a glance */}
-      <section style={{ marginBottom: 48 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
-          {[
-            { label: 'Creator', value: '70%', sub: 'of LP fees on buys & sells' },
-            { label: 'Platform', value: pct(PROTOCOL_PLATFORM_BPS), sub: 'of LP fees · MON only on sells' },
-            { label: 'Burn MONSHI', value: pct(PROTOCOL_BURN_MONSHI_BPS), sub: 'of LP fees · buyback & burn' },
-            { label: 'Burn token', value: pct(PROTOCOL_BURN_TOKEN_BPS), sub: 'of LP fees · project token → dEaD' },
-            { label: 'Dev bot', value: `≤${V3_MAX_DEV_BUY_BPS / 100}%`, sub: 'atomic first buy in create tx' },
-            { label: 'Liquidity', value: 'DEX / LP', sub: 'Uniswap V3 from block one' },
-          ].map((c) => (
-            <div
-              key={c.label}
-              style={{
-                padding: 14,
-                borderRadius: 12,
-                border: '1px solid rgba(168,85,247,0.2)',
-                background: 'rgba(20,16,42,0.75)',
-              }}
-            >
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)' }}>{c.label}</div>
-              <div style={{ fontSize: 22, fontWeight: 900, color: '#fff', marginTop: 4 }}>{c.value}</div>
-              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 4, lineHeight: 1.35 }}>{c.sub}</div>
-            </div>
-          ))}
+      <div className="rounded-2xl border border-yellow-400/30 bg-yellow-400/5 p-4 mb-8 flex gap-3">
+        <AlertTriangle className="shrink-0 mt-0.5" size={20} />
+        <div className="text-white/80 text-sm leading-relaxed">
+          <b className="text-white">Status.</b> The launch contracts have been tested on a fork of Monad mainnet and are going through an independent security review. This page describes how they work. Verified contract addresses are published here and on Monadscan at mainnet launch. Nothing on this page is financial advice.
         </div>
-      </section>
+      </div>
 
-      {/* Agents */}
-      <section id="agents" style={{ marginBottom: 48 }}>
-        <h2 style={{ fontSize: 28, fontWeight: 900, color: '#fff', marginBottom: 8 }}>For AI agents &amp; bots</h2>
-        <p style={{ color: 'rgba(220,215,240,0.7)', fontSize: 14, marginBottom: 16, maxWidth: 640, lineHeight: 1.5 }}>
-          Three identical policy surfaces. Start with JSON spec — never invent factory addresses from memory.
-        </p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
-          {[
-            { icon: Code2, t: 'HTTP', d: 'GET /api/v1/spec · /api/v1/burn — CORS open, cacheable.', href: '/api/v1/spec' },
-            { icon: Bot, t: 'MCP', d: 'mcp/server.mjs — monpad_launch_token, buy, sell, burn, list.', href: 'https://github.com/PettyMiggzy/Mon-Pad/blob/main/mcp/README.md' },
-            { icon: Rocket, t: 'SDK', d: '@monpad/sdk — launch(+devBuy), quoteBuy, buy, sell, getMonshiBurned.', href: 'https://github.com/PettyMiggzy/Mon-Pad/blob/main/sdk/README.md' },
-          ].map((c) => (
-            <a
-              key={c.t}
-              href={c.href}
-              target={c.href.startsWith('http') ? '_blank' : undefined}
-              rel={c.href.startsWith('http') ? 'noopener noreferrer' : undefined}
-              style={{
-                display: 'block',
-                padding: 16,
-                borderRadius: 12,
-                border: '1px solid rgba(236,72,153,0.3)',
-                background: 'linear-gradient(145deg, rgba(236,72,153,0.1), rgba(20,16,42,0.9))',
-                textDecoration: 'none',
-                color: 'inherit',
-              }}
-            >
-              <c.icon size={22} style={{ color: 'var(--pink, #EC4899)', marginBottom: 8 }} />
-              <div style={{ fontWeight: 800, color: '#fff', fontSize: 16 }}>{c.t}</div>
-              <div style={{ fontSize: 13, color: 'rgba(220,215,240,0.65)', marginTop: 6, lineHeight: 1.4 }}>{c.d}</div>
-            </a>
-          ))}
-        </div>
-        <pre
-          style={{
-            marginTop: 14,
-            padding: 16,
-            borderRadius: 12,
-            border: '1px solid rgba(168,85,247,0.25)',
-            background: 'rgba(10,8,20,0.95)',
-            color: 'rgba(220,215,240,0.85)',
-            fontSize: 12,
-            overflow: 'auto',
-            fontFamily: 'var(--mono, ui-monospace, monospace)',
-          }}
-        >
-{`# agent bootstrap
-curl -s https://www.monpad.net/api/v1/spec | jq .fees,.addresses,.policy
-curl -s https://www.monpad.net/api/v1/burn | jq .
+      <button className="md:hidden mb-4 w-full rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-left text-white" onClick={() => setOpen(!open)}>
+        {open ? 'Hide sections' : 'Jump to a section'}
+      </button>
 
-# repo playbook
-# → AGENTS.md  ·  docs/PROTOCOL.md`}
-        </pre>
-      </section>
+      <div className="md:grid md:grid-cols-[220px_1fr] md:gap-10">
+        <nav className={`${open ? 'block' : 'hidden'} md:block md:sticky md:top-24 md:self-start mb-8 md:mb-0`}>
+          <ul className="space-y-1">
+            {SECTIONS.map(({ id, label, icon: Icon }) => (
+              <li key={id}>
+                <a href={`#${id}`} onClick={() => setOpen(false)} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-white/70 hover:bg-white/5 hover:text-white">
+                  <Icon size={15} /> {label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
 
-      {/* Lifecycle */}
-      <section style={{ marginBottom: 48 }}>
-        <h2 style={{ fontSize: 28, fontWeight: 900, color: '#fff', marginBottom: 16 }}>How a launch works</h2>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {[
-            { icon: Rocket, t: '1 · Create (+ optional dev bot)', d: `Pay ${n(V3_CREATION_FEE_MON)} MON (MONSHI holders discounted). Optionally include native MON for an atomic first buy in the same tx — you don't get sniped.` },
-            { icon: TrendingUp, t: '2 · Trade on the curve', d: 'Buys/sells in native MON. Every trade burns project tokens, accrues MONSHI buyback, and pays platform in MON.' },
-            { icon: Coins, t: '3 · Graduate', d: `At ~${n(V3_GRADUATION_TARGET_MON)} MON net raised: creator reward ${n(V3_CREATOR_REWARD_MON)} MON, treasury cut ${n(V3_TREASURY_CUT_MON)} MON.` },
-            { icon: Lock, t: '4 · Locked DEX LP', d: 'Remaining MON + unsold tokens seed Uniswap V3 WMON/token. LP locks. Curve closes; trading continues on DEX.' },
-          ].map((s) => (
-            <div key={s.t} style={{ display: 'flex', gap: 14, padding: 16, borderRadius: 12, border: '1px solid rgba(168,85,247,0.18)', background: 'rgba(20,16,42,0.7)' }}>
-              <s.icon size={22} style={{ color: 'var(--p, #A855F7)', flexShrink: 0, marginTop: 2 }} />
-              <div>
-                <div style={{ fontWeight: 800, color: '#fff', marginBottom: 4 }}>{s.t}</div>
-                <div style={{ fontSize: 13, color: 'rgba(220,215,240,0.7)', lineHeight: 1.5 }}>{s.d}</div>
+        <main className="min-w-0">
+          <H2 id="overview">Overview</H2>
+          <P>Monpad is a launchpad on Monad. A token launches straight into a Uniswap V4 pool, paired with native MON, from the first block. There is no bonding curve and no waiting period. The pool is on the DEX from the moment the launch transaction lands.</P>
+          <P>The pool uses a Monpad hook, a small contract that runs on every swap. The hook sets the swap fee and enforces the creator&apos;s tax inside the pool itself. Because the rule lives in the pool, every router, aggregator and bot pays the same fee, and no one can route around it.</P>
+          <ul className="list-disc pl-5 space-y-2 text-white/75 mb-4">
+            <li><b className="text-white">Plain token.</b> A standard ERC-20 with a fixed supply of 1 billion. No token tax, no mint, no owner, no blacklist and no anti-sniper code. It works everywhere a normal token does.</li>
+            <li><b className="text-white">Locked liquidity.</b> The launcher holds the pool position and has no function that removes liquidity.</li>
+            <li><b className="text-white">Open to bots.</b> There is no sniper protection, delay or whitelist. Bots and AI agents are first-class users.</li>
+          </ul>
+
+          <H2 id="launch">How a launch works</H2>
+          <P>A launch is one transaction to the launcher contract:</P>
+          <ol className="list-decimal pl-5 space-y-2 text-white/75 mb-4">
+            <li>Deploys the token (1 billion supply, held entirely by the launcher).</li>
+            <li>Creates the Uniswap V4 pool, native MON against the token, using the Monpad hook.</li>
+            <li>Places the whole supply in one single-sided position at the starting price.</li>
+            <li>Optionally spends your <b className="text-white">dev buy</b> in the same transaction, so you buy before anyone else can. The dev buy is capped at 5% of supply.</li>
+          </ol>
+          <P>You pay a flat creation fee, which the launch form shows before you confirm, plus any dev buy. A launch costs far less gas than a classic launcher, roughly 870k gas in our tests.</P>
+          <P>You choose a <b className="text-white">creator tax</b> from 0% to 5% at launch. It is fixed forever. See Fees for what it does.</P>
+          <Code>{`launch(name, symbol, salt, creatorTaxBps)   // payable: creation fee + optional dev buy`}</Code>
+
+          <H2 id="fees">Fees</H2>
+          <P>Every swap in a Monpad pool pays <b className="text-white">1% plus the creator tax</b>, so between 1% and 6% in total. The hook sets this on every swap. Anyone can trigger the split by calling <Ic>harvest(token)</Ic>.</P>
+          <div className="overflow-x-auto mb-6">
+            <table className="w-full text-sm text-left border border-white/10 rounded-xl overflow-hidden">
+              <thead className="bg-white/5 text-white/80"><tr><th className="p-3">Share of the base 1%</th><th className="p-3">Goes to</th></tr></thead>
+              <tbody className="text-white/75 divide-y divide-white/10">
+                <tr><td className="p-3">70%</td><td className="p-3">The creator, claimable at any time</td></tr>
+                <tr><td className="p-3">10%</td><td className="p-3">The platform</td></tr>
+                <tr><td className="p-3">10%</td><td className="p-3">Buys and burns MONSHI</td></tr>
+                <tr><td className="p-3">10%</td><td className="p-3">Buys and burns the launched token</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <P><b className="text-white">Creator tax.</b> Anything above the base 1% is the creator tax. It is not paid to the creator or the platform. All of it buys and burns the launched token, so it can only reduce supply. The creator cannot take it out or change it later. The total fee is always shown before you trade.</P>
+          <P><b className="text-white">Fees paid in the token.</b> On the token side of a swap, the creator and platform keep their 70% and 10%, and the two burn shares are burned directly in the token, 20% in total.</P>
+          <P><b className="text-white">Buyback and burn.</b> Anyone can run the token buyback. It only executes when the pool price is close to a reference price the hook samples before swaps, which makes it hard to manipulate. The MONSHI buyback runs from a designated keeper with a minimum-out set from an off-chain price.</P>
+
+          <H2 id="trading">Trading</H2>
+          <P>Tokens trade in the Uniswap V4 pool like any other pair. On monpad.net, every token page has a trade box and a chart. Bots and aggregators can swap in the pool directly. The fee is charged either way.</P>
+          <ul className="list-disc pl-5 space-y-2 text-white/75 mb-4">
+            <li><b className="text-white">Always set a minimum out.</b> Prices move between quote and execution. Monpad&apos;s tools require a minimum-out on buys and sells.</li>
+            <li><b className="text-white">Check the total fee.</b> A creator tax raises the fee up to 6%. It is shown on the token page.</li>
+            <li><b className="text-white">Other pools can exist.</b> Anyone can create another pool for the same token elsewhere. Liquidity locked in Monpad&apos;s pool stays there, but volume can move.</li>
+          </ul>
+
+          <H2 id="chat">Launch by chat</H2>
+          <P>Open <Link href="/chat" className="underline text-purple-300">Chat</Link> and describe your coin in a sentence. Monpad drafts the name, ticker, logo and a 3D character, and shows you the result. You confirm and sign the launch from your own wallet. Nothing is deployed until you approve the transaction.</P>
+          <P>Launched tokens can get a living 3D character that reacts to the chart. Character generation uses credits that are covered by the creation fee.</P>
+
+          <H2 id="agents">AI &amp; MCP</H2>
+          <P>Monpad speaks the Model Context Protocol, so Claude, Cursor and other MCP-compatible assistants can read the market and, if you allow it, trade and launch. The server runs on your own machine. Your key stays there.</P>
+          <Code>{`{
+  "mcpServers": {
+    "monpad": {
+      "command": "npx",
+      "args": ["-y", "@monpad/mcp"],
+      "env": {
+        "RPC_URL": "https://rpc.monad.xyz",
+        "MONPAD_PRIVATE_KEY": "<a small burner wallet>"
+      }
+    }
+  }
+}`}</Code>
+          <div className="overflow-x-auto mb-4 rounded-xl border border-white/10">
+            {MCP_TOOLS.map(([name, kind, body]) => (
+              <div key={name} className="flex items-start justify-between gap-4 p-3 border-b border-white/10 last:border-0">
+                <div><Ic>{name}</Ic><div className="text-white/60 text-sm mt-1">{body}</div></div>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${kind === 'write' ? 'bg-red-500/20 text-red-200' : 'bg-green-500/20 text-green-200'}`}>{kind}</span>
               </div>
-            </div>
-          ))}
-        </div>
-      </section>
+            ))}
+          </div>
+          <div className="rounded-xl border border-white/10 bg-white/5 p-4 mb-4 text-white/75 text-sm leading-relaxed">
+            <b className="text-white">Safety built in.</b> Write tools are dry runs unless you turn that off. Spend limits apply per transaction and per day (<Ic>MAX_MON_PER_TX</Ic>, <Ic>MAX_MON_PER_DAY</Ic>). Buys and sells need a minimum-out. Use a separate burner wallet funded with only what you can afford to lose. Never give an AI your main wallet key, and read what it is about to do before you approve a trade.
+          </div>
+          <P><b className="text-white">Availability.</b> The MCP package is published at mainnet launch, together with the contract addresses.</P>
 
-      {/* Fees */}
-      <section style={{ marginBottom: 48 }}>
-        <h2 style={{ fontSize: 28, fontWeight: 900, color: '#fff', marginBottom: 8 }}>LP fee split</h2>
-        <p style={{ color: 'rgba(220,215,240,0.7)', fontSize: 14, marginBottom: 14, lineHeight: 1.5, maxWidth: 640 }}>
-          Taken <strong style={{ color: '#fff' }}>off LP fees</strong> on every buy and sell. Platform never takes bags on sells — quote (MON) only.
-          Liquidity lives in the Uniswap V3 pool from the launch block.
-        </p>
-        <div style={{ overflow: 'hidden', borderRadius: 12, border: '1px solid rgba(168,85,247,0.2)', marginBottom: 12 }}>
-          <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: 'rgba(168,85,247,0.12)', textAlign: 'left', color: 'rgba(255,255,255,0.7)' }}>
-                <th style={{ padding: '12px 14px' }}>Share of LP fees</th>
-                <th style={{ padding: '12px 14px' }}>BPS</th>
-                <th style={{ padding: '12px 14px' }}>Goes to</th>
-              </tr>
-            </thead>
-            <tbody style={{ color: 'rgba(220,215,240,0.85)' }}>
-              <tr style={{ borderTop: '1px solid rgba(168,85,247,0.15)' }}>
-                <td style={{ padding: '12px 14px', fontWeight: 800, color: '#fff' }}>Creator</td>
-                <td style={{ padding: '12px 14px' }}>70%</td>
-                <td style={{ padding: '12px 14px' }}>Token creator</td>
-              </tr>
-              <tr style={{ borderTop: '1px solid rgba(168,85,247,0.15)' }}>
-                <td style={{ padding: '12px 14px' }}>Platform</td>
-                <td style={{ padding: '12px 14px' }}>{pct(PROTOCOL_PLATFORM_BPS)}</td>
-                <td style={{ padding: '12px 14px' }}>Platform wallet · MON only on sells</td>
-              </tr>
-              <tr style={{ borderTop: '1px solid rgba(168,85,247,0.15)' }}>
-                <td style={{ padding: '12px 14px' }}>Burn MONSHI</td>
-                <td style={{ padding: '12px 14px' }}>{pct(PROTOCOL_BURN_MONSHI_BPS)}</td>
-                <td style={{ padding: '12px 14px' }}>Buyback-and-burn Monchi</td>
-              </tr>
-              <tr style={{ borderTop: '1px solid rgba(168,85,247,0.15)' }}>
-                <td style={{ padding: '12px 14px' }}>Burn project token</td>
-                <td style={{ padding: '12px 14px' }}>{pct(PROTOCOL_BURN_TOKEN_BPS)}</td>
-                <td style={{ padding: '12px 14px' }}>Launched token → dEaD</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div style={{ padding: 14, borderRadius: 12, border: '1px solid rgba(236,72,153,0.3)', background: 'rgba(236,72,153,0.08)', fontSize: 13, color: 'rgba(220,215,240,0.75)', lineHeight: 1.5 }}>
-          <Flame size={16} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 6, color: 'var(--pink)' }} />
-          Live Monshi burned = MONSHI balance at <code style={{ color: 'var(--pink)' }}>{DEAD_ADDRESS}</code>. Homepage counter + <code style={{ color: 'var(--pink)' }}>/api/v1/burn</code>.
-        </div>
-      </section>
+          <H2 id="sdk">SDK</H2>
+          <P><Ic>@monpad/sdk</Ic> is a TypeScript library built on viem for traders, bots and apps. It wraps the launcher and the router, simulates before it sends, and requires a minimum-out on every trade.</P>
+          <Code>{`npm i @monpad/sdk viem`}</Code>
+          <Code>{`import { createPublicClient, createWalletClient, http, parseEther } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import { createMonpad, monad } from '@monpad/sdk';
 
-      {/* Creator */}
-      <section style={{ marginBottom: 48 }}>
-        <h2 style={{ fontSize: 28, fontWeight: 900, color: '#fff', marginBottom: 16 }}>What the creator earns</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
-          {[
-            { icon: Coins, t: 'Trade fees forever', d: 'Creator slice on buys/sells — pull-claim anytime.' },
-            { icon: Rocket, t: `${n(V3_CREATOR_REWARD_MON)} MON creator reward`, d: 'Claimable from the token page once the pool is live (test economics on the current factory).' },
-            { icon: Flame, t: 'Dev bot on deploy', d: `Atomic first buy up to ${V3_MAX_DEV_BUY_BPS / 100}% supply in the create tx.` },
-            { icon: Droplets, t: 'Your tax, your rules', d: 'Route creator tax to project burn and/or LP — independent of protocol stack.' },
-          ].map((c) => (
-            <div key={c.t} style={{ padding: 16, borderRadius: 12, border: '1px solid rgba(168,85,247,0.18)', background: 'rgba(20,16,42,0.7)' }}>
-              <c.icon size={20} style={{ color: 'var(--p)', marginBottom: 8 }} />
-              <div style={{ fontWeight: 800, color: '#fff', marginBottom: 4 }}>{c.t}</div>
-              <div style={{ fontSize: 13, color: 'rgba(220,215,240,0.65)', lineHeight: 1.4 }}>{c.d}</div>
-            </div>
-          ))}
-        </div>
-      </section>
+const publicClient = createPublicClient({ chain: monad, transport: http() });
+const walletClient = createWalletClient({
+  account: privateKeyToAccount(process.env.PRIVATE_KEY as \`0x\${string}\`),
+  chain: monad,
+  transport: http(),
+});
+const monpad = createMonpad({ publicClient, walletClient });
 
-      {/* Contracts */}
-      <section style={{ marginBottom: 48 }}>
-        <h2 style={{ fontSize: 28, fontWeight: 900, color: '#fff', marginBottom: 8 }}>Contracts</h2>
-        <p style={{ color: 'rgba(220,215,240,0.65)', fontSize: 13, marginBottom: 12 }}>
-          Prefer live values from <code style={{ color: 'var(--p)' }}>/api/v1/spec</code>. Current app defaults below (test factory may be active).
-        </p>
-        <div style={{ overflow: 'auto', borderRadius: 12, border: '1px solid rgba(168,85,247,0.2)' }}>
-          <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse', minWidth: 640 }}>
-            <thead>
-              <tr style={{ background: 'rgba(168,85,247,0.12)', textAlign: 'left', color: 'rgba(255,255,255,0.7)' }}>
-                <th style={{ padding: '12px 14px' }}>Contract</th>
-                <th style={{ padding: '12px 14px' }}>Address</th>
-                <th style={{ padding: '12px 14px' }}>Purpose</th>
-              </tr>
-            </thead>
-            <tbody>
-              {CONTRACTS.map((c) => (
-                <tr key={c.name} style={{ borderTop: '1px solid rgba(168,85,247,0.12)', color: 'rgba(220,215,240,0.85)' }}>
-                  <td style={{ padding: '12px 14px', fontWeight: 700, whiteSpace: 'nowrap' }}>{c.name}</td>
-                  <td style={{ padding: '12px 14px' }}>
-                    <a href={scan(c.addr)} target="_blank" rel="noopener noreferrer" style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--p)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                      {c.addr.slice(0, 10)}…{c.addr.slice(-8)} <ExternalLink size={11} />
-                    </a>
-                  </td>
-                  <td style={{ padding: '12px 14px', color: 'rgba(220,215,240,0.6)' }}>{c.purpose}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+// Read
+const { launches } = await monpad.listLaunches({ limit: 10 });
+const token = launches[0].token;
 
-      {/* Events */}
-      <section style={{ marginBottom: 48 }}>
-        <h2 style={{ fontSize: 28, fontWeight: 900, color: '#fff', marginBottom: 12 }}>On-chain events</h2>
-        <div style={{ overflow: 'auto', borderRadius: 12, border: '1px solid rgba(168,85,247,0.2)' }}>
-          <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse', minWidth: 720 }}>
-            <thead>
-              <tr style={{ background: 'rgba(168,85,247,0.12)', textAlign: 'left', color: 'rgba(255,255,255,0.7)' }}>
-                <th style={{ padding: '12px 14px' }}>Event</th>
-                <th style={{ padding: '12px 14px' }}>From</th>
-                <th style={{ padding: '12px 14px' }}>Use</th>
-              </tr>
-            </thead>
-            <tbody>
-              {EVENTS.map((e) => (
-                <tr key={e.sig} style={{ borderTop: '1px solid rgba(168,85,247,0.12)', color: 'rgba(220,215,240,0.85)', verticalAlign: 'top' }}>
-                  <td style={{ padding: '12px 14px', fontFamily: 'var(--mono)', fontSize: 11, wordBreak: 'break-all' }}>{e.sig}</td>
-                  <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>{e.from}</td>
-                  <td style={{ padding: '12px 14px', color: 'rgba(220,215,240,0.6)' }}>{e.use}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+// Quote, then buy with protection
+const q = await monpad.quoteBuy({ token, monIn: parseEther('0.5') });
+await monpad.buy({
+  token,
+  monIn: parseEther('0.5'),
+  minTokensOut: (q.tokensOut * 98n) / 100n, // 2% slippage
+});
 
-      {/* Security */}
-      <section style={{ marginBottom: 48 }}>
-        <h2 style={{ fontSize: 28, fontWeight: 900, color: '#fff', marginBottom: 16 }}>Security notes</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
-          {[
-            { icon: Lock, t: 'Locked LP', d: 'The Uniswap V3 LP NFT is burned. Creators cannot pull the pool.' },
-            { icon: Shield, t: 'Timelock + 2-step ownership', d: 'Economic changes delayed; ownership propose → accept.' },
-            { icon: FileCode, t: 'Audits before mainnet cutover', d: 'Two clean passes + E2E bots required for the new fee stack.' },
-            { icon: Sparkles, t: 'Bots welcome', d: 'Agents, bots, and traders share the same pool. Creators can take an optional atomic first buy.' },
-          ].map((c) => (
-            <div key={c.t} style={{ padding: 16, borderRadius: 12, border: '1px solid rgba(168,85,247,0.18)', background: 'rgba(20,16,42,0.7)' }}>
-              <c.icon size={20} style={{ color: 'var(--p)', marginBottom: 8 }} />
-              <div style={{ fontWeight: 800, color: '#fff', marginBottom: 4 }}>{c.t}</div>
-              <div style={{ fontSize: 13, color: 'rgba(220,215,240,0.65)', lineHeight: 1.4 }}>{c.d}</div>
-            </div>
-          ))}
-        </div>
-      </section>
+// Launch with a 2% creator tax and a 1 MON dev buy
+await monpad.launch({ name: 'Example', symbol: 'EX', creatorTaxBps: 200, devBuyMon: '1' });`}</Code>
+          <div className="rounded-xl border border-white/10 divide-y divide-white/10 mb-4">
+            {SDK_METHODS.map(([sig, body]) => (
+              <div key={sig} className="p-3"><code className="text-purple-200 text-sm break-words">{sig}</code><div className="text-white/60 text-sm mt-1">{body}</div></div>
+            ))}
+          </div>
+          <P>Every write method accepts <Ic>simulate: true</Ic> to run the transaction against the chain without sending it. Errors are typed, for example slippage exceeded, deadline passed, or unknown token.</P>
+          <P><b className="text-white">Availability.</b> SDK v0.2 for the V4 launcher is published at mainnet launch, together with the contract addresses.</P>
 
-      {/* Wallet */}
-      <section style={{ marginBottom: 48 }}>
-        <h2 style={{ fontSize: 28, fontWeight: 900, color: '#fff', marginBottom: 12 }}>Wallet setup</h2>
-        <div style={{ padding: 16, borderRadius: 12, border: '1px solid rgba(168,85,247,0.2)', background: 'rgba(20,16,42,0.75)', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {[
-            ['Chain ID', `${CHAIN_PARAMS.chainIdDecimal} (${CHAIN_PARAMS.chainId})`],
-            ['Network', CHAIN_PARAMS.chainName],
-            ['RPC', CHAIN_PARAMS.rpcUrl],
-            ['Explorer', CHAIN_PARAMS.explorerUrl],
-            ['Currency', `${CHAIN_PARAMS.currency.symbol} · ${CHAIN_PARAMS.currency.decimals} decimals`],
-          ].map(([k, v]) => (
-            <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', borderBottom: '1px solid rgba(168,85,247,0.12)', paddingBottom: 8 }}>
-              <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13 }}>{k}</span>
-              <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: '#fff', wordBreak: 'break-all' }}>{v}</span>
-            </div>
-          ))}
-        </div>
-        <button
-          type="button"
-          onClick={addMonadToWallet}
-          style={{
-            marginTop: 12,
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '10px 18px',
-            borderRadius: 999,
-            border: 'none',
-            background: 'var(--p, #A855F7)',
-            color: '#fff',
-            fontWeight: 800,
-            cursor: 'pointer',
-          }}
-        >
-          <Wallet size={18} /> Add Monad to wallet
-        </button>
-      </section>
+          <H2 id="api">HTTP API</H2>
+          <P>Read-only JSON, open to any origin, for bots, dashboards and AI agents.</P>
+          <div className="rounded-xl border border-white/10 divide-y divide-white/10 mb-4">
+            <div className="p-3"><Ic>GET /api/v1/spec</Ic><div className="text-white/60 text-sm mt-1">Fee policy, chain and the current state of the contracts.</div></div>
+            <div className="p-3"><Ic>GET /api/v1/burn</Ic><div className="text-white/60 text-sm mt-1">Live MONSHI burned, circulating and total supply.</div></div>
+          </div>
+          <Code>{`curl https://www.monpad.net/api/v1/burn`}</Code>
 
-      {/* Community */}
-      <section>
-        <h2 style={{ fontSize: 28, fontWeight: 900, color: '#fff', marginBottom: 16 }}>Support</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
-          <a href="https://t.me/MonshiUtilitySupport" target="_blank" rel="noopener noreferrer" style={{ padding: 18, borderRadius: 12, border: '1px solid rgba(168,85,247,0.25)', background: 'rgba(20,16,42,0.75)', textDecoration: 'none', color: 'inherit' }}>
-            <MessageCircle size={22} style={{ color: 'var(--p)', marginBottom: 8 }} />
-            <div style={{ fontWeight: 800, color: '#fff' }}>Support</div>
-            <div style={{ fontSize: 13, color: 'rgba(220,215,240,0.6)', marginTop: 4 }}>Integration &amp; contract questions</div>
-          </a>
-          <a href="https://t.me/monpadlounge" target="_blank" rel="noopener noreferrer" style={{ padding: 18, borderRadius: 12, border: '1px solid rgba(168,85,247,0.25)', background: 'rgba(20,16,42,0.75)', textDecoration: 'none', color: 'inherit' }}>
-            <Sparkles size={22} style={{ color: 'var(--p)', marginBottom: 8 }} />
-            <div style={{ fontWeight: 800, color: '#fff' }}>Lounge</div>
-            <div style={{ fontSize: 13, color: 'rgba(220,215,240,0.6)', marginTop: 4 }}>Community &amp; launches</div>
-          </a>
-        </div>
-        <div style={{ marginTop: 20, textAlign: 'center' }}>
-          <Link href="/" style={{ fontSize: 13, color: 'rgba(220,215,240,0.55)', textDecoration: 'none' }}>← Back to the board</Link>
-        </div>
-      </section>
+          <H2 id="events">On-chain data</H2>
+          <P>Everything is readable on-chain, including the platform address, creator earnings and every swap. Read it from the verified contracts on Monadscan once they are published.</P>
+          <ul className="list-disc pl-5 space-y-2 text-white/75 mb-4">
+            <li><b className="text-white">Launches.</b> The launcher emits an event for every launch with the token, creator, creator tax and pool id, and keeps a list you can read by index.</li>
+            <li><b className="text-white">Swaps.</b> Uniswap V4 emits <Ic>Swap</Ic> from the pool manager. Filter by the pool id to follow one token.</li>
+            <li><b className="text-white">Fees.</b> The hook exposes the live fee for a pool. The launcher exposes claimable balances and the reserves waiting to burn.</li>
+          </ul>
+
+          <H2 id="security">Security &amp; risks</H2>
+          <ul className="list-disc pl-5 space-y-2 text-white/75 mb-4">
+            <li><Lock className="inline mr-1" size={14} /><b className="text-white">Not yet audited.</b> The contracts are tested on a fork of Monad mainnet. They go live only after an independent audit.</li>
+            <li><b className="text-white">Admin powers are limited and visible.</b> The owner can pause new launches and change the platform address, the creation fee and the keeper. The owner has no function to withdraw user funds or remove liquidity. Ownership belongs in a multisig.</li>
+            <li><b className="text-white">Keepers are needed.</b> Harvests and buybacks run when someone calls them. Monpad runs a keeper, and anyone can call harvest.</li>
+            <li><b className="text-white">Protocol fees.</b> Uniswap governance can switch on a protocol fee for pools. That would take a slice before the fee reaches Monpad.</li>
+            <li><b className="text-white">Memecoins are risky.</b> Tokens can go to zero, and liquidity being locked does not protect the price.</li>
+          </ul>
+
+          <H2 id="wallet">Wallet setup</H2>
+          <P>Add Monad mainnet to any EVM wallet:</P>
+          <div className="rounded-xl border border-white/10 divide-y divide-white/10 mb-4 text-sm">
+            {[['Network name', 'Monad Mainnet'], ['Chain ID', '143'], ['RPC URL', 'https://rpc.monad.xyz'], ['Currency', 'MON'], ['Explorer', 'https://monadscan.com']].map(([k, v]) => (
+              <div key={k} className="flex justify-between gap-4 p-3"><span className="text-white/60">{k}</span><span className="text-white break-all text-right">{v}</span></div>
+            ))}
+          </div>
+          <P>Questions? Ask in the community Telegram or on X. Please never share your seed phrase or private key with anyone, including anyone claiming to be Monpad support.</P>
+        </main>
+      </div>
     </div>
   );
 }

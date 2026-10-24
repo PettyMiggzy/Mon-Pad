@@ -1,6 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import {
-  MONPAD_PLATFORM_WALLET,
   MONSHI_TOKEN,
   DEAD_ADDRESS,
   PROTOCOL_BURN_TOKEN_BPS,
@@ -52,7 +51,6 @@ export default function handler(_req: NextApiRequest, res: NextApiResponse) {
       factory: FACTORY_V3,
       graduator: GRADUATOR_V3,
       uniswapV3Npm: UNISWAP_V3_NPM,
-      platformWallet: MONPAD_PLATFORM_WALLET,
       monshi: MONSHI_TOKEN,
       dead: DEAD_ADDRESS,
     },
