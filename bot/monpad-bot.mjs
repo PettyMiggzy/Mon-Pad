@@ -648,6 +648,24 @@ async function tick() {
   } catch (e) { console.error('tick failed:', e.message); }
 }
 
+// ── /milk <wallet> — Munchy Kart milk balance (read from the site API) ────
+let updateOffset = 0;
+async function pollCommands() {
+  const j = await tg('getUpdates', { offset: updateOffset, timeout: 0, allowed_updates: ['message'] });
+  for (const u of j.result || []) {
+    updateOffset = u.update_id + 1;
+    const m = u.message;
+    const match = /^\/milk(?:@\w+)?\s+(0x[0-9a-fA-F]{40})\s*$/.exec(m?.text || '');
+    if (!match) continue;
+    try {
+      const r = await fetch(`${SITE}/api/game/milk?wallet=${match[1].toLowerCase()}`);
+      const d = await r.json();
+      const text = r.ok ? `🥛 <code>${esc(short(match[1]))}</code> has <b>${fmtMon(Number(d.milk))}</b> milk` : `Couldn't read milk balance: ${esc(d.error || r.status)}`;
+      await tg('sendMessage', { chat_id: m.chat.id, text, parse_mode: 'HTML', reply_to_message_id: m.message_id });
+    } catch (e) { console.error('milk lookup failed:', e.message); }
+  }
+}
+
 // ── Boot ─────────────────────────────────────────────────────────────────
 async function main() {
   const testArg = process.argv.find((a) => a.startsWith('--test-alert'));
@@ -664,6 +682,7 @@ async function main() {
   setInterval(() => { refreshGradPools().catch((e) => console.error('gradPools failed:', e.message)); }, TOKENS_REFRESH_MS);
   setInterval(tick, POLL_MS);
   setInterval(() => { checkTrending().catch((e) => console.error('trending failed:', e.message)); }, TREND_CHECK_MS);
+  setInterval(() => { pollCommands().catch((e) => console.error('commands failed:', e.message)); }, 3000);
   await tick();
   console.log('bot running.');
 }
