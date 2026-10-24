@@ -73,6 +73,7 @@ const factoryAbi = [
 const erc20Abi = [
   parseAbiItem('function symbol() view returns (string)'),
   parseAbiItem('function name() view returns (string)'),
+  parseAbiItem('function balanceOf(address) view returns (uint256)'),
 ];
 const curveAbi = [
   parseAbiItem('function graduated() view returns (bool)'),
@@ -100,8 +101,9 @@ const seenTx = new Set(Array.isArray(state.seenTx) ? state.seenTx : []);
 let gradInitialized = false;   // skip backfill spam on the very first pool discovery pass
 
 // ── Telegram ─────────────────────────────────────────────────────────────
+const TG_API = process.env.TG_API || 'https://api.telegram.org'; // override only for tests
 async function tg(method, body) {
-  const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${method}`, {
+  const res = await fetch(`${TG_API}/bot${TELEGRAM_BOT_TOKEN}/${method}`, {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
   });
   const j = await res.json().catch(() => ({}));
@@ -175,6 +177,7 @@ async function enrichToken(info) {
       source: 'dexscreener', listed: true, priceUsd,
       marketCapUsd: Number(pair.marketCap) || Number(pair.fdv) || priceUsd * TOTAL_SUPPLY,
       priceChangeH24: pair.priceChange?.h24 ?? null,
+      liquidityUsd: Number(pair.liquidity?.usd) || 0, volumeH24: Number(pair.volume?.h24) || 0,
       pairUrl: pair.url || `https://dexscreener.com/monad/${pair.pairAddress}`,
     };
   }
@@ -208,41 +211,185 @@ async function refreshTokens() {
 }
 
 // ── Buy alerts (tiered by USD size) ──────────────────────────────────────────
-function buyTier(usd) {
-  if (usd >= 5000) return { emoji: '🐋', label: 'WHALE', unit: 250 };
-  if (usd >= 1000) return { emoji: '🦈', label: 'SHARK', unit: 100 };
-  if (usd >= 300)  return { emoji: '🐬', label: 'DOLPHIN', unit: 40 };
-  return { emoji: '🐟', label: 'FISH', unit: 15 };
+// A WHALE buy is WHALE_TOKENS tokens or more (default 10,000,000 = 1% of a 1B supply). Other sizes go by USD.
+const WHALE_TOKENS = Number(process.env.WHALE_TOKENS || '10000000');
+function buyTier(usd, tokens = 0) {
+  if (tokens >= WHALE_TOKENS) return { emoji: '🐋', label: 'WHALE', unit: 150, min: 25 };
+  if (usd >= 1000) return { emoji: '🦈', label: 'SHARK', unit: 80, min: 8 };
+  if (usd >= 300)  return { emoji: '🐬', label: 'DOLPHIN', unit: 35, min: 3 };
+  return { emoji: '🐟', label: 'FISH', unit: 12, min: 1 };
+}
+
+// Monshi's own spinning coin (custom emoji pack t.me/addemoji/monshi_spin_by_Monshizbot). The bigger the buy, the
+// more of them the alert posts. MONSHI_EMOJI_ID overrides assets/emoji.json; with neither, plain emoji are used.
+const EMOJI_CFG = loadJson(new URL('./assets/emoji.json', import.meta.url), {});
+const MONSHI_EMOJI_ID = process.env.MONSHI_EMOJI_ID || EMOJI_CFG.id || '';
+const MAX_WALL = 60;
+function wallCount(usd, tier) {
+  return Math.max(tier.min, Math.min(MAX_WALL, Math.floor(usd / tier.unit)));
 }
 function emojiWall(usd, tier) {
-  return tier.emoji.repeat(Math.max(1, Math.min(40, Math.floor(usd / tier.unit))));
+  const n = wallCount(usd, tier);
+  if (MONSHI_EMOJI_ID) return `<tg-emoji emoji-id="${MONSHI_EMOJI_ID}">${EMOJI_CFG.placeholder || '🪙'}</tg-emoji>`.repeat(n);
+  return tier.emoji.repeat(Math.min(40, n));
 }
-// Inline buttons: Buy on Mon-Pad + Chart (DexScreener when listed, else Mon-Pad) + Txn.
+
+// Telegram button colours (Bot API 9.4+): "success" green, "primary" blue, "danger" red. BUTTON_STYLES=off disables.
+const STYLES_ON = (process.env.BUTTON_STYLES || 'on') !== 'off';
+const styled = (btn, style) => (STYLES_ON && style ? { ...btn, style } : btn);
+const AI_URL = process.env.AI_URL || `${SITE}/ai`;
+
+// Buttons: [Monadscan | DexScreener] green, [Trade with your AI], [Buy on Monpad] blue.
 function buyButtons(info, enr, tx) {
-  const rows = [[{ text: '🟣 Buy on Mon-Pad', url: `${SITE}/token/${info.token}` }]];
-  const r2 = [enr?.listed && enr.pairUrl
-    ? { text: '📊 Chart (DexScreener)', url: enr.pairUrl }
-    : { text: '📈 Chart (Mon-Pad)', url: `${SITE}/token/${info.token}` }];
-  if (tx) r2.push({ text: '🔎 Txn', url: `${EXPLORER}/tx/${tx}` });
-  rows.push(r2);
-  return { reply_markup: { inline_keyboard: rows } };
+  const row1 = [styled({ text: '🔎 Monadscan', url: tx ? `${EXPLORER}/tx/${tx}` : EXPLORER }, 'success')];
+  if (enr?.listed && enr.pairUrl) row1.push(styled({ text: '📊 DexScreener', url: enr.pairUrl }, 'success'));
+  return { reply_markup: { inline_keyboard: [
+    row1,
+    [{ text: '🤖 Trade with your AI', url: AI_URL }],
+    [styled({ text: '🟣 Buy on Monpad', url: `${SITE}/token/${info.token}` }, 'primary')],
+  ] } };
 }
-async function announceBuy(info, mon, usd, tokensOut, trader, tx, enr) {
-  const tier = buyTier(usd);
-  const lines = [
-    `${tier.emoji} <b>${esc(info.name || info.symbol)}</b> ($${esc(info.symbol)}) — ${tier.label} BUY`,
-    emojiWall(usd, tier),
-    ``,
-    `💵 <b>${fmtUsd(usd)}</b>  (${fmtMon(mon)} MON)`,
-    `🪙 Got: ${fmtMon(tokensOut)} $${esc(info.symbol)}`,
-  ];
+
+// Buy clips (bot/assets/buy-{small,big,whale}.mp4, made by bot/video/gif/render.py). The first send uploads
+// the file; Telegram's file_id is cached in video-cache.json so every later alert is instant.
+const ASSETS = new URL('./assets/', import.meta.url);
+const VIDEO_CACHE = new URL('./video-cache.json', import.meta.url);
+const videoCache = loadJson(VIDEO_CACHE, {});
+const videoFor = (usd, tokens = 0) => (tokens >= WHALE_TOKENS ? 'whale' : usd >= 1000 ? 'big' : 'small');
+
+async function sendBuyVideo(chatId, kind, caption, extra = {}) {
+  const base = { chat_id: chatId, caption, parse_mode: 'HTML', ...extra };
+  if (videoCache[kind]) {
+    const r = await tg('sendAnimation', { ...base, animation: videoCache[kind] });
+    if (r.ok) return r;
+    delete videoCache[kind]; // stale file_id: fall through and upload again
+  }
+  const file = new URL(`buy-${kind}.mp4`, ASSETS);
+  if (!fs.existsSync(file)) return { ok: false };
+  const form = new FormData();
+  for (const [k, v] of Object.entries(base)) form.append(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
+  form.append('width', '1280'); form.append('height', '720'); form.append('duration', '7');
+  form.append('animation', new Blob([fs.readFileSync(file)], { type: 'video/mp4' }), `buy-${kind}.mp4`);
+  const res = await fetch(`${TG_API}/bot${TELEGRAM_BOT_TOKEN}/sendAnimation`, { method: 'POST', body: form });
+  const j = await res.json().catch(() => ({}));
+  if (j.ok) {
+    const id = j.result?.animation?.file_id || j.result?.video?.file_id;
+    if (id) { videoCache[kind] = id; saveJson(VIDEO_CACHE, videoCache); }
+  } else console.error('telegram error: sendAnimation', j.description || res.status);
+  return j;
+}
+
+// ── Alert extras: rank, holder position, socials, DEX PAID ─────────────────
+const getJson = async (url, ms = 2500) => { try { const r = await fetch(url, { signal: AbortSignal.timeout(ms) }); return r.ok ? await r.json() : null; } catch { return null; } };
+const safeUrl = (u) => { const t = String(u || '').trim(); return /^https:\/\/[^\s"<>]+$/i.test(t) ? t : ''; };
+const asX = (u) => { const t = String(u || '').trim(); if (!t) return ''; if (/^https?:/i.test(t)) return safeUrl(t); return /^@?[A-Za-z0-9_]{1,15}$/.test(t) ? `https://x.com/${t.replace(/^@/, '')}` : ''; };
+const asTg = (u) => { const t = String(u || '').trim(); if (!t) return ''; if (/^https?:/i.test(t)) return safeUrl(t); return /^@?[A-Za-z0-9_]{4,32}$/.test(t) ? `https://t.me/${t.replace(/^@/, '')}` : ''; };
+
+const socialCache = new Map(); // token(lower) -> { v, at }
+async function tokenSocials(token) {
+  const k = token.toLowerCase(); const hit = socialCache.get(k);
+  if (hit && Date.now() - hit.at < 600_000) return hit.v;
+  const d = await getJson(`${SITE}/api/token-meta?addresses=${token}`);
+  const m = Array.isArray(d) ? d[0] : null;
+  const v = { web: safeUrl(m?.website), x: asX(m?.twitter), tg: asTg(m?.telegram) };
+  socialCache.set(k, { v, at: Date.now() });
+  return v;
+}
+const paidCache = new Map();
+async function isDexPaid(token) { // DexScreener "enhanced token info" order that was approved
+  const k = token.toLowerCase(); const hit = paidCache.get(k);
+  if (hit && Date.now() - hit.at < 900_000) return hit.v;
+  const d = await getJson(`https://api.dexscreener.com/orders/v1/monad/${token}`);
+  const v = Array.isArray(d) && d.some((o) => o?.type === 'tokenProfile' && o?.status === 'approved');
+  paidCache.set(k, { v, at: Date.now() });
+  return v;
+}
+// "New Holder" or "+X% Holder" from the buyer's balance in the block before the buy (needs a node with that state).
+async function holderPosition(info, trader, tokensOut, block) {
+  if (!block || !trader) return '';
+  try {
+    const prev = await client.readContract({ address: info.token, abi: erc20Abi, functionName: 'balanceOf', args: [trader], blockNumber: BigInt(block) - 1n });
+    const p = Number(formatEther(prev));
+    if (p <= 0) return 'New Holder';
+    const pct = (tokensOut / p) * 100;
+    return `Holder +${pct >= 100 ? Math.round(pct) : pct.toFixed(1)}%`;
+  } catch { return ''; }
+}
+function trendRank(tokenLower) { // rank by volume in the trending window; 0 = not ranked
+  const since = Math.floor(Date.now() / 1000) - TREND_WINDOW_SEC;
+  const vol = new Map();
+  for (const t of recentTrades) if (t.time >= since) vol.set(t.token, (vol.get(t.token) || 0) + t.usd);
+  const ranked = [...vol.entries()].sort((a, b) => b[1] - a[1]).map(([tk]) => tk);
+  const i = ranked.indexOf(tokenLower);
+  return i >= 0 && i < 10 ? i + 1 : 0;
+}
+async function gatherExtras(info, trader, tokensOut, block) {
+  const [position, socials, paid] = await Promise.all([holderPosition(info, trader, tokensOut, block), tokenSocials(info.token), isDexPaid(info.token)]);
+  return { position, socials, paid, rank: trendRank(info.token.toLowerCase()) };
+}
+
+function fmtPrice(p) {
+  if (!(p > 0)) return '—';
+  if (p >= 1) return `$${p.toFixed(4)}`;
+  const dec = Math.min(14, Math.max(4, 3 - Math.floor(Math.log10(p))));
+  return `$${p.toFixed(dec)}`;
+}
+
+// Caption layout (Monpad version of a classic buy-bot alert):
+//   🔥 #3 on Monpad Trending
+//   🐋 WHALE BUY · Name ($SYM)
+//   <spinning Monshi coins>          (more of them the bigger the buy)
+//   Tokens / Amount / Position / MCap / Price / Liquidity
+//   Tx · DS · WEB · X · TG          ✅ DEX PAID
+function buyCaption(info, mon, usd, tokensOut, trader, enr, x = {}) {
+  const tier = buyTier(usd, tokensOut);
+  const lines = [];
+  if (x.rank) lines.push(`🔥 <b>#${x.rank} on Monpad Trending</b>`);
+  lines.push(`${tier.emoji} <b>${tier.label} BUY</b> · <b>${esc(info.name || info.symbol)}</b> ($${esc(info.symbol)})`);
+  lines.push(emojiWall(usd, tier));
+  lines.push(`<b>Tokens:</b> ${fmtMon(tokensOut)} (${esc(info.symbol)})`);
+  lines.push(`<b>Amount:</b> ${fmtMon(mon)} MON (${fmtUsd(usd)})`);
+  lines.push(`<b>Buyer:</b> <a href="${EXPLORER}/address/${trader}">${short(trader)}</a>${x.position ? `  ·  ${esc(x.position)}` : ''}`);
   if (enr && enr.marketCapUsd > 0) {
-    let mc = `💰 MC: <b>${fmtUsd(enr.marketCapUsd)}</b>${enr.listed ? '' : ' (curve)'}`;
-    if (enr.priceChangeH24 != null) mc += `  ·  24h ${enr.priceChangeH24 >= 0 ? '▲' : '▼'} ${Math.abs(enr.priceChangeH24).toFixed(1)}%`;
+    let mc = `<b>MCap:</b> ${fmtUsd(enr.marketCapUsd)}`;
+    if (enr.priceChangeH24 != null) mc += `  ${enr.priceChangeH24 >= 0 ? '▲' : '▼'} ${Math.abs(enr.priceChangeH24).toFixed(1)}%`;
     lines.push(mc);
   }
-  lines.push(`👤 <a href="${EXPLORER}/address/${trader}">${short(trader)}</a>`);
-  await send(lines.join('\n'), buyButtons(info, enr, tx));
+  if (enr && enr.priceUsd > 0) lines.push(`<b>Price:</b> ${fmtPrice(enr.priceUsd)}`);
+  if (enr?.listed && enr.liquidityUsd > 0) lines.push(`<b>Liquidity:</b> ${fmtUsd(enr.liquidityUsd)}  ·  <b>24h Vol:</b> ${fmtUsd(enr.volumeH24 || 0)}`);
+  const sc = x.socials || {};
+  const links = [x.tx ? `<a href="${EXPLORER}/tx/${x.tx}">Tx</a>` : `<a href="${EXPLORER}/address/${trader}">Wallet</a>`];
+  if (enr?.listed && enr.pairUrl) links.push(`<a href="${enr.pairUrl}">DS</a>`);
+  links.push(`<a href="${SITE}/token/${info.token}">WEB</a>`);
+  if (sc.x) links.push(`<a href="${sc.x}">X</a>`);
+  if (sc.tg) links.push(`<a href="${sc.tg}">TG</a>`);
+  if (sc.web) links.push(`<a href="${sc.web}">Site</a>`);
+  lines.push(links.join(' · '));
+  if (x.paid) lines.push('✅ <b>DEX PAID</b>');
+  return lines.join('\n');
+}
+
+async function announceBuy(info, mon, usd, tokensOut, trader, tx, enr, block) {
+  const x = { ...(await gatherExtras(info, trader, tokensOut, block).catch(() => ({}))), tx };
+  const caption = buyCaption(info, mon, usd, tokensOut, trader, enr, x);
+  const extra = buyButtons(info, enr, tx);
+  const r = await sendBuyVideo(TELEGRAM_CHAT_ID, videoFor(usd, tokensOut), caption, extra);
+  if (!r.ok) await send(caption, extra); // never lose an alert if the video fails
+}
+
+// node monpad-bot.mjs --test-alert=whale [--chat=<id>]   posts one sample alert and exits (no chain access needed)
+async function runTestAlert(arg, chatArg) {
+  const kind = (arg.split('=')[1] || 'small');
+  const usd = { small: 120, big: 1800, whale: 8200 }[kind] ?? 120;
+  const tokens = { small: 480_000, big: 2_600_000, whale: 12_500_000 }[kind] ?? 480_000;
+  const chat = chatArg ? chatArg.split('=')[1] : TELEGRAM_CHAT_ID;
+  const info = { name: 'Monshi Zoomies', symbol: 'ZOOM', token: '0x0000000000000000000000000000000000000001' };
+  const enr = { marketCapUsd: 184000, priceChangeH24: 12.4, listed: true, priceUsd: 0.000184, liquidityUsd: 61200, volumeH24: 39500, pairUrl: 'https://dexscreener.com/monad' };
+  const x = { tx: '0x' + 'ab'.repeat(32), rank: 3, position: kind === 'small' ? 'New Holder' : 'Holder +45%', paid: true, socials: { x: 'https://x.com/', tg: 'https://t.me/monshionmonad' } };
+  const caption = buyCaption(info, usd / 0.02, usd, tokens, '0x5db7CA9d2CE3f414B3fd94EC0FcaF9F3Ab1A575f', enr, x);
+  const extra = buyButtons(info, enr, '0x' + 'ab'.repeat(32));
+  const r = await sendBuyVideo(chat, videoFor(usd, tokens), caption, extra);
+  console.log(r.ok ? `sample ${kind} alert sent` : `failed: ${r.description || 'see log'}`);
 }
 
 // ── Trending ───────────────────────────────────────────────────────────────
@@ -378,7 +525,7 @@ async function scanRange(from, to) {
       if (a.isBuy && dollars >= MIN_BUY_USD) {
         try {
           const enr = await enrichToken(info).catch(() => null);
-          await announceBuy(info, mon, dollars, tokensOut, a.trader, lg.transactionHash, enr);
+          await announceBuy(info, mon, dollars, tokensOut, a.trader, lg.transactionHash, enr, lg.blockNumber);
         } catch (e) { console.error('announce failed:', e.message); }
       }
     }
@@ -440,7 +587,7 @@ async function handleGradSwap(g, lg, usd) {
   try { const tx = await client.getTransaction({ hash: lg.transactionHash }); if (tx?.from) buyer = tx.from; } catch {}
   try {
     const enr = await enrichToken(g).catch(() => null);
-    await announceBuy(g, mon, dollars, Number(formatEther(tokensOut)), buyer, lg.transactionHash, enr);
+    await announceBuy(g, mon, dollars, Number(formatEther(tokensOut)), buyer, lg.transactionHash, enr, lg.blockNumber);
   } catch (e) { console.error('grad announce failed:', e.message); }
 }
 
@@ -503,6 +650,8 @@ async function tick() {
 
 // ── Boot ─────────────────────────────────────────────────────────────────
 async function main() {
+  const testArg = process.argv.find((a) => a.startsWith('--test-alert'));
+  if (testArg) { await runTestAlert(testArg, process.argv.find((a) => a.startsWith('--chat='))); return; }
   console.log(`monpad-bot → chat ${TELEGRAM_CHAT_ID} | factory ${FACTORY_V3} | min buy $${MIN_BUY_USD}`);
   console.log(BOOST_CONTRACT ? `boost contract ${BOOST_CONTRACT} (MONSHI-paid, tiered)` : 'boost contract: (not set — paid trending disabled)');
   await refreshTokens();

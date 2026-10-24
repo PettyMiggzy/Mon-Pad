@@ -80,8 +80,9 @@ export function MonshiGLB({ height = 2.5, onLoaded }: { height?: number; onLoade
     apply('neck', p.headX * 0.4, p.headY * 0.4, 0);
     apply('Spine01', Math.sin(t * 1.7) * 0.015, p.sway, 0);
     apply('Spine02', 0, p.headY * 0.15, 0);
-    apply('RightArm', 0, 0, -p.armR);
-    apply('LeftArm', 0, 0, -p.armL);
+    // y = twist about the arm so raised hands face each other instead of sideways
+    apply('RightArm', 0, -Math.max(0, p.armR) * 0.46, -p.armR);
+    apply('LeftArm', 0, Math.max(0, -p.armL) * 0.46, -p.armL);
     apply('RightForeArm', 0, 0, -p.foreR);
 
     if (root.current) root.current.position.y = p.hop + Math.sin(t * 1.7) * 0.012;
