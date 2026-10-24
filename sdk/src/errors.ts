@@ -53,3 +53,25 @@ export class MaxMonExceeded extends MonpadError {
     this.name = 'MaxMonExceeded';
   }
 }
+
+export class MaxUsdcExceeded extends MonpadError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'MaxUsdcExceeded';
+  }
+}
+
+/** The quote asset (USDC) refused a transfer: paused, or an address on its blacklist. */
+export class QuoteAssetBlocked extends MonpadError {
+  constructor(message = 'USDC transfer blocked (token paused or an address is blacklisted)') {
+    super(message);
+    this.name = 'QuoteAssetBlocked';
+  }
+}
+
+export class InsufficientQuoteBalance extends MonpadError {
+  constructor(need: string, have: string) {
+    super(`Insufficient USDC: need ${need}, have ${have}`);
+    this.name = 'InsufficientQuoteBalance';
+  }
+}

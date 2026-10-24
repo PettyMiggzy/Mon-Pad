@@ -11,6 +11,7 @@ export type RemoteSpec = {
     launcher?: string;
     hook?: string;
     v4Router?: string;
+    quoteAsset?: string;
     poolManager?: string;
     stateView?: string;
   };
@@ -20,6 +21,8 @@ export type ResolvedAddresses = {
   launcher: Address | '';
   hook: Address | '';
   v4Router: Address | '';
+  /** USDC. Left empty it is read from `launcher.quoteAsset()`. */
+  quoteAsset: Address | '';
   poolManager: Address;
   stateView: Address;
   monshi: Address | '';
@@ -33,7 +36,10 @@ export type MonpadCreateOptions = {
   walletClient?: import('viem').WalletClient;
   specUrl?: string;
   addresses?: Partial<ResolvedAddresses>;
+  /** Cap for one MON-denominated send (MON entry points of the router). */
   maxMonPerTx?: bigint;
+  /** Cap for one USDC-denominated send (launch, buy, sell). In USDC base units (6 decimals). */
+  maxUsdcPerTx?: bigint;
   fetch?: typeof fetch;
 };
 
@@ -71,6 +77,10 @@ export async function resolveAddresses(opts: MonpadCreateOptions): Promise<Resol
     v4Router: (opts.addresses?.v4Router ||
       envAddr('MONPAD_V4_ROUTER') ||
       uv4.v4Router ||
+      '') as Address | '',
+    quoteAsset: (opts.addresses?.quoteAsset ||
+      envAddr('MONPAD_QUOTE_ASSET') ||
+      uv4.quoteAsset ||
       '') as Address | '',
     poolManager: (opts.addresses?.poolManager ||
       envAddr('MONPAD_POOL_MANAGER') ||

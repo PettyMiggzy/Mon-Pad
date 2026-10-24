@@ -33,6 +33,7 @@ export async function getMonpad({ dryRun = true } = {}) {
       launcher: config.contracts.launcher,
       hook: config.contracts.hook,
       v4Router: config.contracts.v4Router,
+      quoteAsset: config.contracts.quoteAsset,
       poolManager: config.contracts.poolManager,
       stateView: config.contracts.stateView,
       monshi: config.contracts.monshi,

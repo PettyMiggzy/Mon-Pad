@@ -1,21 +1,23 @@
 # @monpad/mcp
 
-MCP server for **Monpad Uniswap V4** launches on Monad. Agents can list launches, read pool stats, check MONSHI burns, and (with a **burner wallet**) simulate or send launch / buy / sell transactions.
+MCP server for **Monpad Uniswap V4** launches on Monad. Pools are paired with **USDC**. Agents can list launches, read pool stats, check MONSHI burns, and (with a **burner wallet**) simulate or send launch / buy / sell transactions.
 
-> **Use a burner wallet.** Set `MONPAD_PRIVATE_KEY` to a dedicated low-balance key. Never use your main wallet. Write tools enforce `MAX_MON_PER_TX` (default 5 MON) and `MAX_MON_PER_DAY` (default 20 MON).
+> **Use a burner wallet.** Set `MONPAD_PRIVATE_KEY` to a dedicated low-balance key. Never use your main wallet. Write tools enforce per-asset caps: `MAX_USDC_PER_TX` (default 25) and `MAX_USDC_PER_DAY` (default 100) for USDC, and `MAX_MON_PER_TX` (default 5) and `MAX_MON_PER_DAY` (default 20) for the MON routes.
 
 ## Tools
 
 | Tool | Access | Purpose |
 |---|---|---|
-| `monpad_get_spec` | read | V4 fee policy, addresses, safety limits |
+| `monpad_get_spec` | read | V4 fee policy, addresses, safety limits, `quoteHealth` (USDC paused / blacklisted?) |
 | `monpad_get_monshi_burn` | read | MONSHI burned (dead balance) |
 | `monpad_list_launches` | read | Recent V4 launches |
 | `monpad_get_token` | read | Price, liquidity, volume, creator tax |
 | `monpad_trending` | read | Rank by recent swap volume |
-| `monpad_launch_token` | write | `launch()` on MonpadHookLauncher |
-| `monpad_buy` | write | Payable `buyExactIn` on **MonpadV4Router** (`minTokensOut` required) |
-| `monpad_sell` | write | `sellExactIn` on **MonpadV4Router** (`minMonOut` required) |
+| `monpad_launch_token` | write | `launch()` on MonpadHookLauncher; creation fee + `devBuyUsdc` paid in USDC |
+| `monpad_buy` | write | `buyWithUsdc` on **MonpadV4Router** (`usdcIn`, `minTokensOut` required) |
+| `monpad_buy_with_mon` | write | `buyWithMon`: MON → USDC → token (`minTokensOut` required, optional `minUsdcOut`) |
+| `monpad_sell` | write | `sellToUsdc` (`minUsdcOut` required) |
+| `monpad_sell_for_mon` | write | `sellToMon`: token → USDC → MON (`minMonOut` required) |
 
 **Write tools default to `dryRun: true`** (simulate only; **no private key needed**). Pass `"dryRun": false` and set `MONPAD_PRIVATE_KEY` to broadcast. Buys always simulate before send.
 
@@ -75,8 +77,8 @@ npx -y @monpad/mcp
         "MONPAD_LAUNCHER": "0x…",
         "MONPAD_HOOK": "0x…",
         "MONPAD_V4_ROUTER": "0x…",
-        "MAX_MON_PER_TX": "5",
-        "MAX_MON_PER_DAY": "20"
+        "MAX_USDC_PER_TX": "25",
+        "MAX_USDC_PER_DAY": "100"
       }
     }
   }
@@ -92,19 +94,28 @@ cd mcp && npm install
 FORK_RPC=https://rpc.monad.xyz npm test
 ```
 
+The test deploys the USDC-quote stack (PR #36), so it needs those contracts in `hardhat-test/`.
+
+## USDC risk
+
+USDC can be paused or can blacklist an address (Circle). Each write tool checks for that before sending, and `monpad_get_spec` returns `quoteHealth`. If USDC blacklists the launcher, router or PoolManager, every USDC trade, launch and claim fails until it is lifted.
+
 ## Env reference
 
 | Variable | Purpose |
 |---|---|
 | `MONPAD_LAUNCHER` | MonpadHookLauncher |
 | `MONPAD_HOOK` | MonpadHook |
-| `MONPAD_V4_ROUTER` | `MonpadV4Router` (payable buy + slippage) |
+| `MONPAD_V4_ROUTER` | `MonpadV4Router` (USDC and MON routes, slippage) |
+| `MONPAD_QUOTE_ASSET` | Optional USDC override; by default read from `launcher.quoteAsset()` |
 | `MONPAD_POOL_MANAGER` | Default: Monad V4 PoolManager |
 | `MONPAD_STATE_VIEW` | Default: Monad StateView |
 | `MONSHI` | MONSHI token |
 | `MONPAD_PRIVATE_KEY` | Burner wallet (`dryRun=false` only) |
 | `MONPAD_SIMULATE_ADDRESS` | Optional `from` for dry-run |
-| `MAX_MON_PER_TX` | Default `5` (buys + sell proceeds) |
-| `MAX_MON_PER_DAY` | Default `20` (MON spent + sell proceeds) |
+| `MAX_USDC_PER_TX` | Default `25` (USDC spent or received in one call) |
+| `MAX_USDC_PER_DAY` | Default `100` (USDC spent + sell proceeds) |
+| `MAX_MON_PER_TX` | Default `5` (MON routes only) |
+| `MAX_MON_PER_DAY` | Default `20` (MON routes only) |
 
 See `CONTRACT-UV4.md` in the repo root for protocol details.

@@ -1,5 +1,5 @@
 /**
- * Fork integration test: local Hardhat fork, read tools, dryRun sends no txs.
+ * Fork integration test: local Hardhat fork, read tools, dryRun sends no txs. Needs the USDC-quote contracts (PR #36).
  *
  *   FORK_RPC=https://rpc.monad.xyz npm test
  */
@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { getPublicClient } from '../lib/clients.mjs';
 import { resetConfigCache } from '../lib/config.mjs';
-import { getSpec, listLaunches, getToken, buy, launchToken } from '../lib/actions.mjs';
+import { getSpec, listLaunches, getToken, buy, buyWithMon, launchToken } from '../lib/actions.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const hardhatDir = join(root, 'hardhat-test');
@@ -89,6 +89,7 @@ async function main() {
     process.env.MONPAD_LAUNCHER = deployed.launcher;
     process.env.MONPAD_HOOK = deployed.hook;
     process.env.MONPAD_V4_ROUTER = deployed.v4Router;
+    process.env.MONPAD_QUOTE_ASSET = deployed.quoteAsset;
     process.env.MONPAD_POOL_MANAGER = deployed.poolManager;
     process.env.MONPAD_STATE_VIEW = deployed.stateView;
     process.env.MONSHI = deployed.monshi;
@@ -105,18 +106,25 @@ async function main() {
     const tokenInfo = JSON.parse((await getToken({ token: deployed.sampleToken })).content[0].text);
     if (tokenInfo.creatorTaxBps !== 0) throw new Error('unexpected tax');
     if (!tokenInfo.poolId) throw new Error('missing poolId');
+    if (tokenInfo.quoteAsset?.toLowerCase() !== deployed.quoteAsset.toLowerCase()) throw new Error('quoteAsset should be USDC');
+    if (!(Number(tokenInfo.price.approxUsdcPerToken) > 0)) throw new Error('missing USDC price');
 
     const client = getPublicClient();
     const simulateFrom = deployed.deployer;
     const nonceBefore = await client.getTransactionCount({ address: simulateFrom });
 
     const dryBuy = JSON.parse(
-      (await buy({ token: deployed.sampleToken, monIn: '1', minTokensOut: '1', dryRun: true })).content[0].text,
+      (await buy({ token: deployed.sampleToken, usdcIn: '10', minTokensOut: '1', dryRun: true })).content[0].text,
     );
     if (!dryBuy.dryRun || !dryBuy.simulated) throw new Error('buy dryRun should simulate');
 
+    const dryBuyMon = JSON.parse(
+      (await buyWithMon({ token: deployed.sampleToken, monIn: '1', minTokensOut: '1', dryRun: true })).content[0].text,
+    );
+    if (!dryBuyMon.dryRun || !dryBuyMon.simulated) throw new Error('buyWithMon dryRun should simulate');
+
     const dryLaunch = JSON.parse(
-      (await launchToken({ name: 'Dry', symbol: 'DRY', dryRun: true })).content[0].text,
+      (await launchToken({ name: 'Dry', symbol: 'DRY', devBuyUsdc: '10', dryRun: true })).content[0].text,
     );
     if (!dryLaunch.dryRun) throw new Error('launch dryRun expected');
 

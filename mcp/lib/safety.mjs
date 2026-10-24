@@ -1,29 +1,57 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { formatEther, parseEther } from 'viem';
+import { formatEther, formatUnits, parseEther, parseUnits } from 'viem';
 
 const STORE = join(homedir(), '.monpad-mcp', 'daily-spend.json');
 
-function maxPerTx() {
-  const v = process.env.MAX_MON_PER_TX;
-  return parseEther(v && v.trim() ? v : '5');
+/** Two assets move through the tools: USDC (6 decimals, the quote asset) and native MON (18, the router's MON routes). */
+const ASSETS = {
+  usdc: {
+    label: 'USDC',
+    decimals: 6,
+    txEnv: 'MAX_USDC_PER_TX',
+    dayEnv: 'MAX_USDC_PER_DAY',
+    txDefault: '25',
+    dayDefault: '100',
+  },
+  mon: {
+    label: 'MON',
+    decimals: 18,
+    txEnv: 'MAX_MON_PER_TX',
+    dayEnv: 'MAX_MON_PER_DAY',
+    txDefault: '5',
+    dayDefault: '20',
+  },
+};
+
+function cap(asset, kind) {
+  const a = ASSETS[asset];
+  const v = process.env[kind === 'tx' ? a.txEnv : a.dayEnv];
+  const text = v && v.trim() ? v : kind === 'tx' ? a.txDefault : a.dayDefault;
+  return a.decimals === 18 ? parseEther(text) : parseUnits(text, a.decimals);
 }
 
-function maxPerDay() {
-  const v = process.env.MAX_MON_PER_DAY;
-  return parseEther(v && v.trim() ? v : '20');
+function fmt(asset, amount) {
+  const a = ASSETS[asset];
+  return a.decimals === 18 ? formatEther(amount) : formatUnits(amount, a.decimals);
 }
 
 function todayUtc() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function emptyStore() {
+  return { date: todayUtc(), flow: { usdc: '0', mon: '0' } };
+}
+
 function readStore() {
   try {
-    return JSON.parse(readFileSync(STORE, 'utf8'));
+    const s = JSON.parse(readFileSync(STORE, 'utf8'));
+    if (s.date !== todayUtc() || !s.flow) return emptyStore();
+    return s;
   } catch {
-    return { date: todayUtc(), monFlowWei: '0' };
+    return emptyStore();
   }
 }
 
@@ -32,50 +60,42 @@ function writeStore(data) {
   writeFileSync(STORE, JSON.stringify(data), 'utf8');
 }
 
-function dailyMonFlow() {
-  let store = readStore();
-  if (store.date !== todayUtc()) return 0n;
-  return BigInt(store.monFlowWei || store.spentWei || '0');
-}
-
 /**
- * Refuse if monAmount exceeds per-tx or daily caps (buys, launch dev buy, sell proceeds).
- * @param {bigint} monAmountWei
+ * Refuse if `amount` (base units of `asset`: 'usdc' or 'mon') exceeds the per-tx or daily cap.
+ * Counts what a tool spends (launch, buy) and what a sell pays out.
+ * @param {'usdc' | 'mon'} asset
+ * @param {bigint} amount
  */
-export function assertMonFlowAllowed(monAmountWei) {
-  const txCap = maxPerTx();
-  const dayCap = maxPerDay();
-  if (monAmountWei > txCap) {
-    throw new Error(
-      `Refused: ${formatEther(monAmountWei)} MON exceeds MAX_MON_PER_TX (${formatEther(txCap)} MON)`,
-    );
+export function assertFlowAllowed(asset, amount) {
+  const a = ASSETS[asset];
+  const txCap = cap(asset, 'tx');
+  const dayCap = cap(asset, 'day');
+  if (amount > txCap) {
+    throw new Error(`Refused: ${fmt(asset, amount)} ${a.label} exceeds ${a.txEnv} (${fmt(asset, txCap)} ${a.label})`);
   }
-  const flow = dailyMonFlow();
-  if (flow + monAmountWei > dayCap) {
+  const flow = BigInt(readStore().flow[asset] || '0');
+  if (flow + amount > dayCap) {
     throw new Error(
-      `Refused: daily MON flow would exceed MAX_MON_PER_DAY (${formatEther(dayCap)} MON; already ${formatEther(flow)} today)`,
+      `Refused: daily ${a.label} flow would exceed ${a.dayEnv} (${fmt(asset, dayCap)} ${a.label}; already ${fmt(asset, flow)} today)`,
     );
   }
 }
 
-/** Record MON flow after a successful receipt (buy spend, launch value, or sell proceeds). */
-export function recordMonFlow(monAmountWei) {
-  if (monAmountWei <= 0n) return;
-  let store = readStore();
-  if (store.date !== todayUtc()) store = { date: todayUtc(), monFlowWei: '0' };
-  const flow = BigInt(store.monFlowWei || store.spentWei || '0') + monAmountWei;
-  writeStore({ date: todayUtc(), monFlowWei: flow.toString() });
+/** Record flow after a successful receipt. */
+export function recordFlow(asset, amount) {
+  if (amount <= 0n) return;
+  const store = readStore();
+  store.flow[asset] = (BigInt(store.flow[asset] || '0') + amount).toString();
+  writeStore(store);
 }
-
-/** @deprecated alias */
-export const assertMonSpendAllowed = assertMonFlowAllowed;
-export const recordMonSpend = recordMonFlow;
 
 export function safetyLimitsForSpec() {
   return {
-    maxMonPerTx: formatEther(maxPerTx()),
-    maxMonPerDay: formatEther(maxPerDay()),
+    maxUsdcPerTx: fmt('usdc', cap('usdc', 'tx')),
+    maxUsdcPerDay: fmt('usdc', cap('usdc', 'day')),
+    maxMonPerTx: fmt('mon', cap('mon', 'tx')),
+    maxMonPerDay: fmt('mon', cap('mon', 'day')),
     privateKeyEnv: 'MONPAD_PRIVATE_KEY',
-    note: 'Use a burner wallet. Daily cap counts MON spent (launch/buy) and MON received (sell). dryRun does not need a key.',
+    note: 'Use a burner wallet. Caps are per asset: USDC for launch/buy/sell, MON only for the MON routes. Daily caps count what is spent and what a sell pays out. dryRun does not need a key.',
   };
 }

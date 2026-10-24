@@ -12,6 +12,7 @@ const ENV_MAP = {
   stateView: 'MONPAD_STATE_VIEW',
   monshi: 'MONSHI',
   v4Router: 'MONPAD_V4_ROUTER',
+  quoteAsset: 'MONPAD_QUOTE_ASSET',
   platform: 'MONPAD_PLATFORM',
 };
 
