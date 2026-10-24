@@ -13,7 +13,8 @@ mkdirSync(shotDir, { recursive: true });
 
 const save = {
   milk: 500, cars: [1], car: 1,
-  inv: { nitro: 3, shield: 0, magnet: 0 },
+  inv: { nitro: 3, shield: 0, magnet: 0, turbo: 0, ghost: 0, double: 0 },
+  loadout: [null, null],
   up: { engine: 1, zap: 2, tires: 1 },
   best: 0, races: 0,
 };
