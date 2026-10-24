@@ -20,6 +20,9 @@ interface IMonpadLauncherConfig {
 ///         by trading through a different front end. It also keeps a slow reference price used to guard buybacks.
 ///
 ///         Hook address flags (must be mined into the CREATE2 address): BEFORE_INITIALIZE (1<<13) | BEFORE_SWAP (1<<7) = 0x2080.
+///
+///         **Fees:** the hook sets the pool LP fee rate on each swap. Accrued fees are collected in both
+///         currencies by `MonpadHookLauncher.harvest` (see launcher NatSpec). There is no USDC-only skim here.
 contract MonpadHook {
     using PoolIdLibrary for PoolKey;
     using StateLibrary for IPoolManager;

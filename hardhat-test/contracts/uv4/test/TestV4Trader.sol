@@ -10,7 +10,7 @@ import {BalanceDelta, BalanceDeltaLibrary} from "@uniswap/v4-core/src/types/Bala
 import {ModifyLiquidityParams, SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 
-/// TEST ONLY: trades and seeds hookless liquidity against a V4 pool manager.
+/// TEST ONLY: USDC-quoted Monpad trades + hookless pool seeding on a V4 pool manager.
 contract TestV4Trader is IUnlockCallback {
     using BalanceDeltaLibrary for BalanceDelta;
 
@@ -22,14 +22,10 @@ contract TestV4Trader is IUnlockCallback {
 
     receive() external payable {}
 
-    function buy(PoolKey memory key, uint256 nativeIn) external returns (uint256 tokensOut) {
-        bytes memory out = pm.unlock(abi.encode(uint8(0), key, nativeIn, uint160(TickMath.MIN_SQRT_PRICE + 1)));
-        tokensOut = abi.decode(out, (uint256));
-    }
-
-    function sell(PoolKey memory key, uint256 tokensIn) external returns (uint256 nativeOut) {
-        bytes memory out = pm.unlock(abi.encode(uint8(1), key, tokensIn, uint160(TickMath.MAX_SQRT_PRICE - 1)));
-        nativeOut = abi.decode(out, (uint256));
+    /// MON → USDC on hookless native/USDC pool (currency0 = native).
+    function swapMonForUsdc(PoolKey memory monUsdcKey, uint256 monIn) external returns (uint256 usdcOut) {
+        bytes memory out = pm.unlock(abi.encode(uint8(0), monUsdcKey, monIn, uint160(TickMath.MIN_SQRT_PRICE + 1)));
+        usdcOut = abi.decode(out, (uint256));
     }
 
     function buyWithQuote(PoolKey memory key, bool quoteIs0, uint256 quoteIn) external returns (uint256 tokensOut) {
@@ -65,6 +61,14 @@ contract TestV4Trader is IUnlockCallback {
             return "";
         }
 
+        if (op == 0) {
+            (, PoolKey memory key, uint256 monIn, uint160 limit) = abi.decode(raw, (uint8, PoolKey, uint256, uint160));
+            BalanceDelta s = pm.swap(key, SwapParams({zeroForOne: true, amountSpecified: -int256(monIn), sqrtPriceLimitX96: limit}), "");
+            _pay(CurrencyLibrary.ADDRESS_ZERO, address(0), uint256(uint128(-s.amount0())));
+            pm.take(key.currency1, address(this), uint256(uint128(s.amount1())));
+            return abi.encode(uint256(uint128(s.amount1())));
+        }
+
         if (op == 10) {
             (, PoolKey memory key, bool quoteIs0, uint256 quoteIn, uint160 limit) =
                 abi.decode(raw, (uint8, PoolKey, bool, uint256, uint160));
@@ -73,26 +77,11 @@ contract TestV4Trader is IUnlockCallback {
             return _quoteIn(key, quoteIs0, s);
         }
 
-        if (op == 11) {
-            (, PoolKey memory key, bool quoteIs0, uint256 tokensIn, uint160 limit) =
-                abi.decode(raw, (uint8, PoolKey, bool, uint256, uint160));
-            bool zeroForOne = !quoteIs0;
-            BalanceDelta s = pm.swap(key, SwapParams({zeroForOne: zeroForOne, amountSpecified: -int256(tokensIn), sqrtPriceLimitX96: limit}), "");
-            return _quoteOut(key, quoteIs0, s);
-        }
-
-        (, PoolKey memory key, uint256 amount, uint160 limit) = abi.decode(raw, (uint8, PoolKey, uint256, uint160));
-        bool zeroForOne = op == 0;
-        BalanceDelta s = pm.swap(key, SwapParams({zeroForOne: zeroForOne, amountSpecified: -int256(amount), sqrtPriceLimitX96: limit}), "");
-        if (zeroForOne) {
-            _pay(CurrencyLibrary.ADDRESS_ZERO, address(0), uint256(uint128(-s.amount0())));
-            pm.take(key.currency1, address(this), uint256(uint128(s.amount1())));
-            return abi.encode(uint256(uint128(s.amount1())));
-        }
-        address token = Currency.unwrap(key.currency1);
-        _pay(key.currency1, token, uint256(uint128(-s.amount1())));
-        pm.take(CurrencyLibrary.ADDRESS_ZERO, address(this), uint256(uint128(s.amount0())));
-        return abi.encode(uint256(uint128(s.amount0())));
+        (, PoolKey memory key, bool quoteIs0, uint256 tokensIn, uint160 limit) =
+            abi.decode(raw, (uint8, PoolKey, bool, uint256, uint160));
+        bool zeroForOne = !quoteIs0;
+        BalanceDelta s = pm.swap(key, SwapParams({zeroForOne: zeroForOne, amountSpecified: -int256(tokensIn), sqrtPriceLimitX96: limit}), "");
+        return _quoteOut(key, quoteIs0, s);
     }
 
     function _quoteIn(PoolKey memory key, bool quoteIs0, BalanceDelta s) internal returns (bytes memory) {
@@ -108,13 +97,11 @@ contract TestV4Trader is IUnlockCallback {
 
     function _quoteOut(PoolKey memory key, bool quoteIs0, BalanceDelta s) internal returns (bytes memory) {
         if (quoteIs0) {
-            address token = Currency.unwrap(key.currency1);
-            _pay(key.currency1, token, uint256(uint128(-s.amount1())));
+            _pay(key.currency1, Currency.unwrap(key.currency1), uint256(uint128(-s.amount1())));
             pm.take(key.currency0, address(this), uint256(uint128(s.amount0())));
             return abi.encode(uint256(uint128(s.amount0())));
         }
-        address token = Currency.unwrap(key.currency0);
-        _pay(key.currency0, token, uint256(uint128(-s.amount0())));
+        _pay(key.currency0, Currency.unwrap(key.currency0), uint256(uint128(-s.amount0())));
         pm.take(key.currency1, address(this), uint256(uint128(s.amount1())));
         return abi.encode(uint256(uint128(s.amount1())));
     }

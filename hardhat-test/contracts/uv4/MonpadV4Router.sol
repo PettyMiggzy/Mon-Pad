@@ -45,21 +45,22 @@ contract MonpadV4Router is IUnlockCallback, ReentrancyGuard {
         IPoolManager poolManager_,
         IMonpadHookLauncher launcher_,
         address monpadHook_,
-        address quoteAsset_,
+        address monpadQuoteAsset_,
+        address monUsdcQuoteAsset_,
         PoolKey memory monUsdcKey_
     ) {
         require(
             address(poolManager_) != address(0) && address(launcher_) != address(0) && monpadHook_ != address(0)
-                && quoteAsset_ != address(0),
+                && monpadQuoteAsset_ != address(0) && monUsdcQuoteAsset_ != address(0),
             "zero addr"
         );
         require(Currency.unwrap(monUsdcKey_.currency0) == address(0), "monUsdc: c0=MON");
-        require(Currency.unwrap(monUsdcKey_.currency1) == quoteAsset_, "monUsdc: c1=USDC");
+        require(Currency.unwrap(monUsdcKey_.currency1) == monUsdcQuoteAsset_, "monUsdc: c1=USDC");
         require(address(IHooks(monUsdcKey_.hooks)) == address(0), "monUsdc: hookless");
         poolManager = poolManager_;
         launcher = launcher_;
         monpadHook = monpadHook_;
-        quoteAsset = quoteAsset_;
+        quoteAsset = monpadQuoteAsset_;
         monUsdcFee = monUsdcKey_.fee;
         monUsdcTickSpacing = monUsdcKey_.tickSpacing;
     }

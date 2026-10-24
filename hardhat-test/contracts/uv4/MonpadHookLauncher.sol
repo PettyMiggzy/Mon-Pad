@@ -128,6 +128,7 @@ contract MonpadHookLauncher is Ownable2Step, ReentrancyGuard, IUnlockCallback {
     event LaunchPaused(bool paused);
     event MonshiPoolProposed(uint24 fee, int24 tickSpacing, uint256 executableAt);
     event MonshiPoolSet(uint24 fee, int24 tickSpacing);
+    error MonshiPoolNotConfigured();
 
     constructor(
         address owner_,
@@ -243,7 +244,14 @@ contract MonpadHookLauncher is Ownable2Step, ReentrancyGuard, IUnlockCallback {
     // Fees: harvest, split, claim
     // ═════════════════════════════════════════════════════════════════════════════
 
-    /// @notice Collect a token's swap fees and split them. Anyone can call.
+    /// @notice Collect swap LP fees from the launcher-owned position and split them.
+    /// @dev **Deterministic fee handling (no hook skim):** Uniswap V4 accrues the dynamic LP fee into the
+    ///      position in **both** currencies. `COLLECT` returns `(quoteFees, tokenFees)` where `quoteFees` is
+    ///      always USDC and `tokenFees` is the launch token.
+    ///      • **USDC (`quoteFees`):** `extra = quoteFees * taxBps / (BASE+tax)`; base = quoteFees - extra.
+    ///        Split base 70/10/10/10 → creator/platform USDC claimable, `monshiReserve`, `tokenReserve`; add `extra` to `tokenReserve`.
+    ///      • **Token (`tokenFees`):** same tax split on token; 70% creator / 10% platform claimable; **remainder burned** to `DEAD`.
+    ///      Invariant: USDC allocations sum to `quoteFees`; token allocations + burn sum to `tokenFees`.
     function harvest(address token) external nonReentrant {
         Launch storage L = _launches[token];
         require(L.token != address(0), "unknown token");
@@ -260,7 +268,9 @@ contract MonpadHookLauncher is Ownable2Step, ReentrancyGuard, IUnlockCallback {
             claimable[L.creator][quoteAsset] += toCreator;
             claimable[platform][quoteAsset] += toPlatform;
             monshiReserve += toMonshi;
-            tokenReserve[token] += base - toCreator - toPlatform - toMonshi + extra;
+            uint256 toTokenReserve = base - toCreator - toPlatform - toMonshi + extra;
+            tokenReserve[token] += toTokenReserve;
+            require(toCreator + toPlatform + toMonshi + toTokenReserve == quoteFees, "quote fee split");
         }
         if (tokenFees > 0) {
             uint256 extra = (tokenFees * L.taxBps) / total;
@@ -271,6 +281,7 @@ contract MonpadHookLauncher is Ownable2Step, ReentrancyGuard, IUnlockCallback {
             claimable[platform][token] += toPlatform;
             uint256 toBurn = tokenFees - toCreator - toPlatform;
             if (toBurn > 0) IERC20(token).safeTransfer(DEAD, toBurn);
+            require(toCreator + toPlatform + toBurn == tokenFees, "token fee split");
         }
         emit Harvested(token, quoteFees, tokenFees);
     }
@@ -324,7 +335,7 @@ contract MonpadHookLauncher is Ownable2Step, ReentrancyGuard, IUnlockCallback {
     /// @notice Keeper only. Swaps USDC reserve → MONSHI on the configured USDC/MONSHI pool; MONSHI is burned.
     function buybackMonshi(uint256 maxUsdc, uint256 minMonshiOut) external nonReentrant returns (uint256 burned) {
         require(msg.sender == keeper, "not keeper");
-        require(monshiKeySet, "no MONSHI pool");
+        if (!monshiKeySet) revert MonshiPoolNotConfigured();
         require(block.timestamp >= uint256(lastMonshiBuyback) + BUYBACK_COOLDOWN, "cooldown");
         uint256 amountIn = _boundedAmount(monshiReserve, maxUsdc);
         (uint160 sqrtSpot,,,) = poolManager.getSlot0(monshiKey.toId());
@@ -427,6 +438,7 @@ contract MonpadHookLauncher is Ownable2Step, ReentrancyGuard, IUnlockCallback {
             return abi.encode(quoteFees, tokenFees);
         }
 
+        require(op == Op.SWAP_QUOTE_IN, "bad op");
         (bool quoteIs0, uint256 amountIn, address recipient, uint160 limit) = abi.decode(args, (bool, uint256, address, uint160));
         bool zeroForOne = quoteIs0;
         BalanceDelta s = poolManager.swap(
