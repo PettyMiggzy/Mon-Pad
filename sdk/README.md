@@ -1,69 +1,74 @@
-# `@monpad/sdk` — trader & bot SDK (sniper-friendly)
+# @monpad/sdk
 
-Public TypeScript SDK for Monpad on Monad. **Bots and snipers are welcome.**
-There is no anti-sniper delay, whitelist, or block-0 gate in the protocol API.
+TypeScript SDK for **Monpad Uniswap V4** on Monad. **viem** is the only dependency (peer). No bonding curves — trades go through `MonpadV4Router`.
 
-Mirrors Minta’s `@vyrechain/sdk` shape: read launches, quote, launch (with
-**dev bot / first buy** in the same tx), buy, sell, and Monchi burn stats.
+> **Not published to npm in this repo.** Install from the monorepo: `npm install file:../sdk`.
 
-## Install (when published)
+## 5-minute quickstart
 
 ```bash
-npm i @monpad/sdk viem
+cd sdk && npm install && npm run build
+export RPC_URL=https://rpc.monad.xyz
+export MONPAD_LAUNCHER=0x…      # when deployed
+export MONPAD_HOOK=0x…
+export MONPAD_V4_ROUTER=0x…
+export MONPAD_POOL_MANAGER=0x…  # infra from spec / env
+export MONPAD_STATE_VIEW=0x…
+export MONPAD_PRIVATE_KEY=0x…   # only for simulate: false
 ```
 
-Until publish, import from this folder or point package.json at `file:./sdk`.
-
-## Policy
-
-| Rule | Behavior |
-|---|---|
-| External bots / snipers | Allowed — quote default slippage **2%** so a competing trade between quote and send is expected |
-| Creator “dev bot” | Optional `devBuyMon` in `launch()` — atomic first buy in the create tx (same as Minta `firstBuyUsdc`) |
-| Protocol fees | 10% burn traded token + 10% Monchi buyback-burn + 10% platform (quote-only on sells) |
-| Creator tax | Independent, creator-set |
-
-## Quick start
-
-```ts
-import { createPublicClient, createWalletClient, http, parseEther } from 'viem';
+```typescript
+import { createMonpad, parseEther } from '@monpad/sdk';
+import { createWalletClient, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import {
-  monad, MONPAD, launch, buy, sell, quoteBuy, getLaunches, getMonshiBurned,
-} from '@monpad/sdk';
 
-const account = privateKeyToAccount(process.env.PRIVATE_KEY as `0x${string}`);
-const publicClient = createPublicClient({ chain: monad, transport: http() });
-const wallet = createWalletClient({ account, chain: monad, transport: http() });
-
-// Creator: deploy + dev bot in one tx (you buy before anyone else can)
-const created = await launch(wallet, publicClient, {
-  name: 'Example',
-  symbol: 'EX',
-  feeConfig: { cfBurnTokenBps: 0, cfLpBps: 0, taxBurnTokenBps: 0, taxLpBps: 0 },
-  devBuyMon: parseEther('1'), // ← Minta-style first buy
+const account = privateKeyToAccount(process.env.MONPAD_PRIVATE_KEY as `0x${string}`);
+const walletClient = createWalletClient({
+  account,
+  chain: { id: 143, name: 'Monad', nativeCurrency: { name: 'MON', symbol: 'MON', decimals: 18 }, rpcUrls: { default: { http: [process.env.RPC_URL!] } } },
+  transport: http(process.env.RPC_URL!),
 });
 
-// Sniper / trader bot: quote then buy (2% slippage default)
-const q = await quoteBuy(publicClient, { curve: created.curve, monIn: parseEther('0.5') });
-await buy(wallet, publicClient, {
-  curve: created.curve,
-  monIn: parseEther('0.5'),
-  minTokensOut: q.minTokensOut,
-});
+const monpad = createMonpad({ walletClient, specUrl: 'https://www.monpad.net/api/v1/spec' });
 
-// Live Monchi burn (dead-address balance)
-console.log(await getMonshiBurned(publicClient));
+// Read-only
+const spec = await monpad.getSpec();
+const launches = await monpad.listLaunches({ limit: 10 });
+const token = await monpad.getToken('0x…');
+
+// Quote (simulates router)
+const q = await monpad.quoteBuy(token.token, parseEther('1'));
+
+// Trade — simulate by default; set simulate: false to send
+await monpad.buy(token.token, parseEther('0.5'), { slippageBps: 100, simulate: true });
+
+// Launch
+await monpad.launch({ name: 'My', symbol: 'MY', creatorTaxBps: 100, simulate: true });
 ```
 
-## HTTP twin
+## Safety defaults
 
-Read-only routes under `/api/v1/*` expose the same surface for non-TS bots
-(see `pages/api/v1/`). Writes always go on-chain via the wallet — the HTTP API
-does not custody keys.
+- **`simulate: true`** on `launch`, `buy`, `sell` (dry-run via `simulateContract`).
+- **`maxMonPerTx`** guard (default 5 MON, env `MAX_MON_PER_TX`).
+- **`minTokensOut` / `minMonOut`** never zero on sends; quotes include slippage-adjusted `minOut`.
+- Typed errors: `SlippageExceeded`, `DeadlineExpired`, `PoolNotFound`, `Paused`, `ContractsNotDeployed`, `MaxMonExceeded`.
 
-## MCP twin (AI agents)
+## Addresses & fees
 
-`mcp/server.mjs` exposes the same capabilities as MCP tools so any AI agent
-(Cursor, Claude Desktop, custom) can discover, launch (with optional **dev bot**),
-buy, sell, and read Monchi burns. See `mcp/README.md`.
+No hardcoded platform wallet or Monpad contract addresses in `src/`. Resolution order:
+
+1. `createMonpad({ addresses })`
+2. Env (`MONPAD_LAUNCHER`, `MONPAD_HOOK`, `MONPAD_V4_ROUTER`, …)
+3. `GET /api/v1/spec` (platform, monshi, dead, fees) + optional future `uv4` block
+
+## Scripts
+
+| Command | Purpose |
+|---------|---------|
+| `npm run build` | ESM + CJS + `.d.ts` → `dist/` |
+| `npm run check:addresses` | CI: fail on `0x…` literals outside `chain-config.ts` |
+| `npm test` | Vitest fork tests (needs `FORK_RPC`, `MONPAD_TEST_PRIVATE_KEY`) |
+
+## MCP
+
+The `@monpad/mcp` package can depend on this SDK to avoid duplicating chain logic.
