@@ -23,25 +23,30 @@ const SECTIONS = [
 
 const MCP_TOOLS: [string, 'read' | 'write', string][] = [
   ['monpad_list_launches', 'read', 'Recent launches, newest first.'],
-  ['monpad_get_token', 'read', 'Price, liquidity, creator tax and approximate volume for one token.'],
+  ['monpad_get_token', 'read', 'Price in USDC, liquidity, creator tax and approximate volume for one token.'],
   ['monpad_trending', 'read', 'Tokens ranked by swap volume over a recent window.'],
   ['monpad_get_spec', 'read', 'Fee policy, safety limits and contract readiness.'],
   ['monpad_get_monshi_burn', 'read', 'Live MONSHI burn counter.'],
-  ['monpad_launch_token', 'write', 'Launch a token, with an optional dev buy. Dry run by default.'],
-  ['monpad_buy', 'write', 'Buy with MON. Requires a minimum-out. Dry run by default.'],
-  ['monpad_sell', 'write', 'Sell for MON. Requires a minimum-out. Dry run by default.'],
+  ['monpad_launch_token', 'write', 'Launch a token. The creation fee and an optional dev buy are paid in USDC. Dry run by default.'],
+  ['monpad_buy', 'write', 'Buy with USDC. Requires a minimum-out. Dry run by default.'],
+  ['monpad_buy_with_mon', 'write', 'Buy with native MON, swapped to USDC on the way. Requires a minimum-out. Dry run by default.'],
+  ['monpad_sell', 'write', 'Sell for USDC. Requires a minimum-out. Dry run by default.'],
+  ['monpad_sell_for_mon', 'write', 'Sell for native MON, via USDC. Requires a minimum-out. Dry run by default.'],
 ];
 
 const SDK_METHODS: [string, string][] = [
-  ['createMonpad({ publicClient, walletClient?, addresses? })', 'Create a client. Read methods need only a public client. Writes need a wallet client.'],
+  ['createMonpad({ rpcUrl?, walletClient?, addresses?, maxUsdcPerTx?, maxMonPerTx? })', 'Create a client. Read methods need no wallet. Writes need a wallet client. The USDC address is read from the launcher.'],
   ['monpad.listLaunches({ limit })', 'Recent launches with creator, creator tax, pool id, name and symbol.'],
-  ['monpad.getToken(token)', 'Price, liquidity, total swap fee, creator tax and volume for one token.'],
-  ['monpad.quoteBuy({ token, monIn })', 'Simulates a buy and returns the expected tokens out and the fee paid.'],
-  ['monpad.buy({ token, monIn, minTokensOut, deadline?, simulate? })', 'One payable transaction. Reverts if you would receive less than minTokensOut.'],
-  ['monpad.sell({ token, tokensIn, minMonOut, deadline?, simulate? })', 'Sells tokens for MON, with the same protections. Handles the approval if needed.'],
-  ['monpad.launch({ name, symbol, creatorTaxBps?, devBuyMon?, salt?, simulate? })', 'Deploys the token and its pool in one transaction. Creator tax 0 to 500 bps.'],
-  ['monpad.creatorEarnings(address)', 'Fees a creator can claim, per asset.'],
-  ['monpad.claim() / monpad.harvest(token)', 'Claim creator earnings, or trigger the fee split for a pool. Anyone can call harvest.'],
+  ['monpad.getToken(token)', 'Price in USDC, liquidity, total swap fee, creator tax and approximate USDC volume for one token.'],
+  ['monpad.quoteBuy(token, usdcIn)', 'Simulates a buy and returns the expected tokens out and a slippage-adjusted minimum.'],
+  ['monpad.buy(token, usdcIn, { slippageBps?, minTokensOut?, simulate? })', 'Approves the router for exactly usdcIn, then buys. Reverts if you would receive less than minTokensOut.'],
+  ['monpad.buyWithMon(token, monIn, { minTokensOut?, minUsdcOut?, simulate? })', 'Buys with native MON: MON to USDC on the MON/USDC pool, then USDC to the token, in one transaction.'],
+  ['monpad.sell(token, tokensIn, { slippageBps?, minUsdcOut?, simulate? })', 'Sells tokens for USDC, with the same protections. Handles the token approval if needed.'],
+  ['monpad.sellForMon(token, tokensIn, { minMonOut?, minUsdcOut?, simulate? })', 'Sells tokens and pays out native MON, via USDC.'],
+  ['monpad.launch({ name, symbol, creatorTaxBps?, devBuyUsdc?, salt?, simulate? })', 'Deploys the token and its pool in one transaction. Creation fee and dev buy are paid in USDC. Creator tax 0 to 500 bps.'],
+  ['monpad.creatorEarnings(address)', 'USDC and token fees a creator can claim.'],
+  ['monpad.claim(asset) / monpad.harvest(token)', 'Claim creator earnings in USDC or in a token, or trigger the fee split for a pool. Anyone can call harvest.'],
+  ['monpad.quoteHealth()', 'Whether USDC is paused, or has blacklisted the launcher, router or pool manager.'],
   ['monpad.getMonshiBurned()', 'MONSHI held at the dead address.'],
 ];
 
@@ -100,7 +105,7 @@ export default function Docs() {
 
         <main className="min-w-0">
           <H2 id="overview">Overview</H2>
-          <P>Monpad is a launchpad on Monad. A token launches straight into a Uniswap V4 pool, paired with native MON, from the first block. There is no bonding curve and no waiting period. The pool is on the DEX from the moment the launch transaction lands.</P>
+          <P>Monpad is a launchpad on Monad. A token launches straight into a Uniswap V4 pool, paired with USDC, from the first block. There is no bonding curve and no waiting period. The pool is on the DEX from the moment the launch transaction lands.</P>
           <P>The pool uses a Monpad hook, a small contract that runs on every swap. The hook sets the swap fee and enforces the creator&apos;s tax inside the pool itself. Because the rule lives in the pool, every router, aggregator and bot pays the same fee, and no one can route around it.</P>
           <ul className="list-disc pl-5 space-y-2 text-white/75 mb-4">
             <li><b className="text-white">Plain token.</b> A standard ERC-20 with a fixed supply of 1 billion. No token tax, no mint, no owner, no blacklist and no anti-sniper code. It works everywhere a normal token does.</li>
@@ -112,13 +117,13 @@ export default function Docs() {
           <P>A launch is one transaction to the launcher contract:</P>
           <ol className="list-decimal pl-5 space-y-2 text-white/75 mb-4">
             <li>Deploys the token (1 billion supply, held entirely by the launcher).</li>
-            <li>Creates the Uniswap V4 pool, native MON against the token, using the Monpad hook.</li>
+            <li>Creates the Uniswap V4 pool, USDC against the token, using the Monpad hook.</li>
             <li>Places the whole supply in one single-sided position at the starting price.</li>
             <li>Optionally spends your <b className="text-white">dev buy</b> in the same transaction, so you buy before anyone else can. The dev buy is capped at 5% of supply.</li>
           </ol>
-          <P>You pay a flat creation fee, which the launch form shows before you confirm, plus any dev buy. A launch costs far less gas than a classic launcher, roughly 870k gas in our tests.</P>
+          <P>You pay a flat creation fee in USDC, which the launch form shows before you confirm, plus any dev buy, also in USDC. The launcher pulls the USDC, so your wallet approves it first. Gas is paid in MON. A launch costs far less gas than a classic launcher, roughly 950k gas in our tests.</P>
           <P>You choose a <b className="text-white">creator tax</b> from 0% to 5% at launch. It is fixed forever. See Fees for what it does.</P>
-          <Code>{`launch(name, symbol, salt, creatorTaxBps)   // payable: creation fee + optional dev buy`}</Code>
+          <Code>{`launch(name, symbol, salt, creatorTaxBps, quoteDevBuy)   // pulls creation fee + dev buy in USDC`}</Code>
 
           <H2 id="fees">Fees</H2>
           <P>Every swap in a Monpad pool pays <b className="text-white">1% plus the creator tax</b>, so between 1% and 6% in total. The hook sets this on every swap. Anyone can trigger the split by calling <Ic>harvest(token)</Ic>.</P>
@@ -134,12 +139,15 @@ export default function Docs() {
             </table>
           </div>
           <P><b className="text-white">Creator tax.</b> Anything above the base 1% is the creator tax. It is not paid to the creator or the platform. All of it buys and burns the launched token, so it can only reduce supply. The creator cannot take it out or change it later. The total fee is always shown before you trade.</P>
+          <P><b className="text-white">Paid in USDC.</b> The fee on the USDC side of a swap is collected in USDC, and so are the creator payout and the platform share. The two burn shares are held in USDC until a buyback swaps them: one into MONSHI, one into the launched token.</P>
           <P><b className="text-white">Fees paid in the token.</b> On the token side of a swap, the creator and platform keep their 70% and 10%, and the two burn shares are burned directly in the token, 20% in total.</P>
           <P><b className="text-white">Buyback and burn.</b> Anyone can run the token buyback. It only executes when the pool price is close to a reference price the hook samples before swaps, which makes it hard to manipulate. The MONSHI buyback runs from a designated keeper with a minimum-out set from an off-chain price.</P>
 
           <H2 id="trading">Trading</H2>
-          <P>Tokens trade in the Uniswap V4 pool like any other pair. On monpad.net, every token page has a trade box and a chart. Bots and aggregators can swap in the pool directly. The fee is charged either way.</P>
+          <P>Tokens trade in the Uniswap V4 pool like any other pair, against USDC. On monpad.net, every token page has a trade box and a chart. Bots and aggregators can swap in the pool directly. The fee is charged either way.</P>
+          <P>If you hold MON instead of USDC, the Monpad router can swap it for you in the same transaction: MON to USDC on the hookless MON/USDC pool, then USDC to the token. Selling works the same way in reverse. You pay the MON/USDC pool&apos;s own fee on that extra hop, and the router lets you set a minimum-out on the whole trade and on the MON/USDC leg.</P>
           <ul className="list-disc pl-5 space-y-2 text-white/75 mb-4">
+            <li><b className="text-white">You need USDC to launch.</b> The creation fee and dev buy are USDC. MON is only needed for gas, or to buy through the MON route.</li>
             <li><b className="text-white">Always set a minimum out.</b> Prices move between quote and execution. Monpad&apos;s tools require a minimum-out on buys and sells.</li>
             <li><b className="text-white">Check the total fee.</b> A creator tax raises the fee up to 6%. It is shown on the token page.</li>
             <li><b className="text-white">Other pools can exist.</b> Anyone can create another pool for the same token elsewhere. Liquidity locked in Monpad&apos;s pool stays there, but volume can move.</li>
@@ -172,45 +180,43 @@ export default function Docs() {
             ))}
           </div>
           <div className="rounded-xl border border-white/10 bg-white/5 p-4 mb-4 text-white/75 text-sm leading-relaxed">
-            <b className="text-white">Safety built in.</b> Write tools are dry runs unless you turn that off. Spend limits apply per transaction and per day (<Ic>MAX_MON_PER_TX</Ic>, <Ic>MAX_MON_PER_DAY</Ic>). Buys and sells need a minimum-out. Use a separate burner wallet funded with only what you can afford to lose. Never give an AI your main wallet key, and read what it is about to do before you approve a trade.
+            <b className="text-white">Safety built in.</b> Write tools are dry runs unless you turn that off. Spend limits apply per transaction and per day, in USDC (<Ic>MAX_USDC_PER_TX</Ic>, <Ic>MAX_USDC_PER_DAY</Ic>) and separately in MON for the MON routes (<Ic>MAX_MON_PER_TX</Ic>, <Ic>MAX_MON_PER_DAY</Ic>). Buys and sells need a minimum-out. Use a separate burner wallet funded with only what you can afford to lose. Never give an AI your main wallet key, and read what it is about to do before you approve a trade.
           </div>
           <P><b className="text-white">Availability.</b> The MCP package is published at mainnet launch, together with the contract addresses.</P>
 
           <H2 id="sdk">SDK</H2>
           <P><Ic>@monpad/sdk</Ic> is a TypeScript library built on viem for traders, bots and apps. It wraps the launcher and the router, simulates before it sends, and requires a minimum-out on every trade.</P>
           <Code>{`npm i @monpad/sdk viem`}</Code>
-          <Code>{`import { createPublicClient, createWalletClient, http, parseEther } from 'viem';
+          <Code>{`import { createWalletClient, http, parseUnits, parseEther } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { createMonpad, monad } from '@monpad/sdk';
+import { createMonpad } from '@monpad/sdk';
 
-const publicClient = createPublicClient({ chain: monad, transport: http() });
 const walletClient = createWalletClient({
-  account: privateKeyToAccount(process.env.PRIVATE_KEY as \`0x\${string}\`),
-  chain: monad,
-  transport: http(),
+  account: privateKeyToAccount(process.env.MONPAD_PRIVATE_KEY as \`0x\${string}\`),
+  chain: { id: 143, name: 'Monad', nativeCurrency: { name: 'MON', symbol: 'MON', decimals: 18 }, rpcUrls: { default: { http: ['https://rpc.monad.xyz'] } } },
+  transport: http('https://rpc.monad.xyz'),
 });
-const monpad = createMonpad({ publicClient, walletClient });
+const monpad = createMonpad({ walletClient });
 
 // Read
 const { launches } = await monpad.listLaunches({ limit: 10 });
 const token = launches[0].token;
 
-// Quote, then buy with protection
-const q = await monpad.quoteBuy({ token, monIn: parseEther('0.5') });
-await monpad.buy({
-  token,
-  monIn: parseEther('0.5'),
-  minTokensOut: (q.tokensOut * 98n) / 100n, // 2% slippage
-});
+// Quote, then buy with 25 USDC (USDC has 6 decimals). simulate defaults to true: pass false to send.
+const q = await monpad.quoteBuy(token, parseUnits('25', 6));
+await monpad.buy(token, parseUnits('25', 6), { slippageBps: 200, simulate: false });
 
-// Launch with a 2% creator tax and a 1 MON dev buy
-await monpad.launch({ name: 'Example', symbol: 'EX', creatorTaxBps: 200, devBuyMon: '1' });`}</Code>
+// Or buy with MON: it is swapped to USDC on the way
+await monpad.buyWithMon(token, parseEther('0.5'), { simulate: false });
+
+// Launch with a 2% creator tax and a 50 USDC dev buy (the creation fee is added on top)
+await monpad.launch({ name: 'Example', symbol: 'EX', creatorTaxBps: 200, devBuyUsdc: parseUnits('50', 6), simulate: false });`}</Code>
           <div className="rounded-xl border border-white/10 divide-y divide-white/10 mb-4">
             {SDK_METHODS.map(([sig, body]) => (
               <div key={sig} className="p-3"><code className="text-purple-200 text-sm break-words">{sig}</code><div className="text-white/60 text-sm mt-1">{body}</div></div>
             ))}
           </div>
-          <P>Every write method accepts <Ic>simulate: true</Ic> to run the transaction against the chain without sending it. Errors are typed, for example slippage exceeded, deadline passed, or unknown token.</P>
+          <P>Every write method defaults to <Ic>simulate: true</Ic>, which runs the transaction against the chain without sending it, and checks that USDC is not paused or blacklisting your wallet. Errors are typed, for example slippage exceeded, deadline passed, or unknown token.</P>
           <P><b className="text-white">Availability.</b> SDK v0.2 for the V4 launcher is published at mainnet launch, together with the contract addresses.</P>
 
           <H2 id="api">HTTP API</H2>
@@ -233,6 +239,7 @@ await monpad.launch({ name: 'Example', symbol: 'EX', creatorTaxBps: 200, devBuyM
           <ul className="list-disc pl-5 space-y-2 text-white/75 mb-4">
             <li><Lock className="inline mr-1" size={14} /><b className="text-white">Not yet audited.</b> The contracts are tested on a fork of Monad mainnet. They go live only after an independent audit.</li>
             <li><b className="text-white">Admin powers are limited and visible.</b> The owner can pause new launches and change the platform address, the creation fee and the keeper. The owner has no function to withdraw user funds or remove liquidity. Ownership belongs in a multisig.</li>
+            <li><b className="text-white">USDC is a dependency.</b> USDC is issued by Circle, which can pause it or blacklist an address. If USDC is paused, or blacklists the launcher, the router or the pool manager, launches, trades and fee claims in USDC stop until Circle lifts it. A blacklisted wallet cannot send or receive USDC. Monpad&apos;s tools check for this before they send.</li>
             <li><b className="text-white">Keepers are needed.</b> Harvests and buybacks run when someone calls them. Monpad runs a keeper, and anyone can call harvest.</li>
             <li><b className="text-white">Protocol fees.</b> Uniswap governance can switch on a protocol fee for pools. That would take a slice before the fee reaches Monpad.</li>
             <li><b className="text-white">Memecoins are risky.</b> Tokens can go to zero, and liquidity being locked does not protect the price.</li>
@@ -241,7 +248,7 @@ await monpad.launch({ name: 'Example', symbol: 'EX', creatorTaxBps: 200, devBuyM
           <H2 id="wallet">Wallet setup</H2>
           <P>Add Monad mainnet to any EVM wallet:</P>
           <div className="rounded-xl border border-white/10 divide-y divide-white/10 mb-4 text-sm">
-            {[['Network name', 'Monad Mainnet'], ['Chain ID', '143'], ['RPC URL', 'https://rpc.monad.xyz'], ['Currency', 'MON'], ['Explorer', 'https://monadscan.com']].map(([k, v]) => (
+            {[['Network name', 'Monad Mainnet'], ['Chain ID', '143'], ['RPC URL', 'https://rpc.monad.xyz'], ['Currency', 'MON (gas). Trades and launch fees use USDC.'], ['Explorer', 'https://monadscan.com']].map(([k, v]) => (
               <div key={k} className="flex justify-between gap-4 p-3"><span className="text-white/60">{k}</span><span className="text-white break-all text-right">{v}</span></div>
             ))}
           </div>
