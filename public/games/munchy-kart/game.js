@@ -10,6 +10,37 @@ const PLAYER_Z = CAM_H * CAM_D, RACE_SECS = 60;
 const tg = window.Telegram && window.Telegram.WebApp; if (tg) { try { tg.ready(); tg.expand(); } catch (e) {} }
 const rnd = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const FIXED_RACE_DT = 1 / 60;
+const MSG_MAX_W = W * 0.88;
+
+/** Seeded PRNG (mulberry32). Same seed -> same [0,1) sequence. */
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** Autopilot tuning (deterministic; no random choices). */
+const AUTOPILOT = {
+  LOOK_AHEAD_Z: 3400,
+  MILK_COLLECT_X: 0.34,
+  HAZARD_AVOID_Z: 420,
+  HAZARD_LANE_X: 0.3,
+  STEER_DEADZONE: 0.05,
+  STEER_FULL: 0.22,
+  LANE_CENTER_PULL: 0.12,
+  NITRO_MIN_T: 42,
+  NITRO_CLEAR_Z: 2600,
+  NITRO_LANE_X: 0.35,
+  ZAP_RIVAL_X: 0.42,
+  ZAP_MIN_Z: 400,
+  ZAP_MAX_Z: SEG * 40,
+};
 const ease = (a, b, p) => a + (b - a) * (p * p * (3 - 2 * p));
 const FONT = 'Russo One';
 
@@ -47,18 +78,19 @@ function addSection(n, curve) { for (let i = 0; i < n; i++) segs.push({ curve: i
 while (segs.length < TRACK_SEGS) segs.push({ curve: 0 });
 segs.length = TRACK_SEGS;
 let milk = [], hazards = [], boosts = [], decor = [], rivals = [];
-function seedTrack(playerCar) {
+function seedTrack(playerCar, rng = Math.random) {
+  const r = (a, b) => a + rng() * (b - a);
   milk = []; hazards = []; boosts = []; decor = []; rivals = [];
   for (let i = 18; i < TRACK_SEGS - 4; i += 5) {
-    const lane = Math.sin(i / 9) * 0.55 + (Math.random() - 0.5) * 0.25;
+    const lane = Math.sin(i / 9) * 0.55 + (rng() - 0.5) * 0.25;
     milk.push({ z: i * SEG, x: clamp(lane, -0.85, 0.85), taken: false });
-    if (Math.random() < 0.35) milk.push({ z: i * SEG + SEG * 2, x: clamp(lane + (Math.random() < .5 ? .35 : -.35), -.85, .85), taken: false });
+    if (rng() < 0.35) milk.push({ z: i * SEG + SEG * 2, x: clamp(lane + (rng() < .5 ? .35 : -.35), -.85, .85), taken: false });
   }
-  for (let i = 34; i < TRACK_SEGS - 6; i += 17) hazards.push({ z: i * SEG, x: rnd(-.7, .7), hit: false });
-  for (let i = 60; i < TRACK_SEGS - 6; i += 90) boosts.push({ z: i * SEG, x: rnd(-.5, .5), taken: false });
-  for (let i = 4; i < TRACK_SEGS; i += 6) decor.push({ z: i * SEG, x: (i / 6 % 2 ? 1 : -1) * rnd(1.35, 2.6), kind: Math.random() < .62 ? 'candleG' : 'candleR', s: rnd(.8, 1.4) });
+  for (let i = 34; i < TRACK_SEGS - 6; i += 17) hazards.push({ z: i * SEG, x: r(-.7, .7), hit: false });
+  for (let i = 60; i < TRACK_SEGS - 6; i += 90) boosts.push({ z: i * SEG, x: r(-.5, .5), taken: false });
+  for (let i = 4; i < TRACK_SEGS; i += 6) decor.push({ z: i * SEG, x: (i / 6 % 2 ? 1 : -1) * r(1.35, 2.6), kind: rng() < .62 ? 'candleG' : 'candleR', s: r(.8, 1.4) });
   const others = CARS.filter((c) => c.id !== playerCar).map((c) => c.id);
-  for (let k = 0; k < 4; k++) rivals.push({ z: 3000 + k * 8000, x: rnd(-.6, .6), v: MAX_SPEED * rnd(.66, .86), car: others[k % others.length], phase: rnd(0, 6), stun: 0, spin: 0 });
+  for (let k = 0; k < 4; k++) rivals.push({ z: 3000 + k * 8000, x: r(-.6, .6), v: MAX_SPEED * r(.66, .86), car: others[k % others.length], phase: r(0, 6), stun: 0, spin: 0 });
 }
 const idxOf = (z) => Math.floor((((z % LEN) + LEN) % LEN) / SEG) % TRACK_SEGS;
 
@@ -102,9 +134,20 @@ class Garage extends Phaser.Scene {
       r.on('pointerup', () => { this.tab = t; this.draw(); });
       return { t, r, l };
     });
+    this.seedVal = (Math.random() * 1e9 | 0) >>> 0;
+    this.seedTxt = txt(this, W / 2, H - 200, 'SEED  ' + this.seedVal, 26, '#9a8cd8');
+    const bumpSeed = () => { this.seedVal = (Math.random() * 1e9 | 0) >>> 0; this.seedTxt.setText('SEED  ' + this.seedVal); };
+    button(this, W - 100, H - 200, 120, 52, 'NEW', 0x2a1370, bumpSeed, '#d9ccff');
     button(this, W / 2, H - 110, 560, 120, 'RACE', 0x39ff88, () => { persist(); this.scene.start('race'); });
+    button(this, W / 2, H - 250, 560, 88, 'AUTO RACE', 0x6a45f0, () => { persist(); this.scene.start('race', { seed: this.seedVal, autopilot: true }); }, '#ffffff');
     this.toast = txt(this, W / 2, 232, '', 30, '#ffd75e').setAlpha(0).setDepth(50);
     this.draw();
+    const qp = new URLSearchParams(location.search);
+    if (qp.get('auto') === '1' && qp.has('seed')) {
+      const seed = parseInt(qp.get('seed'), 10) >>> 0;
+      persist();
+      this.scene.start('race', { seed, autopilot: true, skipPersist: qp.get('persist') !== '1' });
+    }
   }
   say(m, c = '#ffd75e') { this.toast.setText(m).setColor(c).setAlpha(1); this.tweens.killTweensOf(this.toast); this.tweens.add({ targets: this.toast, alpha: 0, delay: 1100, duration: 400 }); }
   buy(price) { if (save.milk < price) { this.say('Not enough milk', '#ff6d8a'); return false; } save.milk -= price; persist(); return true; }
@@ -158,9 +201,26 @@ class Garage extends Phaser.Scene {
 // ---------- race ----------
 class Race extends Phaser.Scene {
   constructor() { super('race'); }
+  init(data = {}) {
+    this.raceSeed = data.seed != null ? data.seed >>> 0 : null;
+    this.autopilot = !!data.autopilot;
+    this.skipPersist = !!data.skipPersist;
+    this.syncSim = !!data.syncSim;
+    this.fixedStep = (this.autopilot && this.raceSeed != null) || this.syncSim;
+    this.stepAcc = 0;
+    this.autoSteer = 0;
+    this.zapCount = 0;
+    this.spillCount = 0;
+  }
   create() {
     this.car = carById(save.car); this.mk = (n) => this.textures.exists(n);
-    seedTrack(this.car.id);
+    if (this.raceSeed != null) {
+      this.rng = mulberry32(this.raceSeed);
+      seedTrack(this.car.id, () => this.rng());
+    } else {
+      this.rng = null;
+      seedTrack(this.car.id);
+    }
     this.sky = this.add.image(W / 2, 0, 'sky').setOrigin(.5, 0).setDisplaySize(W * 1.9, HY + 60).setDepth(0);
     this.gfx = this.add.graphics().setDepth(1); this.pool = [];
     this.zapBolts = [];
@@ -223,6 +283,8 @@ class Race extends Phaser.Scene {
     this.milkTxt = this.add.text(100, 28, '0', f(64)).setDepth(950);
     this.timeTxt = this.add.text(W - 36, 30, '60', f(64, '#39ff88')).setOrigin(1, 0).setDepth(950);
     this.msg = this.add.text(W / 2, 330, '', f(58, '#ffd75e')).setOrigin(.5).setDepth(960).setAlpha(0);
+    if (this.autopilot) txt(this, W / 2, 175, 'AUTOPILOT', 34, '#7dffb0').setDepth(960);
+    if (this.raceSeed != null) txt(this, W / 2, 210, 'SEED  ' + this.raceSeed, 24, '#9a8cd8').setDepth(960);
     this.speedBar = this.add.graphics().setDepth(950);
     this.input.addPointer(3);
     this.keys = this.input.keyboard.addKeys({ l: 'LEFT', r: 'RIGHT', a: 'A', d: 'D', f: 'SPACE', n: 'N' });
@@ -237,6 +299,14 @@ class Race extends Phaser.Scene {
     if (save.inv.nitro > 0) { this.nitroBtn = true; btn(455, 1100, 'NITRO', () => this.nitro()); }
     this.input.keyboard.on('keydown-SPACE', () => this.zap()); this.input.keyboard.on('keydown-N', () => this.nitro());
     this.reset();
+    if (this.syncSim) {
+      let guard = 0;
+      while (!this.over && guard < 5000) {
+        this.simulationStep(FIXED_RACE_DT);
+        this.updateZapBolts(FIXED_RACE_DT);
+        guard++;
+      }
+    }
   }
   reset() {
     Object.assign(this, { pos: 0, speed: 0, px: 0, milkN: 0, t: RACE_SECS, boost: 0, stun: 0, over: false, shield: 0, magnet: 0, skyOff: 0, cool: 0, combo: 0, comboT: 0, lean: 0, recoilY: 0 });
@@ -244,15 +314,33 @@ class Race extends Phaser.Scene {
     this.zapSprPool.forEach((s) => s.setVisible(false));
     this.fxGfx.clear();
     this.shieldGfx.clear();
-    if (save.inv.shield > 0) { save.inv.shield--; this.shield = 1; }
-    if (save.inv.magnet > 0) { save.inv.magnet--; this.magnet = 12; }
-    persist(); this.milkTxt.setText('0');
+    this.raceNitro = save.inv.nitro;
+    if (this.skipPersist) {
+      if (save.inv.shield > 0) this.shield = 1;
+      if (save.inv.magnet > 0) this.magnet = 12;
+    } else {
+      if (save.inv.shield > 0) { save.inv.shield--; this.shield = 1; }
+      if (save.inv.magnet > 0) { save.inv.magnet--; this.magnet = 12; }
+      persist();
+    }
+    this.milkTxt.setText('0');
     if (this.shield) this.flash('SHIELD ON', '#7dffb0'); else if (this.magnet) this.flash('MAGNET ON', '#7dffb0');
   }
-  flash(text, color) { this.msg.setText(text).setColor(color || '#ffd75e').setAlpha(1).setScale(1.25); this.tweens.killTweensOf(this.msg); this.tweens.add({ targets: this.msg, alpha: 0, scale: 1, duration: 900, delay: 250 }); }
+  nitroLeft() { return this.skipPersist ? this.raceNitro : save.inv.nitro; }
+  flash(text, color) {
+    this.msg.setText(text).setColor(color || '#ffd75e').setAlpha(1).setScale(1);
+    const pop = 1.25;
+    const rawW = this.msg.width;
+    const popScale = rawW * pop > MSG_MAX_W ? (MSG_MAX_W / rawW) : pop;
+    const endScale = rawW > MSG_MAX_W ? MSG_MAX_W / rawW : 1;
+    this.msg.setScale(popScale);
+    this.tweens.killTweensOf(this.msg);
+    this.tweens.add({ targets: this.msg, alpha: 0, scale: endScale, duration: 900, delay: 250 });
+  }
   nitro() {
-    if (this.over || save.inv.nitro <= 0 || this.boost > 0.2) return;
-    save.inv.nitro--; persist(); this.boost = 2.0; this.flash('NITRO!', '#39ff88');
+    if (this.over || this.nitroLeft() <= 0 || this.boost > 0.2) return;
+    if (this.skipPersist) this.raceNitro--; else { save.inv.nitro--; persist(); }
+    this.boost = 2.0; this.flash('NITRO!', '#39ff88');
     this.nitroFx.emitParticleAt(W / 2, 980, 14);
   }
   bumpMilkHud() {
@@ -283,8 +371,61 @@ class Race extends Phaser.Scene {
       ey = HY + sc * CAM_H * H / 2 * .62 + yOff;
     };
     if (best) aimAt(best.r.x, best.d, -60);
-    else aimAt(this.px + (Math.random() < .5 ? -.15 : .15), 2200, -20);
+    else {
+      const side = this.rng ? (this.rng() < .5 ? -.15 : .15) : (Math.random() < .5 ? -.15 : .15);
+      aimAt(this.px + side, 2200, -20);
+    }
     return { sx, sy, ex, ey, best };
+  }
+  relZ(z) {
+    const pz = this.pos + PLAYER_Z;
+    let d = z - pz;
+    if (d < -LEN / 2) d += LEN;
+    if (d > LEN / 2) d -= LEN;
+    return d;
+  }
+  autopilotThink() {
+    const A = AUTOPILOT;
+    let targetX = -this.px * A.LANE_CENTER_PULL;
+    let bestM = null;
+    for (const m of milk) {
+      if (m.taken) continue;
+      const d = this.relZ(m.z);
+      if (d < 120 || d > A.LOOK_AHEAD_Z) continue;
+      if (!bestM || d < bestM.d) bestM = { d, x: m.x };
+    }
+    if (bestM) targetX = bestM.x;
+    for (const h of hazards) {
+      if (h.hit) continue;
+      const d = this.relZ(h.z);
+      if (d < 80 || d > A.HAZARD_AVOID_Z) continue;
+      if (Math.abs(h.x - this.px) < A.HAZARD_LANE_X + 0.15) {
+        targetX = clamp(this.px + (this.px >= h.x ? 0.55 : -0.55), -0.85, 0.85);
+      }
+    }
+    const dx = targetX - this.px;
+    if (Math.abs(dx) < A.STEER_DEADZONE) this.autoSteer = 0;
+    else if (Math.abs(dx) >= A.STEER_FULL) this.autoSteer = dx > 0 ? 1 : -1;
+    else this.autoSteer = dx / A.STEER_FULL;
+    if (this.cool <= 0) {
+      for (const r of rivals) {
+        let d = r.z - (this.pos + PLAYER_Z);
+        if (d < 0) d += LEN;
+        if (d > A.ZAP_MIN_Z && d < A.ZAP_MAX_Z && Math.abs(r.x - this.px) < A.ZAP_RIVAL_X) {
+          this.zap();
+          break;
+        }
+      }
+    }
+    if (this.nitroLeft() > 0 && this.boost <= 0.2 && this.t >= A.NITRO_MIN_T) {
+      let clear = true;
+      for (const h of hazards) {
+        if (h.hit) continue;
+        const d = this.relZ(h.z);
+        if (d > 0 && d < A.NITRO_CLEAR_Z && Math.abs(h.x - this.px) < A.NITRO_LANE_X) clear = false;
+      }
+      if (clear) this.nitro();
+    }
   }
   muzzleFlash(x, y) {
     const g = this.zapMuzzleGfx;
@@ -303,7 +444,8 @@ class Race extends Phaser.Scene {
       r.v *= .6;
       r.spin = 2.6;
       this.rivalBoom.emitParticleAt(ex, ey, 16);
-      for (let i = 0; i < 3; i++) milk.push({ z: r.z + (i + 1) * 380, x: clamp(r.x + rnd(-.4, .4), -.9, .9), taken: false, fresh: true });
+      const jx = () => (this.rng ? (this.rng() * 2 - 1) * 0.4 : rnd(-.4, .4));
+      for (let i = 0; i < 3; i++) milk.push({ z: r.z + (i + 1) * 380, x: clamp(r.x + jx(), -.9, .9), taken: false, fresh: true });
       this.flash('ZAPPED!  +MILK DROP', '#39ff88');
       this.cameras.main.shake(120, .006);
     }
@@ -330,6 +472,7 @@ class Race extends Phaser.Scene {
   zap() {
     const cd = [.34, .28, .23, .18][save.up.zap];
     if (this.over || this.cool > 0) return;
+    this.zapCount++;
     this.cool = cd;
     const aim = this.zapAim();
     const spr = this.zapSprPool.find((s) => !s.visible) || this.zapSprPool[0];
@@ -337,43 +480,64 @@ class Race extends Phaser.Scene {
     this.muzzleFlash(aim.sx, aim.sy);
     this.zapRecoil();
   }
-  update(_, dtms) {
-    const dt = Math.min(dtms, 50) / 1000, c = this.car;
+  simulationStep(dt) {
+    const c = this.car;
     const topSpeed = MAX_SPEED * c.speed * (1 + save.up.engine * .04), accel = ACCEL * c.accel, steerK = 2.1 * c.grip * (1 + save.up.tires * .1);
-    if (!this.over) {
-      this.t -= dt; this.cool -= dt; this.comboT -= dt; this.magnet -= dt; if (this.comboT <= 0) this.combo = 0;
-      const left = this.keys.l.isDown || this.keys.a.isDown || this.touch.l, right = this.keys.r.isDown || this.keys.d.isDown || this.touch.r;
-      if (this.keys.f.isDown && this.cool <= 0) this.zap();
-      const steer = (right ? 1 : 0) - (left ? 1 : 0); this.lean += (steer - this.lean) * Math.min(1, dt * 10);
-      const target = this.boost > 0 ? topSpeed * 1.6 : (Math.abs(this.px) > 1.02 ? OFFROAD_MAX : topSpeed) * (this.stun > 0 ? .35 : 1);
-      this.speed += (this.speed < target ? accel : -BRAKE_OFF) * dt; this.speed = clamp(this.speed, 0, BOOST_SPEED * 1.2);
-      if (this.speed > target && this.boost <= 0) this.speed = Math.max(target, this.speed - BRAKE_OFF * dt);
-      this.boost -= dt; this.stun -= dt;
-      const sp = this.speed / MAX_SPEED, cur = this.seg(this.pos + PLAYER_Z).curve;
-      this.px += steer * dt * steerK * sp - cur * dt * sp * .62; this.px = clamp(this.px, -2.2, 2.2);
-      const prev = this.pos; this.pos += this.speed * dt;
-      if (this.pos >= LEN) { this.pos -= LEN; milk.forEach((m) => { if (!m.fresh) m.taken = false; }); hazards.forEach((h) => (h.hit = false)); boosts.forEach((b) => (b.taken = false)); milk = milk.filter((m) => !m.fresh); }
-      this.collide();
-      rivals.forEach((r) => {
-        r.stun = Math.max(0, r.stun - dt);
-        if (r.spin > 0) r.spin = Math.max(0, r.spin - dt * 2.2);
-        const base = MAX_SPEED * .8;
-        r.v += ((r.stun > 0 ? 0 : base * (.8 + .1 * Math.sin(r.phase))) - r.v) * Math.min(1, dt * 1.2);
-        r.z = (r.z + r.v * dt * (r.stun > 0 ? .5 : 1)) % LEN;
-        r.phase += dt * .7;
-        r.x = clamp(r.x + Math.sin(r.phase * 1.7) * dt * .5, -.85, .85);
-      });
-      if (this.boost > 0 && this.speed > MAX_SPEED * 0.4) {
-        const ky = 1010 - (this.recoilY || 0);
-        if (Math.random() < 0.48) this.nitroFx.emitParticleAt(W / 2 - 18, ky - 36, 1);
-      }
-      if (this.t <= 0) { this.t = 0; this.over = true; this.speed = 0; this.finish(); }
+    if (this.over) return;
+    this.t -= dt; this.cool -= dt; this.comboT -= dt; this.magnet -= dt; if (this.comboT <= 0) this.combo = 0;
+    if (this.autopilot) this.autopilotThink();
+    const left = this.autopilot ? this.autoSteer < -0.15 : (this.keys.l.isDown || this.keys.a.isDown || this.touch.l);
+    const right = this.autopilot ? this.autoSteer > 0.15 : (this.keys.r.isDown || this.keys.d.isDown || this.touch.r);
+    if (!this.autopilot && this.keys.f.isDown && this.cool <= 0) this.zap();
+    const steer = this.autopilot ? clamp(this.autoSteer, -1, 1) : (right ? 1 : 0) - (left ? 1 : 0);
+    this.lean += (steer - this.lean) * Math.min(1, dt * 10);
+    const target = this.boost > 0 ? topSpeed * 1.6 : (Math.abs(this.px) > 1.02 ? OFFROAD_MAX : topSpeed) * (this.stun > 0 ? .35 : 1);
+    this.speed += (this.speed < target ? accel : -BRAKE_OFF) * dt; this.speed = clamp(this.speed, 0, BOOST_SPEED * 1.2);
+    if (this.speed > target && this.boost <= 0) this.speed = Math.max(target, this.speed - BRAKE_OFF * dt);
+    this.boost -= dt; this.stun -= dt;
+    const sp = this.speed / MAX_SPEED, cur = this.seg(this.pos + PLAYER_Z).curve;
+    this.px += steer * dt * steerK * sp - cur * dt * sp * .62; this.px = clamp(this.px, -2.2, 2.2);
+    this.pos += this.speed * dt;
+    if (this.pos >= LEN) { this.pos -= LEN; milk.forEach((m) => { if (!m.fresh) m.taken = false; }); hazards.forEach((h) => (h.hit = false)); boosts.forEach((b) => (b.taken = false)); milk = milk.filter((m) => !m.fresh); }
+    this.collide();
+    rivals.forEach((r) => {
+      r.stun = Math.max(0, r.stun - dt);
+      if (r.spin > 0) r.spin = Math.max(0, r.spin - dt * 2.2);
+      const base = MAX_SPEED * .8;
+      r.v += ((r.stun > 0 ? 0 : base * (.8 + .1 * Math.sin(r.phase))) - r.v) * Math.min(1, dt * 1.2);
+      r.z = (r.z + r.v * dt * (r.stun > 0 ? .5 : 1)) % LEN;
+      r.phase += dt * .7;
+      r.x = clamp(r.x + Math.sin(r.phase * 1.7) * dt * .5, -.85, .85);
+    });
+    if (this.boost > 0 && this.speed > MAX_SPEED * 0.4) {
+      const ky = 1010 - (this.recoilY || 0);
+      const puff = this.rng ? this.rng() : Math.random();
+      if (puff < 0.48) this.nitroFx.emitParticleAt(W / 2 - 18, ky - 36, 1);
     }
+    if (this.t <= 0) { this.t = 0; this.over = true; this.speed = 0; this.finish(); }
+  }
+  update(_, dtms) {
+    let dt = Math.min(dtms, 50) / 1000;
+    if (this.fixedStep) {
+      this.stepAcc += dt;
+      const cap = 12;
+      let n = 0;
+      while (this.stepAcc >= FIXED_RACE_DT && n < cap) {
+        this.stepAcc -= FIXED_RACE_DT;
+        this.simulationStep(FIXED_RACE_DT);
+        this.updateZapBolts(FIXED_RACE_DT);
+        n++;
+      }
+      dt = FIXED_RACE_DT * n;
+    } else {
+      this.simulationStep(dt);
+      this.updateZapBolts(dt);
+    }
+    if (!dt) dt = FIXED_RACE_DT;
     this.skyOff -= this.seg(this.pos + PLAYER_Z).curve * dt * (this.speed / MAX_SPEED) * 90; this.sky.x = W / 2 + clamp(this.skyOff, -120, 120);
     this.render();
     this.milkTxt.setText(String(this.milkN)); this.timeTxt.setText(String(Math.ceil(this.t))).setColor(this.t < 10 ? '#ff4d6d' : '#39ff88');
     this.speedBar.clear().fillStyle(0xffffff, .2).fillRoundedRect(W / 2 - 150, 100, 300, 14, 7).fillStyle(this.boost > 0 ? 0x39ff88 : 0xc9bcff, .95).fillRoundedRect(W / 2 - 150, 100, 300 * clamp(this.speed / (BOOST_SPEED * 1.2), 0, 1), 14, 7);
-    this.updateZapBolts(dt);
   }
   collide() {
     const rel = (z) => { const pz = this.pos + PLAYER_Z; let d = z - pz; if (d < -LEN / 2) d += LEN; if (d > LEN / 2) d -= LEN; return d; };
@@ -389,16 +553,36 @@ class Race extends Phaser.Scene {
         if (this.combo === 5) this.flash('COMBO x2!', '#ffd75e');
       }
     }
-    for (const h of hazards) if (!h.hit) { const d = rel(h.z); if (Math.abs(d) < 320 && Math.abs(h.x - this.px) < .26) { h.hit = true; this.combo = 0; if (this.shield > 0) { this.shield = 0; this.milkPop.emitParticleAt(W / 2, 900, 8); this.cameras.main.shake(100, .008); this.flash('SHIELD BLOCKED IT', '#7dffb0'); continue; } const lose = Math.min(this.milkN, 4); this.milkN -= lose; this.stun = .7; this.speed *= .45; this.cameras.main.shake(200, .014); this.flash('SPILLED -' + lose, '#ff4d6d'); for (let i = 0; i < lose; i++) milk.push({ z: this.pos + PLAYER_Z + 900 + i * 420, x: clamp(this.px + rnd(-.5, .5), -.9, .9), taken: false, fresh: true }); } }
+    const spillR = () => (this.rng ? this.rng() * 1 - 0.5 : Math.random() - 0.5);
+    for (const h of hazards) if (!h.hit) { const d = rel(h.z); if (Math.abs(d) < 320 && Math.abs(h.x - this.px) < .26) { h.hit = true; this.combo = 0; if (this.shield > 0) { this.shield = 0; this.milkPop.emitParticleAt(W / 2, 900, 8); this.cameras.main.shake(100, .008); this.flash('SHIELD BLOCKED IT', '#7dffb0'); continue; } const lose = Math.min(this.milkN, 4); this.milkN -= lose; this.spillCount++; this.stun = .7; this.speed *= .45; this.cameras.main.shake(200, .014); this.flash('SPILLED -' + lose, '#ff4d6d'); for (let i = 0; i < lose; i++) milk.push({ z: this.pos + PLAYER_Z + 900 + i * 420, x: clamp(this.px + spillR() * .5, -.9, .9), taken: false, fresh: true }); } }
     for (const bo of boosts) if (!bo.taken) { const d = rel(bo.z); if (Math.abs(d) < 360 && Math.abs(bo.x - this.px) < .3) { bo.taken = true; this.boost = 1.8; this.flash('BOOST!', '#39ff88'); } }
   }
+  raceResult() {
+    return {
+      seed: this.raceSeed,
+      autopilot: this.autopilot,
+      milk: this.milkN,
+      pos: Math.floor(this.pos),
+      zaps: this.zapCount,
+      spills: this.spillCount,
+      car: this.car.id,
+    };
+  }
   finish() {
-    save.milk += this.milkN; save.races++; const newBest = this.milkN > save.best; if (newBest) save.best = this.milkN; persist();
-    if (window.MunchyKart && window.MunchyKart.onFinish) window.MunchyKart.onFinish({ milk: this.milkN, car: this.car.id });
+    const result = this.raceResult();
+    window.MunchyKart.lastRaceResult = result;
+    if (!this.skipPersist) {
+      save.milk += this.milkN; save.races++; const newBest = this.milkN > save.best; if (newBest) save.best = this.milkN; persist();
+    }
+    if (window.MunchyKart && window.MunchyKart.onFinish) window.MunchyKart.onFinish(result);
     this.add.rectangle(W / 2, H / 2, W, H, 0x07040f, .75).setDepth(1000);
     const z = (y, s, size, color) => txt(this, W / 2, y, s, size, color).setDepth(1001);
-    z(300, 'FINISH!', 100, '#39ff88'); z(440, '+' + this.milkN + ' MILK', 84, '#ffffff'); z(540, 'WALLET  ' + save.milk, 44, '#ffd75e'); z(610, newBest ? 'NEW BEST!' : 'BEST  ' + save.best, 40, newBest ? '#39ff88' : '#d9ccff');
-    const b1 = button(this, W / 2, 780, 520, 120, 'RACE AGAIN', 0x39ff88, () => this.scene.restart()); const b2 = button(this, W / 2, 930, 520, 110, 'GARAGE', 0x6a45f0, () => this.scene.start('garage'), '#ffffff');
+    const newBest = !this.skipPersist && this.milkN > save.best;
+    z(300, 'FINISH!', 100, '#39ff88'); z(440, '+' + this.milkN + ' MILK', 84, '#ffffff');
+    if (this.raceSeed != null) z(520, 'SEED  ' + this.raceSeed, 32, '#9a8cd8');
+    if (!this.skipPersist) { z(560, 'WALLET  ' + save.milk, 44, '#ffd75e'); z(630, newBest ? 'NEW BEST!' : 'BEST  ' + save.best, 40, newBest ? '#39ff88' : '#d9ccff'); }
+    const again = () => this.scene.restart({ seed: this.raceSeed, autopilot: this.autopilot, skipPersist: this.skipPersist });
+    const b1 = button(this, W / 2, 780, 520, 120, 'RACE AGAIN', 0x39ff88, again); const b2 = button(this, W / 2, 930, 520, 110, 'GARAGE', 0x6a45f0, () => this.scene.start('garage'), '#ffffff');
     [b1.r, b1.t, b2.r, b2.t].forEach((o) => o.setDepth(1002));
   }
   proj(z, x, camX) { const sc = CAM_D / z; return { sc, x: W / 2 + sc * (x - camX) * W / 2, y: HY + sc * CAM_H * H / 2 * .62, w: sc * ROAD * W / 2 }; }
@@ -471,6 +655,19 @@ const mkGame = new Phaser.Game({
   scene: [Boot, Garage, Race],
 });
 window.MunchyKart.game = mkGame;
+window.MunchyKart.AUTOPILOT = AUTOPILOT;
+window.MunchyKart.runDeterministicAutopilot = (seed) => {
+  const s = seed >>> 0;
+  return new Promise((resolve) => {
+    window.MunchyKart.onFinish = (r) => resolve(r);
+    mkGame.scene.start('race', { seed: s, autopilot: true, skipPersist: true, syncSim: true });
+  });
+};
+window.MunchyKart.startAutopilotRace = (seed, opts = {}) => new Promise((resolve) => {
+  const s = seed >>> 0;
+  window.MunchyKart.onFinish = (r) => resolve(r);
+  mkGame.scene.start('race', { seed: s, autopilot: true, skipPersist: !!opts.skipPersist, syncSim: !!opts.syncSim });
+});
 const mkHost = document.getElementById('game');
 const mkRefresh = () => {
   const sm = mkGame.scale;
