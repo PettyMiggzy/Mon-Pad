@@ -1,10 +1,11 @@
 import { v3Configured } from '@/lib/constants';
 import { DEMO_BOARD } from '@/lib/demo';
+import { v4Configured } from '@/lib/v4/config';
 
 export function AddressGuard() {
   // The red ".env.local" strip is a local reminder. On the public demo
   // (factory unset) it sits on top of the site and looks like a broken deploy.
-  if (v3Configured() || DEMO_BOARD || process.env.NODE_ENV === 'production') return null;
+  if (v3Configured() || v4Configured() || DEMO_BOARD || process.env.NODE_ENV === 'production') return null;
   return (
     <div
       role="alert"

@@ -13,6 +13,8 @@ export type TokenSummary = {
   graduated: boolean;
   createdAt: number;
   sparkline?: number[];
+  /** Set for Monpad V4 tokens: the money fields are USDC (stored with 18 decimals), not MON. */
+  quote?: 'USDC';
 };
 
 export type Trade = {

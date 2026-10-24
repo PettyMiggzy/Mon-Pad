@@ -49,11 +49,11 @@ export function TokenTile({ token }: { token: TokenSummary }) {
         <div className="pad-card-stats">
           <div>
             <div className="k">Mcap</div>
-            <div className="v">{fmtMon(token.marketCapMon)}</div>
+            <div className="v">{token.quote === 'USDC' ? '$' : ''}{fmtMon(token.marketCapMon)}</div>
           </div>
           <div>
             <div className="k">24h vol</div>
-            <div className="v up">{fmtMon(token.volume24hMon)}</div>
+            <div className="v up">{token.quote === 'USDC' ? '$' : ''}{fmtMon(token.volume24hMon)}</div>
           </div>
           <Spark points={token.sparkline} />
         </div>

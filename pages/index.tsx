@@ -12,6 +12,8 @@ import { listV3Tokens, getV3CardStats } from '@/lib/chainV3';
 import { MOCK_MODE, v3Configured } from '@/lib/constants';
 import { mockTokens } from '@/lib/mocks';
 import { DEMO_BOARD, pickCrown } from '@/lib/demo';
+import { v4Configured } from '@/lib/v4/config';
+import { listV4Tokens } from '@/lib/v4/chain';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 
@@ -50,6 +52,23 @@ export default function Home() {
           setDemo(true);
           setTokens(mapped);
           setLoading(false);
+          return;
+        }
+
+        if (v4Configured()) {
+          const v4 = await listV4Tokens(120);
+          if (cancelled) return;
+          setDemo(false);
+          setTokens(v4);
+          setLoading(false);
+          try {
+            const addrs = v4.map((t) => t.address).join(',');
+            const metas = addrs ? await fetch(`/api/token-meta?addresses=${addrs}`).then((r) => (r.ok ? r.json() : [])) : [];
+            if (!cancelled && Array.isArray(metas) && metas.length) {
+              const byAddr = new Map<string, string>(metas.filter((m: any) => m?.image_url).map((m: any) => [String(m.address).toLowerCase(), m.image_url as string]));
+              if (byAddr.size) setTokens((prev) => prev.map((t) => ({ ...t, imageUrl: byAddr.get(t.address.toLowerCase()) || t.imageUrl })));
+            }
+          } catch { /* optional */ }
           return;
         }
 

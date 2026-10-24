@@ -15,6 +15,8 @@ import { FeeSplit } from '@/components/launch/FeeSplit';
 import { LP_FEE_SPLIT_COPY } from '@/lib/fees';
 import { setHeroMood } from '@/components/hero3d/bus';
 import { useToast } from '@/components/ui/Toast';
+import V4Create from '@/components/v4/V4Create';
+import { v4Configured } from '@/lib/v4/config';
 
 type TxState = { status: 'idle' | 'pending' | 'success' | 'error'; message?: string };
 
@@ -28,7 +30,7 @@ function StatusPill({ state }: { state: TxState }) {
   );
 }
 
-export default function CreatePage() {
+function LegacyCreatePage() {
   const router = useRouter();
   const canonical = 'https://www.monpad.net' + router.asPath.split('?')[0];
   const { address } = useAccount();
@@ -341,4 +343,9 @@ function Stat({ label, value }: { label: string; value: string }) {
       <span>{value}</span>
     </div>
   );
+}
+
+// With the V4 launcher configured, launching goes through Uniswap V4 (USDC pairs). Otherwise the existing flow is unchanged.
+export default function CreatePage() {
+  return v4Configured() ? <V4Create /> : <LegacyCreatePage />;
 }

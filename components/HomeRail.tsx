@@ -5,6 +5,8 @@ import { motion } from 'framer-motion';
 import { Trophy, GraduationCap, Flame } from 'lucide-react';
 import { type TokenSummary } from '../lib/api';
 import { listV3Tokens } from '../lib/chainV3';
+import { v4Configured } from '../lib/v4/config';
+import { listV4Tokens } from '../lib/v4/chain';
 import { MOCK_MODE } from '../lib/constants';
 import { DEMO_BOARD } from '../lib/demo';
 import { mockTokens } from '../lib/mocks';
@@ -58,6 +60,13 @@ export default function HomeRail({ variant, limit = 8 }: Props) {
           else picked.sort((a, b) => cmpBigDesc(a.monRaisedNet, b.monRaisedNet));
           if (cancelled) return;
           setRows(picked.slice(0, limit));
+          return;
+        }
+
+        if (v4Configured()) {
+          const v4 = await listV4Tokens(60);
+          if (cancelled) return;
+          setRows(v4.slice(0, limit));
           return;
         }
 
