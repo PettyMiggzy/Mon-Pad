@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Munchy Kart | Monpad</title>
+<style>
+@font-face{font-family:'Russo One';src:url('/fonts/RussoOne-Regular.ttf');font-display:block}
+html,body{margin:0;height:100%;background:#07040f;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none}
+#game{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+canvas{display:block}
+#err{position:fixed;left:8px;bottom:8px;color:#f66;font:12px monospace;display:none}
+</style></head>
+<body><div id="game"></div><div id="err"></div>
+<script src="phaser.min.js"></script>
+<script src="game.js"></script>
+</body></html>
