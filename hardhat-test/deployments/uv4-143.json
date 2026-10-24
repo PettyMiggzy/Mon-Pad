@@ -1,14 +1,14 @@
 {
   "chainId": 143,
   "deployer": "0xf90bBe889167269f90c5AD28a402f4ff19658675",
-  "launcher": "0xbB720AC8Eb7Ed7a6E868b6335972Dbb71d585e0b",
-  "hook": "0xaE80C0eC737700e3dE0dFD8De6B7437351DF2080",
-  "router": "0xdd7E7564BeB62DD715105654082582451b66d4D7",
+  "launcher": "0x2d55391d4170C7cAF9eE53Cf8BAD00748452ec84",
+  "hook": "0xaff86Dd6e66df26b971767959e854e12b5f7a080",
+  "router": "0xC20A50750a75d2d8FFF47E63003636C3CF0bb18c",
   "quote": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
   "platform": "0xf4352d939b90b4f589ddc12a7064b57039242a47",
   "monshiWallet": "0x5a741bff115b3c5409da04ee7ab9b0f4e5e1f288",
   "pendingOwner": "0xf4352d939b90b4f589ddc12a7064b57039242a47",
-  "startMcapUsdc": 250000,
-  "creationFeeUsdc": 100,
-  "deployedAt": "2026-10-24T22:25:07.127Z"
+  "startMcapUsdc": 3000,
+  "creationFeeUsdc": 0,
+  "deployedAt": "2026-10-24T22:36:05.015Z"
 }
