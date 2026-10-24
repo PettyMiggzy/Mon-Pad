@@ -11,7 +11,7 @@ const need = [
   'syncSim',
   'fixedStep',
   'MSG_MAX_W',
-  'AUTO RACE',
+  'autopilot: true',
 ];
 const missing = need.filter((s) => !js.includes(s));
 if (missing.length) {
