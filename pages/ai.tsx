@@ -61,6 +61,7 @@ export default function AiPage() {
         <p className="text-white/70 mb-3">Add this to your assistant&apos;s MCP settings (Claude Desktop, Cursor, and others use the same format):</p>
         <pre className="rounded-xl border border-white/10 bg-black/40 p-4 text-sm text-white/90 overflow-x-auto">{CONFIG}</pre>
         <p className="text-white/60 text-sm mt-3">The server runs on your machine. Your key never leaves it and Monpad never sees it. Read-only tools work without a key.</p>
+        <p className="text-yellow-200/90 text-sm mt-2"><b>Availability:</b> the <code>@monpad/mcp</code> package is published at mainnet launch, together with the verified contract addresses. Launch by chat works today.</p>
       </section>
 
       <section className="mb-12 rounded-2xl border border-yellow-400/30 bg-yellow-400/5 p-6">
