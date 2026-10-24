@@ -58,7 +58,7 @@ function seedTrack(playerCar) {
   for (let i = 60; i < TRACK_SEGS - 6; i += 90) boosts.push({ z: i * SEG, x: rnd(-.5, .5), taken: false });
   for (let i = 4; i < TRACK_SEGS; i += 6) decor.push({ z: i * SEG, x: (i / 6 % 2 ? 1 : -1) * rnd(1.35, 2.6), kind: Math.random() < .62 ? 'candleG' : 'candleR', s: rnd(.8, 1.4) });
   const others = CARS.filter((c) => c.id !== playerCar).map((c) => c.id);
-  for (let k = 0; k < 4; k++) rivals.push({ z: 3000 + k * 8000, x: rnd(-.6, .6), v: MAX_SPEED * rnd(.66, .86), car: others[k % others.length], phase: rnd(0, 6), stun: 0 });
+  for (let k = 0; k < 4; k++) rivals.push({ z: 3000 + k * 8000, x: rnd(-.6, .6), v: MAX_SPEED * rnd(.66, .86), car: others[k % others.length], phase: rnd(0, 6), stun: 0, spin: 0, explode: 0 });
 }
 const idxOf = (z) => Math.floor((((z % LEN) + LEN) % LEN) / SEG) % TRACK_SEGS;
 
@@ -187,6 +187,34 @@ class Race extends Phaser.Scene {
       tint: [0x39ff88, 0xffffff, 0xbfffe0],
       emitting: false,
     }).setDepth(921);
+    this.rivalBoom = this.add.particles(0, 0, 'coin', {
+      speed: { min: 90, max: 520 },
+      angle: { min: 0, max: 360 },
+      lifespan: { min: 320, max: 560 },
+      scale: { start: 0.5, end: 0 },
+      tint: [0xff6d8a, 0xffb02e, 0xffffff],
+      emitting: false,
+    }).setDepth(924);
+    this.milkPop = this.add.particles(0, 0, 'coin', {
+      speed: { min: 50, max: 220 },
+      angle: { min: 230, max: 310 },
+      lifespan: 480,
+      scale: { start: 0.35, end: 0 },
+      tint: [0xffffff, 0xd9ccff],
+      gravityY: 280,
+      emitting: false,
+    }).setDepth(801);
+    this.nitroFx = this.add.particles(0, 0, 'coin', {
+      speed: { min: 50, max: 240 },
+      angle: { min: 235, max: 305 },
+      lifespan: { min: 280, max: 420 },
+      scale: { start: 0.4, end: 0 },
+      tint: [0x39ff88, 0xffffaa],
+      emitting: false,
+    }).setDepth(588);
+    this.fxGfx = this.add.graphics().setDepth(585);
+    this.shieldGfx = this.add.graphics().setDepth(595);
+    this.recoilY = 0;
     this.kartSpr = this.add.image(W / 2, 1010, `car${this.car.id}_3`).setOrigin(.5, 1).setDepth(590);
     this.kartSpr.setDisplaySize(420, 420 * this.kartSpr.height / this.kartSpr.width);
     this.spark = this.add.particles(0, 0, 'coin', { speed: { min: 80, max: 380 }, angle: { min: 215, max: 325 }, lifespan: 700, scale: { start: .4, end: 0 }, gravityY: 500, emitting: false }).setDepth(800);
@@ -211,8 +239,10 @@ class Race extends Phaser.Scene {
     this.reset();
   }
   reset() {
-    Object.assign(this, { pos: 0, speed: 0, px: 0, milkN: 0, t: RACE_SECS, boost: 0, stun: 0, over: false, shield: 0, magnet: 0, skyOff: 0, cool: 0, combo: 0, comboT: 0, lean: 0 });
+    Object.assign(this, { pos: 0, speed: 0, px: 0, milkN: 0, t: RACE_SECS, boost: 0, stun: 0, over: false, shield: 0, magnet: 0, skyOff: 0, cool: 0, combo: 0, comboT: 0, lean: 0, recoilY: 0 });
     this.zapBolts = [];
+    this.fxGfx.clear();
+    this.shieldGfx.clear();
     this.zapSprPool.forEach((s) => s.setVisible(false));
     if (save.inv.shield > 0) { save.inv.shield--; this.shield = 1; }
     if (save.inv.magnet > 0) { save.inv.magnet--; this.magnet = 12; }
@@ -220,7 +250,21 @@ class Race extends Phaser.Scene {
     if (this.shield) this.flash('SHIELD ON', '#7dffb0'); else if (this.magnet) this.flash('MAGNET ON', '#7dffb0');
   }
   flash(text, color) { this.msg.setText(text).setColor(color || '#ffd75e').setAlpha(1).setScale(1.25); this.tweens.killTweensOf(this.msg); this.tweens.add({ targets: this.msg, alpha: 0, scale: 1, duration: 900, delay: 250 }); }
-  nitro() { if (this.over || save.inv.nitro <= 0 || this.boost > 0.2) return; save.inv.nitro--; persist(); this.boost = 2.0; this.flash('NITRO!', '#39ff88'); }
+  nitro() {
+    if (this.over || save.inv.nitro <= 0 || this.boost > 0.2) return;
+    save.inv.nitro--; persist(); this.boost = 2.0; this.flash('NITRO!', '#39ff88');
+    this.nitroFx.emitParticleAt(W / 2, 980, 14);
+  }
+  bumpMilkHud() {
+    this.tweens.killTweensOf(this.milkTxt);
+    this.milkTxt.setScale(1);
+    this.tweens.add({ targets: this.milkTxt, scale: 1.28, duration: 100, yoyo: true, ease: 'Quad.out' });
+  }
+  zapRecoil() {
+    this.recoilY = 20;
+    this.tweens.killTweensOf(this);
+    this.tweens.add({ targets: this, recoilY: 0, duration: 240, ease: 'Quad.out' });
+  }
   seg(z) { return segs[idxOf(z)]; }
   zapOrigin() { return { sx: W / 2 + 44, sy: 868 }; }
   zapAim() {
@@ -257,7 +301,9 @@ class Race extends Phaser.Scene {
       const r = best.r;
       r.stun = 1.4;
       r.v *= .6;
-      r.spin = 1.1;
+      r.spin = 2.6;
+      r.explode = 0.4;
+      this.rivalBoom.emitParticleAt(ex, ey, 16);
       for (let i = 0; i < 3; i++) milk.push({ z: r.z + (i + 1) * 380, x: clamp(r.x + rnd(-.4, .4), -.9, .9), taken: false, fresh: true });
       this.flash('ZAPPED!  +MILK DROP', '#39ff88');
       this.cameras.main.shake(120, .006);
@@ -290,6 +336,7 @@ class Race extends Phaser.Scene {
     const spr = this.zapSprPool.find((s) => !s.visible) || this.zapSprPool[0];
     this.zapBolts.push({ ...aim, t: 0, dur: 0.26, spr, resolved: false });
     this.muzzleFlash(aim.sx, aim.sy);
+    this.zapRecoil();
   }
   update(_, dtms) {
     const dt = Math.min(dtms, 50) / 1000, c = this.car;
@@ -308,7 +355,20 @@ class Race extends Phaser.Scene {
       const prev = this.pos; this.pos += this.speed * dt;
       if (this.pos >= LEN) { this.pos -= LEN; milk.forEach((m) => { if (!m.fresh) m.taken = false; }); hazards.forEach((h) => (h.hit = false)); boosts.forEach((b) => (b.taken = false)); milk = milk.filter((m) => !m.fresh); }
       this.collide();
-      rivals.forEach((r) => { r.stun = Math.max(0, r.stun - dt); const base = MAX_SPEED * .8; r.v += ((r.stun > 0 ? 0 : base * (.8 + .1 * Math.sin(r.phase))) - r.v) * Math.min(1, dt * 1.2); r.z = (r.z + r.v * dt * (r.stun > 0 ? .5 : 1)) % LEN; r.phase += dt * .7; r.x = clamp(r.x + Math.sin(r.phase * 1.7) * dt * .5, -.85, .85); });
+      rivals.forEach((r) => {
+        r.stun = Math.max(0, r.stun - dt);
+        if (r.spin > 0) r.spin = Math.max(0, r.spin - dt * 2.2);
+        if (r.explode > 0) r.explode = Math.max(0, r.explode - dt);
+        const base = MAX_SPEED * .8;
+        r.v += ((r.stun > 0 ? 0 : base * (.8 + .1 * Math.sin(r.phase))) - r.v) * Math.min(1, dt * 1.2);
+        r.z = (r.z + r.v * dt * (r.stun > 0 ? .5 : 1)) % LEN;
+        r.phase += dt * .7;
+        r.x = clamp(r.x + Math.sin(r.phase * 1.7) * dt * .5, -.85, .85);
+      });
+      if (this.boost > 0 && this.speed > MAX_SPEED * 0.4) {
+        const ky = 1010 - (this.recoilY || 0);
+        if (Math.random() < 0.5) this.nitroFx.emitParticleAt(W / 2 - 18, ky - 36, 1);
+      }
       if (this.t <= 0) { this.t = 0; this.over = true; this.speed = 0; this.finish(); }
     }
     this.skyOff -= this.seg(this.pos + PLAYER_Z).curve * dt * (this.speed / MAX_SPEED) * 90; this.sky.x = W / 2 + clamp(this.skyOff, -120, 120);
@@ -320,8 +380,18 @@ class Race extends Phaser.Scene {
   collide() {
     const rel = (z) => { const pz = this.pos + PLAYER_Z; let d = z - pz; if (d < -LEN / 2) d += LEN; if (d > LEN / 2) d -= LEN; return d; };
     const mw = this.magnet > 0 ? .75 : .3;
-    for (const m of milk) if (!m.taken) { const d = rel(m.z); if (Math.abs(d) < (this.magnet > 0 ? 700 : 360) && Math.abs(m.x - this.px) < mw) { m.taken = true; this.combo++; this.comboT = 1.6; this.milkN += this.combo >= 5 ? 2 : 1; this.spark.emitParticleAt(W / 2 + (m.x - this.px) * 160, 800, 3); if (this.combo === 5) this.flash('COMBO x2!', '#ffd75e'); } }
-    for (const h of hazards) if (!h.hit) { const d = rel(h.z); if (Math.abs(d) < 320 && Math.abs(h.x - this.px) < .26) { h.hit = true; this.combo = 0; if (this.shield > 0) { this.shield = 0; this.flash('SHIELD BLOCKED IT', '#7dffb0'); continue; } const lose = Math.min(this.milkN, 4); this.milkN -= lose; this.stun = .7; this.speed *= .45; this.cameras.main.shake(200, .014); this.flash('SPILLED -' + lose, '#ff4d6d'); for (let i = 0; i < lose; i++) milk.push({ z: this.pos + PLAYER_Z + 900 + i * 420, x: clamp(this.px + rnd(-.5, .5), -.9, .9), taken: false, fresh: true }); } }
+    for (const m of milk) if (!m.taken) {
+      const d = rel(m.z);
+      if (Math.abs(d) < (this.magnet > 0 ? 700 : 360) && Math.abs(m.x - this.px) < mw) {
+        m.taken = true; this.combo++; this.comboT = 1.6; this.milkN += this.combo >= 5 ? 2 : 1;
+        const px = W / 2 + (m.x - this.px) * 160;
+        this.spark.emitParticleAt(px, 800, 3);
+        this.milkPop.emitParticleAt(px, 780, 4);
+        this.bumpMilkHud();
+        if (this.combo === 5) this.flash('COMBO x2!', '#ffd75e');
+      }
+    }
+    for (const h of hazards) if (!h.hit) { const d = rel(h.z); if (Math.abs(d) < 320 && Math.abs(h.x - this.px) < .26) { h.hit = true; this.combo = 0; if (this.shield > 0) { this.shield = 0; this.milkPop.emitParticleAt(W / 2, 900, 8); this.cameras.main.shake(100, .008); this.flash('SHIELD BLOCKED IT', '#7dffb0'); continue; } const lose = Math.min(this.milkN, 4); this.milkN -= lose; this.stun = .7; this.speed *= .45; this.cameras.main.shake(200, .014); this.flash('SPILLED -' + lose, '#ff4d6d'); for (let i = 0; i < lose; i++) milk.push({ z: this.pos + PLAYER_Z + 900 + i * 420, x: clamp(this.px + rnd(-.5, .5), -.9, .9), taken: false, fresh: true }); } }
     for (const bo of boosts) if (!bo.taken) { const d = rel(bo.z); if (Math.abs(d) < 360 && Math.abs(bo.x - this.px) < .3) { bo.taken = true; this.boost = 1.8; this.flash('BOOST!', '#39ff88'); } }
   }
   finish() {
@@ -352,16 +422,43 @@ class Race extends Phaser.Scene {
     milk.forEach((m) => !m.taken && list.push({ k: 'milk', seg: idxOf(m.z), w: 250, x: m.x }));
     hazards.forEach((h) => !h.hit && list.push({ k: 'candleR', seg: idxOf(h.z), w: 150, x: h.x }));
     boosts.forEach((b) => !b.taken && list.push({ k: 'candleG', seg: idxOf(b.z), w: 190, x: b.x }));
-    rivals.forEach((r) => list.push({ k: `car${r.car}_3`, seg: idxOf(r.z), w: 560, x: r.x, alpha: r.stun > 0 && Math.floor(this.t * 14) % 2 ? .4 : 1 }));
+    rivals.forEach((r) => list.push({
+      k: `car${r.car}_3`, seg: idxOf(r.z), w: 560, x: r.x,
+      alpha: r.stun > 0 && Math.floor(this.t * 14) % 2 ? .4 : 1,
+      ang: (r.spin || 0) * 38,
+    }));
     for (const it of list) for (let n = DRAW - 1; n >= 1; n--) {
       const p = pts[n]; if (it.seg !== (base + n) % TRACK_SEGS) continue; const sc = p.a.sc; const tex = this.textures.get(it.k).getSourceImage();
       const w = sc * it.w * W / 2, h = w * tex.height / tex.width; if (w < 3) continue;
-      const im = use(it.k); im.setPosition(p.a.x + sc * it.x * ROAD * W / 2, p.a.y + h * .06).setDisplaySize(w, h).setDepth(10 + (DRAW - n)).setAlpha(it.alpha == null ? 1 : it.alpha);
+      const im = use(it.k);
+      im.setPosition(p.a.x + sc * it.x * ROAD * W / 2, p.a.y + h * .06).setDisplaySize(w, h).setDepth(10 + (DRAW - n)).setAlpha(it.alpha == null ? 1 : it.alpha);
+      if (it.ang) im.setAngle(it.ang);
+      else im.setAngle(0);
     }
     for (let i = pi; i < this.pool.length; i++) this.pool[i].setVisible(false);
     const bob = Math.sin(this.pos / 700) * 3 + (this.stun > 0 ? Math.sin(this.t * 60) * 6 : 0);
+    const kx = W / 2 + this.lean * 14;
+    const ky = 1010 + bob - (this.recoilY || 0);
+    this.fxGfx.clear();
+    if (this.speed > MAX_SPEED * 0.5 && !this.over) {
+      const lines = clamp(Math.floor(this.speed / MAX_SPEED * 10), 4, 14);
+      for (let li = 0; li < lines; li++) {
+        const lx = kx + (Math.random() - 0.5) * 300;
+        const ly = 720 + Math.random() * 300;
+        this.fxGfx.lineStyle(2, 0xffffff, 0.06 + Math.random() * 0.1);
+        this.fxGfx.lineBetween(lx, ly, lx + (Math.random() - 0.5) * 20, ly + 50 + Math.random() * 90);
+      }
+    }
+    this.shieldGfx.clear();
+    if (this.shield > 0) {
+      const pulse = 0.5 + Math.sin(this.t * 9) * 0.12;
+      this.shieldGfx.lineStyle(5, 0x7dffb0, pulse);
+      this.shieldGfx.strokeCircle(kx, ky - 115, 125);
+      this.shieldGfx.fillStyle(0x7dffb0, 0.07);
+      this.shieldGfx.fillCircle(kx, ky - 115, 125);
+    }
     const k = clamp(Math.round(3 + this.lean * 3), 0, 6);
-    this.kartSpr.setTexture(`car${this.car.id}_${k}`).setPosition(W / 2 + this.lean * 14, 1010 + bob).setTint(this.boost > 0 ? 0xbfffe0 : 0xffffff);
+    this.kartSpr.setTexture(`car${this.car.id}_${k}`).setPosition(kx, ky).setTint(this.boost > 0 ? 0xbfffe0 : 0xffffff);
   }
 }
 
