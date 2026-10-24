@@ -6,7 +6,7 @@ import { Trophy, GraduationCap, Flame } from 'lucide-react';
 import { type TokenSummary } from '../lib/api';
 import { listV3Tokens } from '../lib/chainV3';
 import { MOCK_MODE } from '../lib/constants';
-import { DEMO_BOARD } from '../lib/demo';
+import { DEMO_BOARD, DEMO_PREVIEW } from '../lib/demo';
 import { mockTokens } from '../lib/mocks';
 import { fmtMon } from '../lib/format';
 
@@ -64,8 +64,12 @@ export default function HomeRail({ variant, limit = 8 }: Props) {
         // All rails read straight from chain — no backend dependency, no 404s.
         const list = await listV3Tokens(60);
         if (!list.length) {
+          const demo = DEMO_PREVIEW ? await mockTokens() : [];
+          let picked = [...demo];
+          if (variant === 'hottest-24h') picked.sort((a, b) => cmpBigDesc(a.volume24hMon, b.volume24hMon));
+          else picked.sort((a, b) => cmpBigDesc(a.monRaisedNet, b.monRaisedNet));
           if (cancelled) return;
-          setRows([]);
+          setRows(picked.slice(0, limit));
           return;
         }
         let picked = list;

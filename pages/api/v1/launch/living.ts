@@ -1,11 +1,13 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { isAddr, lc } from '@/lib/launchAgent/account';
+import { DEMO_PREVIEW, isDemoAddress } from '@/lib/demo';
 
 // GET /api/v1/launch/living?token=0x… -> the finished 3D character for a token (if it has one).
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const token = lc(String(req.query.token || ''));
   if (!isAddr(token)) return res.status(400).json({ error: 'invalid token' });
+  if (DEMO_PREVIEW && isDemoAddress(token)) return res.status(200).json({ glb: '/models/monshi.glb', rigged: true, demo: true });
   const supabase = getSupabaseAdmin();
   if (!supabase) return res.status(200).json({ glb: null });
   const { data } = await supabase.from('launch_characters').select('glb_url,rigged').eq('token', token).eq('stage', 'ready').order('created_at', { ascending: false }).limit(1).maybeSingle();

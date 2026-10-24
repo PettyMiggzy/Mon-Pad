@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { TokenSummary } from '@/lib/api';
 import { fmtMon } from '@/lib/format';
+import { isDemoAddress } from '@/lib/demo';
 
 function ageLabel(createdAt: number): string {
   if (!createdAt) return '—';
@@ -44,6 +45,7 @@ export function TokenTile({ token }: { token: TokenSummary }) {
       <div className="pad-card-meta">
         <div className="pad-card-name">
           {token.name} <span>${token.symbol}</span>
+          {isDemoAddress(token.address) && <em className="pad-demo-tag">DEMO</em>}
         </div>
         <div className="pad-card-by">{ageLabel(token.createdAt)}</div>
         <div className="pad-card-stats">

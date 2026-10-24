@@ -11,7 +11,7 @@ import { type TokenSummary } from '@/lib/api';
 import { listV3Tokens, getV3CardStats } from '@/lib/chainV3';
 import { MOCK_MODE, v3Configured } from '@/lib/constants';
 import { mockTokens } from '@/lib/mocks';
-import { DEMO_BOARD, pickCrown } from '@/lib/demo';
+import { DEMO_BOARD, DEMO_PREVIEW, pickCrown } from '@/lib/demo';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 
@@ -56,11 +56,12 @@ export default function Home() {
         const list = await listV3Tokens(120);
         if (cancelled) return;
 
-        // Factory live but empty -> honest empty board (never fake tokens).
+        // No real launches yet -> labelled 3-token preview (disappears with the first real token).
         if (!list.length) {
+          const preview = DEMO_PREVIEW ? await mockTokens(filter) : [];
           if (cancelled) return;
-          setDemo(false);
-          setTokens([]);
+          setDemo(preview.length > 0);
+          setTokens(preview);
           setLoading(false);
           return;
         }
@@ -130,8 +131,9 @@ export default function Home() {
         } catch { /* optional */ }
       } catch {
         if (!cancelled) {
-          setDemo(false);
-          setTokens([]);
+          const preview = DEMO_PREVIEW && !configured ? await mockTokens(filter).catch(() => []) : [];
+          setDemo(preview.length > 0);
+          setTokens(preview);
           setLoading(false);
         }
       }
@@ -182,7 +184,11 @@ export default function Home() {
         <FeeSplit />
         <MostWanted token={crown} />
 
-        {demo && <div className="pad-empty">Demo board: these tokens are sample data, not real launches.</div>}
+        {demo && (
+          <div className="pad-empty">
+            <b>Demo preview.</b> These 3 tokens are samples so you can see living coins react to the chart. They disappear when the first real token launches.
+          </div>
+        )}
 
         <div id="board" className="pad-tabs">
           {FILTERS.map((f) => (

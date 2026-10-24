@@ -1693,3 +1693,5 @@ h1, h2, h3, .pad-display { font-family: var(--font-display), 'Russo One', sans-s
 
 /* Home sidebar: stack the panels (the older .pad-rail rule is a horizontal scroller and clipped the 2nd panel). */
 .pad-layout > .pad-rail { display: flex; flex-direction: column; gap: 12px; overflow: visible; padding: 0; scroll-snap-type: none; min-width: 0; }
+
+.pad-demo-tag { margin-left: 6px; padding: 1px 6px; border-radius: 6px; border: 1px solid rgba(255, 77, 154, 0.5); color: var(--pink); font-size: 10px; font-style: normal; font-weight: 800; letter-spacing: 0.08em; vertical-align: middle; }
