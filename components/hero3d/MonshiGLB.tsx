@@ -2,12 +2,15 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
 import { Box3, Quaternion, Euler, Vector3, type Bone, type Group, type Object3D } from 'three';
-import { currentMood, heroBus } from './bus';
+import { currentMood, heroBus, setHeroMood } from './bus';
 
 export const MONSHI_GLB = '/models/monshi-hq.glb';
 
+/** Monshi does a short "Hit the Quan" every so often while the hero is idle. Set false to switch it off. */
+const AUTO_DANCE = true;
+
 const damp = (a: number, b: number, k: number) => a + (b - a) * k;
-const BONES = ['Head', 'neck', 'Spine01', 'Spine02', 'RightArm', 'RightForeArm', 'LeftArm', 'LeftForeArm'] as const;
+const BONES = ['Head', 'neck', 'Spine01', 'Spine02', 'RightArm', 'RightForeArm', 'RightHand', 'LeftArm', 'LeftForeArm', 'LeftHand'] as const;
 type BoneName = (typeof BONES)[number];
 
 /** The real Meshy-built Monshi. Head follows the cursor; arms and body react to hero moods. */
@@ -44,7 +47,7 @@ export function MonshiGLB({ height = 2.5, onLoaded }: { height?: number; onLoade
   }, [model]);
 
   // Smoothed pose offsets (radians), applied on top of the rest pose every frame.
-  const pose = useRef({ headY: 0, headX: 0, armR: 0, armL: 0, foreR: 0, hop: 0, sway: 0 });
+  const pose = useRef({ headY: 0, headX: 0, armR: 0, armL: 0, foreR: 0, hop: 0, sway: 0, relax: 1, dance: 0, nextDance: 0 });
   const tmp = useMemo(() => new Euler(), []);
   const q = useMemo(() => new Quaternion(), []);
 
@@ -76,16 +79,45 @@ export function MonshiGLB({ height = 2.5, onLoaded }: { height?: number; onLoade
     p.foreR = damp(p.foreR, wave ? 0.5 + Math.sin(t * 9) * 0.5 : mood === 'facepalm' ? 1.6 : 0, 0.14);
     p.hop = damp(p.hop, cheer ? Math.abs(Math.sin(t * 8)) * 0.18 : 0, 0.2);
 
-    apply('Head', p.headX, p.headY * 0.6, 0);
-    apply('neck', p.headX * 0.4, p.headY * 0.4, 0);
-    apply('Spine01', Math.sin(t * 1.7) * 0.015, p.sway, 0);
-    apply('Spine02', 0, p.headY * 0.15, 0);
-    // y = twist about the arm so raised hands face each other instead of sideways
-    apply('RightArm', 0, -Math.max(0, p.armR) * 0.46, -p.armR);
-    apply('LeftArm', 0, Math.max(0, -p.armL) * 0.46, -p.armL);
-    apply('RightForeArm', 0, 0, -p.foreR);
+    // Hands: the rest pose splays the fingers out, so twist them in (mirrored) to hang relaxed. Back off when the arms are busy.
+    p.relax = damp(p.relax, wave || cheer || mood === 'facepalm' ? 0 : 1, 0.14);
 
-    if (root.current) root.current.position.y = p.hop + Math.sin(t * 1.7) * 0.012;
+    // "Hit the Quan": low stance, bounce on the beat, rock the upper body, shift weight side to side, swing the arms.
+    // The model has no leg bones, so the knee bounce is the whole body dipping.
+    const now = performance.now();
+    const reduceMotion = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (p.nextDance === 0) p.nextDance = now + 9000;
+    if (AUTO_DANCE && !reduceMotion && mood === 'idle' && now > p.nextDance) {
+      setHeroMood('dance', 7000);
+      p.nextDance = now + 24000;
+    }
+    p.dance = damp(p.dance, mood === 'dance' ? 1 : 0, 0.08);
+    const d = p.dance;
+    const rock = Math.sin(t * Math.PI * 2); // rock forward and back once a second (120 bpm: two beats)
+    const beat = Math.abs(Math.sin(t * Math.PI * 2)); // knee bounce on every beat
+    const tap = Math.abs(Math.sin(t * Math.PI * 4)); // toe taps run double time
+    const shift = Math.sin(t * Math.PI); // weight steps side to side every 2s
+    const rowR = Math.sin(t * Math.PI * 2 + 0.5); // arms row front-to-back, the left half a beat behind
+    const rowL = Math.sin(t * Math.PI * 2 - 0.1);
+
+    apply('Head', p.headX - d * (0.16 + 0.08 * rock), p.headY * 0.6, 0);
+    apply('neck', p.headX * 0.4, p.headY * 0.4, 0);
+    apply('Spine01', Math.sin(t * 1.7) * 0.015 + d * (0.34 + 0.2 * rock), p.sway, d * 0.14 * shift);
+    apply('Spine02', d * (0.12 + 0.1 * rock), p.headY * 0.15, 0);
+    // y = twist about the arm so raised hands face each other instead of sideways
+    apply('RightArm', d * (0.25 + 0.95 * rowR), -Math.max(0, p.armR) * 0.46, -p.armR - d * 0.1);
+    apply('LeftArm', d * (0.25 + 0.95 * rowL), Math.max(0, -p.armL) * 0.46, -p.armL + d * 0.1);
+    apply('RightForeArm', 0, 0, -p.foreR);
+    apply('RightHand', 0, -0.9 * p.relax, 0);
+    apply('LeftHand', 0, 0.9 * p.relax, 0);
+
+    if (root.current) {
+      // low stance, bounce on the beat, with a smaller double-time tap on top
+      root.current.position.y = p.hop + Math.sin(t * 1.7) * 0.012 - d * (0.11 + 0.05 * beat + 0.015 * tap);
+      root.current.position.x = d * 0.12 * shift;
+      root.current.rotation.x = d * 0.05 * -rock; // hips push back as the chest rocks forward
+      root.current.rotation.z = d * 0.05 * shift; // lean into each side step
+    }
   });
 
   return (

@@ -76,7 +76,7 @@ export function Layout({ children }: { children: ReactNode }) {
       <header className="pad-top">
         <div className="pad-top-in">
           <Link href="/" className="pad-brand" aria-label="Monpad home">
-            <img src="/meshy/monshi-face.png" alt="" />
+            <img src="/icon-192.png?v=2" alt="" />
             <span>
               MON<em>PAD</em>
             </span>

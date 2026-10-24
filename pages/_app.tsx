@@ -51,8 +51,9 @@ export default function App({ Component, pageProps }: AppProps) {
         <meta name="twitter:title" content="Mon-Pad — Fair Launch on Monad" />
         <meta name="twitter:description" content="Fair token launches on Monad. Uniswap V3 from block one. Every trade burns Monshi." />
         <meta name="twitter:image" content="https://www.monpad.net/api/og" />
-        <link rel="icon" type="image/png" href="/meshy/monshi-face.png" />
-        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+        <link rel="icon" href="/favicon.ico?v=2" sizes="any" />
+        <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=2" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2" />
         <link rel="manifest" href="/manifest.json" />
       </Head>
       <WagmiProvider config={wagmiConfig}>
