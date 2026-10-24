@@ -24,7 +24,7 @@ export function MostWanted({ token }: { token: TokenSummary | null }) {
             {token.name} <em>${token.symbol}</em>
           </h3>
           <p>
-            {fmtMon(token.marketCapMon)} MON mcap · {fmtMon(token.volume24hMon)} MON 24h
+            {token.quote === 'USDC' ? `$${fmtMon(token.marketCapMon, 0)} mcap` : `${fmtMon(token.marketCapMon)} MON mcap · ${fmtMon(token.volume24hMon)} MON 24h`}
           </p>
         </div>
       </div>

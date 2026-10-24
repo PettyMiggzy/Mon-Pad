@@ -10,6 +10,7 @@ import { MONAD_EXPLORER } from '@/lib/constants';
 import { shortAddr } from '@/lib/format';
 import { useToast } from '@/components/ui/Toast';
 import V4TradePanel from './V4TradePanel';
+import DepthPanel from './DepthPanel';
 
 const usd = (n: number) => (n >= 1e6 ? `$${(n / 1e6).toFixed(2)}M` : n >= 1e3 ? `$${(n / 1e3).toFixed(2)}K` : `$${n.toLocaleString(undefined, { maximumFractionDigits: n < 1 ? 6 : 2 })}`);
 
@@ -47,7 +48,7 @@ export default function V4TokenView({ address: tokenAddr }: { address: Address }
   const isCreator = !!me && me.toLowerCase() === t.creator.toLowerCase();
 
   return (
-    <div style={{ maxWidth: 1080, margin: '0 auto', padding: '16px 16px 64px', display: 'grid', gap: 20, gridTemplateColumns: 'minmax(0,1fr)' }} className="v4-token">
+    <div style={{ maxWidth: 1240, margin: '0 auto', padding: '16px 16px 64px', display: 'grid', gap: 20, gridTemplateColumns: 'minmax(0,1fr)' }} className="v4-token">
       <Head><title>{`${t.name} (${t.symbol}) | MONPAD`}</title></Head>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
         {imageUrl ? <img src={imageUrl} alt="" width={72} height={72} style={{ borderRadius: 16, objectFit: 'cover' }} /> : <span className="pad-card-pfp pad-card-letter" style={{ width: 72, height: 72, fontSize: 32 }}>{t.symbol.slice(0, 1)}</span>}
@@ -61,7 +62,7 @@ export default function V4TokenView({ address: tokenAddr }: { address: Address }
           <div key={k} style={{ padding: 12, border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10 }}><div style={{ fontSize: 11, color: '#999' }}>{k}</div><div style={{ fontWeight: 700, marginTop: 2 }}>{v}</div></div>
         ))}
       </div>
-      <div style={{ display: 'grid', gap: 20, gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', alignItems: 'start' }}>
+      <div className="xch-tok">
         <div style={{ padding: 16, border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, fontSize: 14, lineHeight: 1.6, color: '#bbb' }}>
           <b style={{ color: '#fff' }}>How fees work.</b> Every trade pays {t.totalFeeBps / 100}%, set by the pool&apos;s hook so no router can skip it. Of the base 1%: 70% to the creator, 10% platform, 10% MONSHI, 10% buys and burns this token. The creator tax ({t.taxBps / 100}%) buys and burns this token.
           <div style={{ marginTop: 12 }}><a href={`https://dexscreener.com/monad/${t.address}`} target="_blank" rel="noreferrer" style={{ color: '#a78bfa' }}>Chart on DexScreener ↗</a></div>
@@ -79,6 +80,7 @@ export default function V4TokenView({ address: tokenAddr }: { address: Address }
             </div>
           )}
         </div>
+        <DepthPanel token={t} />
         <V4TradePanel token={t} onTraded={() => { load(); refetchClaim(); refetchTokClaim(); }} />
       </div>
     </div>

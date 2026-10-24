@@ -91,6 +91,7 @@ export async function listV4Tokens(limit = 60): Promise<TokenSummary[]> {
       createdAt: 0,
       sparkline: [],
       quote: 'USDC' as const,
+      feeBps: t.totalFeeBps,
     }));
 }
 
@@ -106,9 +107,12 @@ const usdcOverride = (usdc: Address, owner: Address, spender: Address, amount: b
     { slot: allowanceSlot(owner, spender, 10n), value: toHex(amount, { size: 32 }) },
   ],
 });
-const tokenOverride = (token: Address, owner: Address, spender: Address) => ({
+const tokenOverride = (token: Address, owner: Address, spender: Address, balance?: bigint) => ({
   address: token,
-  stateDiff: [{ slot: allowanceSlot(owner, spender, 1n), value: toHex(maxUint256, { size: 32 }) }], // OpenZeppelin _allowances = slot 1
+  stateDiff: [
+    { slot: allowanceSlot(owner, spender, 1n), value: toHex(maxUint256, { size: 32 }) }, // OpenZeppelin _allowances = slot 1
+    ...(balance !== undefined ? [{ slot: slot(owner, 0n), value: toHex(balance, { size: 32 }) }] : []), // _balances = slot 0 (anonymous quotes only)
+  ],
 });
 
 const SIM_FROM = '0x000000000000000000000000000000000000dEaD' as Address;
@@ -129,9 +133,34 @@ export async function quoteSell(token: Address, tokensIn: bigint, from?: Address
   const account = from ?? SIM_FROM;
   const { result } = await pc.simulateContract({
     address: ROUTER_V4, abi: routerV4Abi, functionName: 'sellToUsdc',
-    args: [poolKeyFor(token, quote), tokensIn, 0n, dl(), 0n], account, stateOverride: [tokenOverride(token, account, ROUTER_V4)],
+    args: [poolKeyFor(token, quote), tokensIn, 0n, dl(), 0n], account, stateOverride: [tokenOverride(token, account, ROUTER_V4, from ? undefined : tokensIn)],
   });
   return result as bigint;
 }
 
 export const deadline = dl;
+
+export type DepthRow = { usdc: number; avgPrice: number | null; impactPct: number | null };
+
+/** Price impact by trade size, from real router simulations (includes fees). Not resting orders. */
+export async function poolDepth(t: V4Token, sizesUsdc = [50, 250, 1000, 5000]): Promise<{ buys: DepthRow[]; sells: DepthRow[] }> {
+  if (!(t.priceUsdc > 0)) return { buys: [], sells: [] };
+  const buys = await Promise.all(sizesUsdc.map(async (usdc): Promise<DepthRow> => {
+    try {
+      const out = await quoteBuy(t.address, BigInt(Math.round(usdc * 1e6)));
+      const tokens = Number(out) / 1e18;
+      const avg = tokens > 0 ? usdc / tokens : null;
+      return { usdc, avgPrice: avg, impactPct: avg ? (avg / t.priceUsdc - 1) * 100 : null };
+    } catch { return { usdc, avgPrice: null, impactPct: null }; }
+  }));
+  const sells = await Promise.all(sizesUsdc.map(async (usdc): Promise<DepthRow> => {
+    try {
+      const tokensIn = usdc / t.priceUsdc;
+      const out = await quoteSell(t.address, BigInt(Math.round(tokensIn * 1e6)) * 10n ** 12n);
+      const got = Number(out) / 1e6;
+      const avg = got > 0 ? got / tokensIn : null;
+      return { usdc, avgPrice: avg, impactPct: avg ? (1 - avg / t.priceUsdc) * 100 : null };
+    } catch { return { usdc, avgPrice: null, impactPct: null }; }
+  }));
+  return { buys, sells };
+}
