@@ -32,8 +32,10 @@ async function assertMonUsdcConfigMatchesChain(ethers, sv) {
   if (sqrtP === 0n) throw new Error("configured MON/USDC pool is not initialized on fork");
   const liq = await sv.getLiquidity(id);
   if (liq === 0n) throw new Error("configured MON/USDC pool has zero liquidity on fork");
-  if (Number(key.fee) !== Number(cfg.fee)) throw new Error(`config fee mismatch live lpFee=${lpFee}`);
+  if (Number(key.fee) !== Number(cfg.fee)) throw new Error("config static fee mismatch");
+  if (Number(lpFee) !== Number(cfg.fee)) throw new Error(`live lpFee ${lpFee} != config ${cfg.fee}`);
   if (Number(key.tickSpacing) !== Number(cfg.tickSpacing)) throw new Error("config tickSpacing mismatch");
+  if (key.hooks.toLowerCase() !== cfg.hooks.toLowerCase()) throw new Error("config hooks mismatch");
   return { sqrtP, liq, lpFee: Number(lpFee) };
 }
 
