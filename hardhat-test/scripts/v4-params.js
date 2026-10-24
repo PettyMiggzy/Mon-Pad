@@ -24,10 +24,12 @@ if (require.main === module) {
 // Legacy native-MON / token (deprecated).
 module.exports.uv4StartTick = (startMcapMon) => -params(startMcapMon).startTick;
 
-// USDC-quoted pools: token1/token0 = tokens per USDC (whole tokens per whole USDC at launch mcap).
+// USDC-quoted pools. Returns the start tick for a pool where the LAUNCH TOKEN is currency1 (USDC is currency0):
+// the raw price is token-wei per USDC-base-unit, so the 18 vs 6 decimal gap (1e12) must be included.
+// The launcher negates this tick for pools where the token sorts first.
 module.exports.uv4StartTickUsdc = (startMcapUsdc) => {
-  const price = 1e9 / Number(startMcapUsdc);
-  let tick = Math.round(Math.log(price) / Math.log(1.0001));
+  const rawTokensPerRawUsdc = (1e9 / Number(startMcapUsdc)) * 1e12;
+  let tick = Math.round(Math.log(rawTokensPerRawUsdc) / Math.log(1.0001));
   tick = Math.round(tick / 200) * 200;
   return tick;
 };

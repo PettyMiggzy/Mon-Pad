@@ -2,7 +2,7 @@
 // Run: FORK_RPC=https://rpc.monad.xyz npx hardhat test test/uv4-usdc.fork.js
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
-const { mine, setBalance, time } = require("@nomicfoundation/hardhat-network-helpers");
+const { mine, setBalance } = require("@nomicfoundation/hardhat-network-helpers");
 const { uv4StartTickUsdc } = require("../scripts/v4-params");
 const { deployHookAndLauncher } = require("../scripts/mine-hook");
 const {
@@ -12,8 +12,6 @@ const {
   monUsdcPoolKey,
   assertMonUsdcConfigMatchesChain,
   fundUsdcViaMonSwap,
-  seedUsdcMonshiPool,
-  ensureTraderUsdc,
 } = require("./helpers/fork-routes");
 
 const MONSHI = "0xB744F5CDb792d8187640214C4A1c9aCE29af7777";
@@ -34,7 +32,7 @@ const erc20 = [
 (process.env.FORK_RPC ? describe : describe.skip)("Monpad UV4 USDC quote (fork)", function () {
   this.timeout(900000);
   const START_TICK = uv4StartTickUsdc(250000);
-  let owner, platform, creator, keeper, launcher, hook, router, trader, sv;
+  let owner, platform, creator, burnWallet, launcher, hook, router, trader, sv;
   let salt = 0;
   const nextSalt = () => ethers.zeroPadValue(ethers.toBeHex(++salt), 32);
   async function deadline(offsetSec = 3600) {
@@ -92,8 +90,8 @@ const erc20 = [
 
   before(async function () {
     await mine(1);
-    [owner, platform, creator, keeper] = await ethers.getSigners();
-    for (const a of [owner, creator, keeper]) await setBalance(a.address, E(10_000_000));
+    [owner, platform, creator, burnWallet] = await ethers.getSigners();
+    for (const a of [owner, creator, burnWallet]) await setBalance(a.address, E(10_000_000));
     sv = new ethers.Contract(STATE_VIEW, [
       "function getSlot0(bytes32) view returns (uint160,int24,uint24,uint24)",
       "function getLiquidity(bytes32) view returns (uint128)",
@@ -108,7 +106,7 @@ const erc20 = [
       startTick: START_TICK,
       creationFee: U(100),
     }));
-    await launcher.connect(owner).setKeeper(keeper.address);
+    await launcher.connect(owner).setMonshiWallet(burnWallet.address);
     trader = await (await ethers.getContractFactory("TestV4Trader")).deploy(POOL_MANAGER);
     await setBalance(trader.target, E(5_000_000));
     const monKey = monUsdcPoolKey(ethers);
@@ -158,7 +156,7 @@ const erc20 = [
     const pUsdc0 = await launcher.claimable(platform.address, USDC);
     const cTok0 = await launcher.claimable(creator.address, r.token);
     const pTok0 = await launcher.claimable(platform.address, r.token);
-    const m0 = await launcher.monshiReserve();
+    const m0 = await launcher.claimable(burnWallet.address, USDC);
     const tr0 = await launcher.tokenReserve(r.token);
 
     const htx = await launcher.harvest(r.token);
@@ -177,7 +175,7 @@ const erc20 = [
 
     const cUsdc = (await launcher.claimable(creator.address, USDC)) - cUsdc0;
     const pUsdc = (await launcher.claimable(platform.address, USDC)) - pUsdc0;
-    const m = (await launcher.monshiReserve()) - m0;
+    const m = (await launcher.claimable(burnWallet.address, USDC)) - m0;
     const tr = (await launcher.tokenReserve(r.token)) - tr0;
     expect(cUsdc + pUsdc + m + tr).to.equal(quoteFees);
 
@@ -198,22 +196,30 @@ const erc20 = [
     expect(tr).to.equal(baseQ - expCreator - expPlatform - expMonshi + extraQ);
   });
 
-  it("harvest accrues monshiReserve when USDC/MONSHI pool unset (funds not stuck)", async function () {
+  it("harvest credits the 10% MONSHI share to monshiWallet, which can claim it as USDC", async function () {
     const r = await launch(500, 0n);
     await setBalance(trader.target, E(500_000));
     await trader.swapMonForUsdc(monUsdcPoolKey(ethers), E(120_000));
     await trader.buyWithQuote(r.key, r.quoteIs0, U(2_000));
-    const before = await launcher.monshiReserve();
+    const before = await launcher.claimable(burnWallet.address, USDC);
     await launcher.harvest(r.token);
-    const after = await launcher.monshiReserve();
-    expect(after).to.be.gt(before);
-    await expect(launcher.connect(keeper).buybackMonshi(after, 0)).to.be.revertedWithCustomError(
-      launcher,
-      "MonshiPoolNotConfigured",
-    );
+    const credited = (await launcher.claimable(burnWallet.address, USDC)) - before;
+    expect(credited).to.be.gt(0n);
+    const usdc = new ethers.Contract(USDC, erc20, ethers.provider);
+    const bal0 = await usdc.balanceOf(burnWallet.address);
+    await launcher.connect(burnWallet).claim(USDC);
+    expect((await usdc.balanceOf(burnWallet.address)) - bal0).to.be.gte(credited);
   });
 
-  it("MONSHI buyback reverts when USDC/MONSHI pool not configured", async function () {
+  it("only the owner sets monshiWallet, and not to zero", async function () {
+    await expect(launcher.connect(creator).setMonshiWallet(creator.address)).to.be.reverted;
+    await expect(launcher.connect(owner).setMonshiWallet(ethers.ZeroAddress)).to.be.revertedWith("zero addr");
+    await expect(launcher.connect(owner).setMonshiWallet(burnWallet.address))
+      .to.emit(launcher, "MonshiWalletChanged")
+      .withArgs(burnWallet.address);
+  });
+
+  it("monshiWallet defaults to the platform until set", async function () {
     const fresh = await deployHookAndLauncher(owner, {
       poolManager: POOL_MANAGER,
       owner: owner.address,
@@ -223,65 +229,7 @@ const erc20 = [
       startTick: START_TICK,
       creationFee: U(100),
     });
-    await fresh.launcher.connect(owner).setKeeper(keeper.address);
-    await expect(fresh.launcher.connect(keeper).buybackMonshi(U(1), 0)).to.be.revertedWithCustomError(
-      fresh.launcher,
-      "MonshiPoolNotConfigured",
-    );
-  });
-
-  it("MONSHI buyback succeeds after USDC/MONSHI pool is configured (seeded on fork)", async function () {
-    const monshiStandIn = await (await ethers.getContractFactory("MockBlockableUsdc")).deploy();
-    const { launcher: l2, hook: h2 } = await deployHookAndLauncher(owner, {
-      poolManager: POOL_MANAGER,
-      owner: owner.address,
-      platform: platform.address,
-      quoteAsset: USDC,
-      monshi: await monshiStandIn.getAddress(),
-      startTick: START_TICK,
-      creationFee: U(100),
-    });
-    await l2.connect(owner).setKeeper(keeper.address);
-    await ensureUsdc(creator.address, U(200));
-    const usdc = new ethers.Contract(USDC, erc20, creator);
-    await usdc.approve(l2.target, U(200));
-    const ltx = await l2.connect(creator).launch("M2", "M2", nextSalt(), 0, 0n);
-    const lrc = await ltx.wait();
-    const lev = lrc.logs
-      .map((x) => {
-        try {
-          return l2.interface.parseLog(x);
-        } catch {
-          return null;
-        }
-      })
-      .find((e) => e && e.name === "Launched");
-    const token = lev.args.token;
-    const quoteIs0 = USDC.toLowerCase() < token.toLowerCase();
-    const key = {
-      currency0: quoteIs0 ? USDC : token,
-      currency1: quoteIs0 ? token : USDC,
-      fee: DYNAMIC,
-      tickSpacing: 200,
-      hooks: h2.target,
-    };
-    await setBalance(trader.target, E(500_000));
-    await trader.swapMonForUsdc(monUsdcPoolKey(ethers), E(120_000));
-    await trader.buyWithQuote(key, quoteIs0, U(2_000));
-    await l2.harvest(token);
-    const reserve = await l2.monshiReserve();
-    expect(reserve).to.be.gte(U(1));
-
-    const monshiAddr = await monshiStandIn.getAddress();
-    const [deployer] = await ethers.getSigners();
-    await monshiStandIn.connect(deployer).transfer(trader.target, U(50_000_000));
-    await ensureTraderUsdc(require("hardhat"), trader, U(50_000));
-    const monshiKey = await seedUsdcMonshiPool(trader, monshiAddr);
-    await l2.connect(owner).proposeMonshiPool(monshiKey.fee, monshiKey.tickSpacing);
-    await time.increase(48 * 3600 + 10);
-    await l2.connect(owner).executeMonshiPool();
-
-    await expect(l2.connect(keeper).buybackMonshi(reserve, 1n)).to.not.be.reverted;
+    expect(await fresh.launcher.monshiWallet()).to.equal(platform.address);
   });
 
   it("rejects wrong hook and unlisted token", async function () {

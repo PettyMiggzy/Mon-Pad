@@ -7,7 +7,7 @@
 //   PLATFORM_ADDRESS   receives the platform 10% and the creation fees
 //   START_MCAP_MON     starting market cap in MON (default 250000)
 //   CREATION_FEE_MON   creation fee in MON (default 100, max 10000)
-//   KEEPER_ADDRESS     optional: bot allowed to run MONSHI buybacks (can be set later with setKeeper)
+//   MONSHI_WALLET      optional: wallet credited with the 10% MONSHI share, converted to MONSHI and burned by the team (default: platform; can be set later with setMonshiWallet)
 //   CONFIRM_MAINNET    must equal I_UNDERSTAND_UNAUDITED to deploy on chain 143
 const hre = require("hardhat");
 const { uv4StartTickUsdc } = require("./v4-params");
@@ -46,9 +46,9 @@ async function main() {
   });
   const launcherAddr = await launcher.getAddress();
   const hookAddr = await hook.getAddress();
-  if (process.env.KEEPER_ADDRESS && owner.toLowerCase() === deployer.address.toLowerCase()) {
-    await (await launcher.setKeeper(process.env.KEEPER_ADDRESS)).wait();
-    console.log("keeper set:", process.env.KEEPER_ADDRESS);
+  if (process.env.MONSHI_WALLET && owner.toLowerCase() === deployer.address.toLowerCase()) {
+    await (await launcher.setMonshiWallet(process.env.MONSHI_WALLET)).wait();
+    console.log("monshi wallet set:", process.env.MONSHI_WALLET);
   }
   console.log("\nMonpadHook:", hookAddr, "(address flags 0x2080 mined)");
   console.log("MonpadHookLauncher:", launcherAddr);
