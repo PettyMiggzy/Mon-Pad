@@ -1,0 +1,17 @@
+{
+  "quoteToken": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+  "quoteDecimals": 6,
+  "monUsdcPool": {
+    "currency0": "0x0000000000000000000000000000000000000000",
+    "currency1": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+    "fee": 500,
+    "tickSpacing": 10,
+    "hooks": "0x0000000000000000000000000000000000000000"
+  },
+  "_monUsdcPoolOnChain": {
+    "note": "Verified via StateView on Monad mainnet fork (hookless MON/USDC). Do not seed in tests.",
+    "fee": 500,
+    "tickSpacing": 10,
+    "hooks": "0x0000000000000000000000000000000000000000"
+  }
+}

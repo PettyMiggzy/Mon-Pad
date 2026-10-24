@@ -41,9 +41,24 @@ module.exports = {
     }],
   },
   networks: {
-    hardhat: process.env.FORK_RPC ? {
-      forking: { url: process.env.FORK_RPC },
-    } : {},
+    hardhat: process.env.FORK_RPC
+      ? {
+          forking: { url: process.env.FORK_RPC },
+          chainId: 143,
+          chains: {
+            143: {
+              hardforkHistory: {
+                byzantium: 0,
+                berlin: 0,
+                london: 0,
+                merge: 0,
+                shanghai: 0,
+                cancun: 0,
+              },
+            },
+          },
+        }
+      : {},
     // Live networks are only registered when their RPC env is set.
     // Missing env -> network simply doesn't exist -> deploy fails fast
     // with "network not found" rather than silently using a default.
