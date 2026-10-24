@@ -46,7 +46,11 @@ curl -s https://www.monpad.net/api/v1/burn  | jq .
 |---|---|
 | HTTP | `/api/v1/spec`, `/api/v1/burn`, `/api/v1/storage` |
 | SDK | `sdk/` (`@monpad/sdk`) |
-| MCP | `mcp/server.mjs` |
+| MCP | `mcp/server.mjs` (`@monpad/mcp`, Uniswap V4 launcher) |
+
+### MCP (V4)
+
+Package: `mcp/` → **`@monpad/mcp`** (`npx -y @monpad/mcp`). Targets **MonpadHookLauncher** (no curves). Set `MONPAD_LAUNCHER`, `MONPAD_HOOK`, and `MONPAD_V4_ROUTER` when deployed; empty config returns *contracts not deployed yet*. Default **`dryRun: true`** (no key); **`MONPAD_PRIVATE_KEY`** burner for broadcast. Caps: `MAX_MON_PER_TX` / `MAX_MON_PER_DAY` (includes sell proceeds). See `mcp/README.md` and `CONTRACT-UV4.md`.
 
 ### 3. Storage (token PFPs — same as original pad)
 
