@@ -105,6 +105,9 @@ class Garage extends Phaser.Scene {
     button(this, W / 2, H - 110, 560, 120, 'RACE', 0x39ff88, () => { persist(); this.scene.start('race'); });
     this.toast = txt(this, W / 2, 232, '', 30, '#ffd75e').setAlpha(0).setDepth(50);
     this.draw();
+    if (typeof location !== 'undefined' && new URLSearchParams(location.search).get('demoZap') === '1') {
+      this.time.delayedCall(700, () => { persist(); this.scene.start('race'); });
+    }
   }
   say(m, c = '#ffd75e') { this.toast.setText(m).setColor(c).setAlpha(1); this.tweens.killTweensOf(this.toast); this.tweens.add({ targets: this.toast, alpha: 0, delay: 1100, duration: 400 }); }
   buy(price) { if (save.milk < price) { this.say('Not enough milk', '#ff6d8a'); return false; } save.milk -= price; persist(); return true; }
@@ -162,7 +165,31 @@ class Race extends Phaser.Scene {
     this.car = carById(save.car); this.mk = (n) => this.textures.exists(n);
     seedTrack(this.car.id);
     this.sky = this.add.image(W / 2, 0, 'sky').setOrigin(.5, 0).setDisplaySize(W * 1.9, HY + 60).setDepth(0);
-    this.gfx = this.add.graphics().setDepth(1); this.pool = []; this.beam = this.add.graphics().setDepth(900);
+    this.gfx = this.add.graphics().setDepth(1); this.pool = [];
+    this.zapBolts = [];
+    this.zapMuzzleGfx = this.add.graphics().setDepth(925);
+    this.zapSprPool = [];
+    for (let zi = 0; zi < 4; zi++) {
+      const spr = this.add.image(0, 0, 'candleG').setOrigin(0.5, 1).setDepth(920).setVisible(false);
+      this.zapSprPool.push(spr);
+    }
+    this.zapTrail = this.add.particles(0, 0, 'coin', {
+      speed: { min: 15, max: 90 },
+      angle: { min: 0, max: 360 },
+      lifespan: { min: 180, max: 320 },
+      scale: { start: 0.22, end: 0 },
+      alpha: { start: 0.85, end: 0 },
+      tint: 0x39ff88,
+      emitting: false,
+    }).setDepth(919);
+    this.zapImpactFx = this.add.particles(0, 0, 'coin', {
+      speed: { min: 120, max: 480 },
+      angle: { min: 0, max: 360 },
+      lifespan: { min: 280, max: 520 },
+      scale: { start: 0.45, end: 0 },
+      tint: [0x39ff88, 0xffffff, 0xbfffe0],
+      emitting: false,
+    }).setDepth(921);
     this.kartSpr = this.add.image(W / 2, 1010, `car${this.car.id}_3`).setOrigin(.5, 1).setDepth(590);
     this.kartSpr.setDisplaySize(420, 420 * this.kartSpr.height / this.kartSpr.width);
     this.spark = this.add.particles(0, 0, 'coin', { speed: { min: 80, max: 380 }, angle: { min: 215, max: 325 }, lifespan: 700, scale: { start: .4, end: 0 }, gravityY: 500, emitting: false }).setDepth(800);
@@ -185,9 +212,15 @@ class Race extends Phaser.Scene {
     if (save.inv.nitro > 0) { this.nitroBtn = true; btn(455, 1100, 'NITRO', () => this.nitro()); }
     this.input.keyboard.on('keydown-SPACE', () => this.zap()); this.input.keyboard.on('keydown-N', () => this.nitro());
     this.reset();
+    if (typeof location !== 'undefined' && new URLSearchParams(location.search).get('demoZap') === '1') {
+      this.time.delayedCall(900, () => this.zap());
+      this.time.delayedCall(1400, () => this.zap());
+    }
   }
   reset() {
-    Object.assign(this, { pos: 0, speed: 0, px: 0, milkN: 0, t: RACE_SECS, boost: 0, stun: 0, over: false, shield: 0, magnet: 0, skyOff: 0, cool: 0, combo: 0, comboT: 0, lean: 0, beamT: 0, beamHit: null });
+    Object.assign(this, { pos: 0, speed: 0, px: 0, milkN: 0, t: RACE_SECS, boost: 0, stun: 0, over: false, shield: 0, magnet: 0, skyOff: 0, cool: 0, combo: 0, comboT: 0, lean: 0 });
+    this.zapBolts = [];
+    this.zapSprPool.forEach((s) => s.setVisible(false));
     if (save.inv.shield > 0) { save.inv.shield--; this.shield = 1; }
     if (save.inv.magnet > 0) { save.inv.magnet--; this.magnet = 12; }
     persist(); this.milkTxt.setText('0');
@@ -196,13 +229,85 @@ class Race extends Phaser.Scene {
   flash(text, color) { this.msg.setText(text).setColor(color || '#ffd75e').setAlpha(1).setScale(1.25); this.tweens.killTweensOf(this.msg); this.tweens.add({ targets: this.msg, alpha: 0, scale: 1, duration: 900, delay: 250 }); }
   nitro() { if (this.over || save.inv.nitro <= 0 || this.boost > 0.2) return; save.inv.nitro--; persist(); this.boost = 2.0; this.flash('NITRO!', '#39ff88'); }
   seg(z) { return segs[idxOf(z)]; }
+  zapOrigin() { return { sx: W / 2 + 44, sy: 868 }; }
+  zapAim() {
+    const { sx, sy } = this.zapOrigin();
+    let best = null;
+    let hazardHit = null;
+    for (const r of rivals) {
+      let d = r.z - (this.pos + PLAYER_Z);
+      if (d < 0) d += LEN;
+      if (d > 400 && d < SEG * 40 && Math.abs(r.x - this.px) < .42 && (!best || d < best.d)) best = { r, d };
+    }
+    for (const h of hazards) {
+      if (h.hit) continue;
+      let d = h.z - (this.pos + PLAYER_Z);
+      if (d < 0) d += LEN;
+      if (d > 260 && d < SEG * 30 && Math.abs(h.x - this.px) < .36 && (!hazardHit || d < hazardHit.d)) hazardHit = { h, d };
+    }
+    let ex = sx;
+    let ey = HY + 100;
+    const aimAt = (laneX, dist, yOff) => {
+      const sc = CAM_D / Math.max(dist, 200);
+      ex = W / 2 + (laneX - this.px) * sc * ROAD * W / 2;
+      ey = HY + sc * CAM_H * H / 2 * .62 + yOff;
+    };
+    if (best) aimAt(best.r.x, best.d, -60);
+    else if (hazardHit) aimAt(hazardHit.h.x, hazardHit.d, -36);
+    else aimAt(this.px + (Math.random() < .5 ? -.15 : .15), 2200, -20);
+    return { sx, sy, ex, ey, best, hazardHit };
+  }
+  muzzleFlash(x, y) {
+    const g = this.zapMuzzleGfx;
+    g.clear().fillStyle(0xffffff, 0.95).fillCircle(x, y, 32).fillStyle(0x39ff88, 0.75).fillCircle(x, y, 20);
+    g.setAlpha(1);
+    this.tweens.killTweensOf(g);
+    this.tweens.add({ targets: g, alpha: 0, duration: 140, onComplete: () => { g.clear(); g.setAlpha(1); } });
+  }
+  resolveZapHit(best, hazardHit, ex, ey) {
+    this.zapImpactFx.emitParticleAt(ex, ey, 14);
+    const ring = this.add.circle(ex, ey, 8, 0x39ff88, 0.85).setDepth(923);
+    this.tweens.add({ targets: ring, scale: 3.2, alpha: 0, duration: 220, onComplete: () => ring.destroy() });
+    if (best) {
+      const r = best.r;
+      r.stun = 1.4;
+      r.v *= .6;
+      for (let i = 0; i < 3; i++) milk.push({ z: r.z + (i + 1) * 380, x: clamp(r.x + rnd(-.4, .4), -.9, .9), taken: false, fresh: true });
+      this.flash('ZAPPED!  +MILK DROP', '#39ff88');
+      this.cameras.main.shake(120, .006);
+    } else if (hazardHit) {
+      hazardHit.h.hit = true;
+      this.flash('RED CANDLE DOWN', '#39ff88');
+      this.cameras.main.shake(80, .004);
+    }
+  }
+  updateZapBolts(dt) {
+    for (let i = this.zapBolts.length - 1; i >= 0; i--) {
+      const b = this.zapBolts[i];
+      b.t += dt / b.dur;
+      const p = clamp(b.t, 0, 1);
+      const ep = p * p * (3 - 2 * p);
+      const x = b.sx + (b.ex - b.sx) * ep;
+      const y = b.sy + (b.ey - b.sy) * ep;
+      const ang = Phaser.Math.RadToDeg(Math.atan2(b.ey - b.sy, b.ex - b.sx)) + 90;
+      b.spr.setVisible(true).setPosition(x, y).setDisplaySize(36 + ep * 28, 52 + ep * 36).setAngle(ang).setTint(0xffffff);
+      if (p < 1 && Math.random() < 0.55) this.zapTrail.emitParticleAt(x, y, 1);
+      if (p >= 1 && !b.resolved) {
+        b.resolved = true;
+        b.spr.setVisible(false);
+        this.resolveZapHit(b.best, b.hazardHit, b.ex, b.ey);
+        this.zapBolts.splice(i, 1);
+      }
+    }
+  }
   zap() {
     const cd = [.34, .28, .23, .18][save.up.zap];
-    if (this.over || this.cool > 0) return; this.cool = cd;
-    let best = null;
-    for (const r of rivals) { let d = r.z - (this.pos + PLAYER_Z); if (d < 0) d += LEN; if (d > 400 && d < SEG * 40 && Math.abs(r.x - this.px) < .42 && (!best || d < best.d)) best = { r, d }; }
-    this.beamT = .12; this.beamHit = best;
-    if (best) { const r = best.r; r.stun = 1.4; r.v *= .6; for (let i = 0; i < 3; i++) milk.push({ z: r.z + (i + 1) * 380, x: clamp(r.x + rnd(-.4, .4), -.9, .9), taken: false, fresh: true }); this.flash('ZAPPED!  +MILK DROP', '#39ff88'); this.cameras.main.shake(120, .006); }
+    if (this.over || this.cool > 0) return;
+    this.cool = cd;
+    const aim = this.zapAim();
+    const spr = this.zapSprPool.find((s) => !s.visible) || this.zapSprPool[0];
+    this.zapBolts.push({ ...aim, t: 0, dur: 0.26, spr, resolved: false });
+    this.muzzleFlash(aim.sx, aim.sy);
   }
   update(_, dtms) {
     const dt = Math.min(dtms, 50) / 1000, c = this.car;
@@ -228,7 +333,7 @@ class Race extends Phaser.Scene {
     this.render();
     this.milkTxt.setText(String(this.milkN)); this.timeTxt.setText(String(Math.ceil(this.t))).setColor(this.t < 10 ? '#ff4d6d' : '#39ff88');
     this.speedBar.clear().fillStyle(0xffffff, .2).fillRoundedRect(W / 2 - 150, 100, 300, 14, 7).fillStyle(this.boost > 0 ? 0x39ff88 : 0xc9bcff, .95).fillRoundedRect(W / 2 - 150, 100, 300 * clamp(this.speed / (BOOST_SPEED * 1.2), 0, 1), 14, 7);
-    if (this.beamT > 0) { this.beamT -= dt; if (this.beamT <= 0) this.beam.clear(); }
+    this.updateZapBolts(dt);
   }
   collide() {
     const rel = (z) => { const pz = this.pos + PLAYER_Z; let d = z - pz; if (d < -LEN / 2) d += LEN; if (d > LEN / 2) d -= LEN; return d; };
@@ -275,11 +380,6 @@ class Race extends Phaser.Scene {
     const bob = Math.sin(this.pos / 700) * 3 + (this.stun > 0 ? Math.sin(this.t * 60) * 6 : 0);
     const k = clamp(Math.round(3 + this.lean * 3), 0, 6);
     this.kartSpr.setTexture(`car${this.car.id}_${k}`).setPosition(W / 2 + this.lean * 14, 1010 + bob).setTint(this.boost > 0 ? 0xbfffe0 : 0xffffff);
-    if (this.beamT > 0) {
-      const sx = W / 2 + 40, sy = 880; let ex = W / 2 + 40, ey = HY + 90;
-      if (this.beamHit) { const r = this.beamHit.r; const sc = CAM_D / Math.max(this.beamHit.d, 200); ex = W / 2 + (r.x - this.px) * sc * ROAD * W / 2; ey = HY + sc * CAM_H * H / 2 * .62 - 60; }
-      this.beam.clear().lineStyle(16, 0x39ff88, .8).beginPath().moveTo(sx, sy).lineTo(ex, ey).strokePath().lineStyle(6, 0xffffff, 1).beginPath().moveTo(sx, sy).lineTo(ex, ey).strokePath();
-    }
   }
 }
 
