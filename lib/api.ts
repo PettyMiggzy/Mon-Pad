@@ -15,6 +15,8 @@ export type TokenSummary = {
   sparkline?: number[];
   /** Set for Monpad V4 tokens: the money fields are USDC (stored with 18 decimals), not MON. */
   quote?: 'USDC';
+  /** Total trade fee in bps (V4: 1% base + creator tax). */
+  feeBps?: number;
 };
 
 export type Trade = {

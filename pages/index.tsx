@@ -14,6 +14,7 @@ import { mockTokens } from '@/lib/mocks';
 import { DEMO_BOARD, pickCrown } from '@/lib/demo';
 import { v4Configured } from '@/lib/v4/config';
 import { listV4Tokens } from '@/lib/v4/chain';
+import V4Board from '@/components/v4/V4Board';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 
@@ -212,6 +213,9 @@ export default function Home() {
           <span className="pad-count">{loading ? '…' : visible.length}</span>
         </div>
 
+        {v4Configured() && !demo ? (
+          <V4Board tokens={visible} loading={loading} query={query} />
+        ) : (
         <div className="pad-layout">
           <div className="pad-grid">
             {loading && visible.length === 0
@@ -228,6 +232,7 @@ export default function Home() {
             <HomeRail variant="top-earners" limit={6} />
           </aside>
         </div>
+        )}
       </div>
     </>
   );

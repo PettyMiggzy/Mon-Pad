@@ -1693,3 +1693,26 @@ h1, h2, h3, .pad-display { font-family: var(--font-display), 'Russo One', sans-s
 
 /* Home sidebar: stack the panels (the older .pad-rail rule is a horizontal scroller and clipped the 2nd panel). */
 .pad-layout > .pad-rail { display: flex; flex-direction: column; gap: 12px; overflow: visible; padding: 0; scroll-snap-type: none; min-width: 0; }
+
+/* ── Exchange look (V4 board + token page) ── */
+.xch{--xl:#2a2150;--xm:#8b83b8;font-variant-numeric:tabular-nums}
+.xch-idx{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--xl);border-radius:12px;overflow:hidden;margin:14px 0;background:#0f0b1d}
+.xch-idx>div{padding:10px 16px;border-right:1px solid var(--xl)}.xch-idx>div:last-child{border:0}
+.xch-idx small{display:block;color:var(--xm);font-size:11px;letter-spacing:.6px}.xch-idx b{font-size:19px}
+.xch-panel{background:#0f0b1d;border:1px solid #2a2150;border-radius:12px;overflow:hidden}
+.xch-ph{padding:9px 14px;border-bottom:1px solid #2a2150;color:#8b83b8;font-weight:700;font-size:12px;letter-spacing:.6px}
+.xch-tbl{width:100%;border-collapse:collapse;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+.xch-tbl th{text-align:right;color:#8b83b8;font-size:11px;letter-spacing:.6px;padding:9px 12px;border-bottom:1px solid #2a2150;font-weight:700}
+.xch-tbl td{text-align:right;padding:10px 12px;border-bottom:1px solid #1a1436;font-size:13.5px}
+.xch-tbl th:first-child,.xch-tbl td:first-child{text-align:left}.xch-tbl tr:nth-child(even) td{background:#0c0919}
+.xch-sym{display:flex;gap:9px;align-items:center;color:#fff;text-decoration:none;font-family:inherit}.xch-sym small{color:#8b83b8;font-size:12px}.xch-sym img{border-radius:5px;object-fit:cover}
+.xch-tk{width:22px;height:22px;border-radius:5px;background:#836EF9;display:grid;place-items:center;font-weight:900;font-size:11px}
+.xch-trade{background:#836EF9;color:#fff;border-radius:6px;padding:6px 12px;font-weight:800;font-size:12px;text-decoration:none}
+.xch-dim{color:#8b83b8;font-size:13px}.xch-note{padding:10px 14px;color:#8b83b8;font-size:12px;border-top:1px solid #2a2150}
+.xch-dep-head,.xch-dep-row{display:grid;grid-template-columns:1fr 1fr 1fr;padding:5px 14px;font-size:12.5px;position:relative;font-family:ui-monospace,Consolas,monospace}
+.xch-dep-head{color:#8b83b8;font-size:11px;letter-spacing:.6px;border-bottom:1px solid #2a2150}.xch-dep-row span{position:relative}
+.xch-dep-row i{position:absolute;right:0;top:0;bottom:0;opacity:.2}.xch-dep-row.buy{color:#FF5C7A}.xch-dep-row.buy i{background:#FF5C7A}.xch-dep-row.sell{color:#2FD27A}.xch-dep-row.sell i{background:#2FD27A}
+.xch-mid{padding:9px 14px;font-size:17px;font-weight:800;background:#150f2e;font-family:ui-monospace,Consolas,monospace}.xch-mid small{color:#8b83b8;font-size:11px;font-weight:600}
+.xch-tok{display:grid;gap:14px;grid-template-columns:minmax(0,1fr) 300px 320px;align-items:start}
+@media(max-width:1000px){.xch-tok{grid-template-columns:1fr}}
+@media(max-width:700px){.xch-idx{grid-template-columns:1fr 1fr}.xch-hm{display:none}}

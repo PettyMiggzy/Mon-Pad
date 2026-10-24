@@ -6,7 +6,7 @@ const CARDS = [
   {
     k: 'dex',
     title: 'DEX day one',
-    body: 'Launch drops the token into a real Uniswap V3 pool. DexScreener from block one.',
+    body: 'Launch drops the token into a real Uniswap V4 pool. DexScreener from block one.',
   },
   {
     k: 'cut',
