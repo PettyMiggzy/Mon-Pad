@@ -204,3 +204,32 @@ create index if not exists launch_characters_wallet_idx on launch_characters (wa
 create index if not exists launch_characters_token_idx on launch_characters (token);
 alter table launch_characters enable row level security;
 -- no public policies: server-only (service role)
+
+-- 4f) Munchy Kart: player loadouts + milk balance --------------------------------
+-- ⚠️ MIGRATION: run in the Supabase SQL editor before deploying /api/game/*.
+create table if not exists game_players (
+  wallet      text primary key,                 -- lowercase 0x address
+  milk        bigint not null default 0 check (milk >= 0),
+  loadout     jsonb  not null default '{"car":1,"cars":[1],"inv":{"nitro":0,"shield":0,"magnet":0},"up":{"engine":0,"zap":0,"tires":0}}',
+  best        int    not null default 0,
+  races       int    not null default 0,
+  nonce       bigint not null default 0,         -- bumps on every signed write (replay guard)
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+alter table game_players enable row level security;
+-- no public policies: server-only (service role)
+
+-- Atomic milk credit/debit (no read-modify-write race). Raises 'insufficient milk' if it would go below 0.
+create or replace function game_adjust_milk(p_wallet text, p_delta bigint) returns bigint
+language plpgsql security definer as $$
+declare v bigint;
+begin
+  insert into game_players (wallet, milk) values (p_wallet, greatest(p_delta, 0))
+    on conflict (wallet) do update set milk = game_players.milk + p_delta, updated_at = now()
+    returning milk into v;
+  return v;
+exception when check_violation then
+  raise exception 'insufficient milk';
+end $$;
+revoke all on function game_adjust_milk(text, bigint) from public, anon, authenticated;
