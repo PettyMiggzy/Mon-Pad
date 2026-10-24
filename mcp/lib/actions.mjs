@@ -14,6 +14,10 @@ const swapEvent = parseAbiItem(
 const BASE_FEE_BPS = 100;
 const VOLUME_BLOCKS = Number(process.env.MONPAD_VOLUME_BLOCKS || '5000');
 
+function tradeDeadline() {
+  return BigInt(Math.floor(Date.now() / 1000) + 3600);
+}
+
 function json(data) {
   return JSON.stringify(data, (_, v) => (typeof v === 'bigint' ? v.toString() : v), 2);
 }
@@ -288,11 +292,12 @@ export async function buy(args) {
   const client = getPublicClient(config);
   const account = dryRun ? getSimulateAccountRef() : getWalletClient(config).account;
 
+  const sqrtLimit = args.sqrtPriceLimitX96 != null ? BigInt(args.sqrtPriceLimitX96) : 0n;
   const txArgs = {
     address: router,
     abi: v4RouterAbi,
     functionName: 'buyExactIn',
-    args: [key, minTokensOut],
+    args: [key, minTokensOut, tradeDeadline(), sqrtLimit],
     value: monIn,
     account,
   };
@@ -341,11 +346,12 @@ export async function sell(args) {
   const client = getPublicClient(config);
   const account = dryRun ? getSimulateAccountRef() : getWalletClient(config).account;
 
+  const sqrtLimit = args.sqrtPriceLimitX96 != null ? BigInt(args.sqrtPriceLimitX96) : 0n;
   const sellSim = {
     address: router,
     abi: v4RouterAbi,
     functionName: 'sellExactIn',
-    args: [key, tokensIn, minMonOut],
+    args: [key, tokensIn, minMonOut, tradeDeadline(), sqrtLimit],
     account,
   };
 

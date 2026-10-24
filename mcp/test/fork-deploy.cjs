@@ -28,7 +28,7 @@ async function main() {
     creationFee: ethers.parseEther('100'),
   });
   const routerFactory = await ethers.getContractFactory('MonpadV4Router');
-  const router = await routerFactory.deploy(POOL_MANAGER);
+  const router = await routerFactory.deploy(POOL_MANAGER, await launcher.getAddress(), await hook.getAddress());
   await router.waitForDeployment();
 
   const salt = ethers.zeroPadValue(ethers.toBeHex(1), 32);

@@ -25,8 +25,8 @@ export const stateViewAbi = parseAbi([
 ]);
 
 export const v4RouterAbi = parseAbi([
-  'function buyExactIn((address currency0, address currency1, uint24 fee, int24 tickSpacing, address hooks) key, uint256 minTokensOut) payable returns (uint256 tokensOut)',
-  'function sellExactIn((address currency0, address currency1, uint24 fee, int24 tickSpacing, address hooks) key, uint256 tokensIn, uint256 minMonOut) returns (uint256 monOut)',
+  'function buyExactIn((address currency0, address currency1, uint24 fee, int24 tickSpacing, address hooks) key, uint256 minTokensOut, uint256 deadline, uint160 sqrtPriceLimitX96) payable returns (uint256 tokensOut)',
+  'function sellExactIn((address currency0, address currency1, uint24 fee, int24 tickSpacing, address hooks) key, uint256 tokensIn, uint256 minMonOut, uint256 deadline, uint160 sqrtPriceLimitX96) returns (uint256 monOut)',
 ]);
 
 export const erc20Abi = parseAbi([
