@@ -1,4 +1,7 @@
 import { useRouter } from 'next/router';
+import V4TokenView from '@/components/v4/V4TokenView';
+import { v4Configured } from '@/lib/v4/config';
+import { isV4Token } from '@/lib/v4/chain';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
@@ -81,7 +84,7 @@ function prefersReducedMotion() {
 }
 const LivingCoin = dynamic(() => import('@/components/token/LivingCoin'), { ssr: false });
 
-export default function TokenPage() {
+function LegacyTokenPage() {
   const router = useRouter();
   const rawAddr = typeof router.query.address === 'string' ? router.query.address : undefined;
   const addr = (rawAddr && /^0x[a-fA-F0-9]{40}$/.test(rawAddr) ? rawAddr.toLowerCase() : undefined) as Address | undefined;
@@ -993,4 +996,20 @@ function CreatorTools({
       )}
     </div>
   );
+}
+
+// A token launched by the V4 launcher gets the V4 page; anything else keeps the existing page.
+export default function TokenPage() {
+  const router = useRouter();
+  const addr = String(router.query.address || '');
+  const [kind, setKind] = useState<'loading' | 'v4' | 'legacy'>(v4Configured() ? 'loading' : 'legacy');
+  useEffect(() => {
+    if (!v4Configured() || !router.isReady) return;
+    let cancelled = false;
+    isV4Token(addr).then((ok) => { if (!cancelled) setKind(ok ? 'v4' : 'legacy'); });
+    return () => { cancelled = true; };
+  }, [addr, router.isReady]);
+  if (kind === 'loading') return <div className="pad-empty" style={{ margin: 24 }}>Loading…</div>;
+  if (kind === 'v4') return <V4TokenView address={addr as Address} />;
+  return <LegacyTokenPage />;
 }
