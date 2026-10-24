@@ -233,3 +233,60 @@ exception when check_violation then
   raise exception 'insufficient milk';
 end $$;
 revoke all on function game_adjust_milk(text, bigint) from public, anon, authenticated;
+
+-- 4g) Munchy Kart: race tickets, milk claims, Telegram <-> wallet links -----------
+-- ⚠️ MIGRATION: run after 4f.
+create table if not exists game_races (
+  id          uuid primary key default gen_random_uuid(),
+  wallet      text not null,
+  seed        bigint not null,
+  started_at  timestamptz not null default now(),
+  claimed_at  timestamptz,
+  milk        bigint
+);
+create index if not exists game_races_wallet_idx on game_races (wallet, started_at desc);
+alter table game_races enable row level security;
+
+create table if not exists game_links (
+  tg_id       text primary key,
+  wallet      text not null unique,
+  created_at  timestamptz not null default now()
+);
+alter table game_links enable row level security;
+
+create table if not exists game_link_codes (
+  code        text primary key,
+  tg_id       text not null,
+  expires_at  timestamptz not null
+);
+alter table game_link_codes enable row level security;
+
+-- Claim a finished race once: enforces minimum duration and a per-race milk cap, then credits the wallet.
+create or replace function game_claim_race(p_id uuid, p_milk bigint, p_min_secs int, p_max_milk bigint) returns bigint
+language plpgsql security definer as $$
+declare r game_races; v bigint;
+begin
+  select * into r from game_races where id = p_id for update;
+  if not found then raise exception 'unknown ticket'; end if;
+  if r.claimed_at is not null then raise exception 'already claimed'; end if;
+  if extract(epoch from (now() - r.started_at)) < p_min_secs then raise exception 'too fast'; end if;
+  if p_milk < 0 or p_milk > p_max_milk then raise exception 'milk out of range'; end if;
+  update game_races set claimed_at = now(), milk = p_milk where id = p_id;
+  return game_adjust_milk(r.wallet, p_milk);
+end $$;
+revoke all on function game_claim_race(uuid, bigint, int, bigint) from public, anon, authenticated;
+
+-- Save a loadout and charge its cost atomically; the nonce stops replays. Raises 'insufficient milk' / 'nonce changed'.
+create or replace function game_save_loadout(p_wallet text, p_nonce bigint, p_loadout jsonb, p_cost bigint) returns game_players
+language plpgsql security definer as $$
+declare g game_players;
+begin
+  insert into game_players (wallet) values (p_wallet) on conflict do nothing;
+  update game_players set milk = milk - p_cost, loadout = p_loadout, nonce = nonce + 1, updated_at = now()
+    where wallet = p_wallet and nonce = p_nonce returning * into g;
+  if not found then raise exception 'nonce changed'; end if;
+  return g;
+exception when check_violation then
+  raise exception 'insufficient milk';
+end $$;
+revoke all on function game_save_loadout(text, bigint, jsonb, bigint) from public, anon, authenticated;

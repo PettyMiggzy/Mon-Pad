@@ -25,3 +25,30 @@ export function sanitizeLoadout(raw: any): Loadout {
 }
 
 export const loadoutMessage = (wallet: string, nonce: number) => `Mon-Pad Munchy Kart: save loadout for ${wallet} nonce ${nonce}`;
+
+// ---- prices (mirror CARS / BOOSTS / UPGRADES in public/games/munchy-kart/game.js) ----
+export const CAR_PRICE: Record<number, number> = { 1: 0, 2: 250, 3: 400, 4: 700, 5: 1500 };
+export const BOOST_PRICE = { nitro: 30, shield: 25, magnet: 40 } as const;
+export const UPGRADE_PRICES = { engine: [120, 260, 520], zap: [60, 140, 300], tires: [90, 200, 400] } as const;
+
+/** Milk cost of moving from `prev` to `next`, or null if the change is not allowed (unknown/removed car, downgrade). */
+export function loadoutCost(prev: Loadout, next: Loadout): number | null {
+  let cost = 0;
+  for (const id of prev.cars) if (!next.cars.includes(id)) return null;
+  for (const id of next.cars) {
+    if (prev.cars.includes(id)) continue;
+    if (CAR_PRICE[id] === undefined) return null;
+    cost += CAR_PRICE[id];
+  }
+  for (const k of ['nitro', 'shield', 'magnet'] as const) cost += Math.max(0, next.inv[k] - prev.inv[k]) * BOOST_PRICE[k];
+  for (const k of ['engine', 'zap', 'tires'] as const) {
+    if (next.up[k] < prev.up[k]) return null;
+    for (let lvl = prev.up[k]; lvl < next.up[k]; lvl++) cost += UPGRADE_PRICES[k][lvl];
+  }
+  return cost;
+}
+
+// ---- races ----
+export const RACE_SECS = 60;
+export const MIN_CLAIM_SECS = 45;      // a real race lasts RACE_SECS; allow slack for load time
+export const MAX_MILK_PER_RACE = 3000; // measured max over 75 seeds x 5 cars with maxed upgrades was 2226

@@ -1,11 +1,11 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { recoverMessageAddress } from 'viem';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
-import { loadoutMessage, sanitizeLoadout } from '@/lib/gameLoadout';
+import { loadoutCost, loadoutMessage, sanitizeLoadout } from '@/lib/gameLoadout';
 
 // GET  /api/game/loadout?wallet=0x…  -> { wallet, loadout, milk, nonce }
 // PUT  /api/game/loadout             -> body { wallet, loadout, signature } signed over loadoutMessage(wallet, nonce)
-// Milk is never written here — it only changes through /api/game/milk.
+// Saving charges the milk cost of what changed (new cars, boosts, upgrade levels); it never adds milk.
 
 const lc = (s?: string) => (s || '').toLowerCase();
 const isAddr = (s?: string) => !!s && /^0x[0-9a-f]{40}$/.test(lc(s));
@@ -26,7 +26,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const b = (req.body || {}) as Record<string, any>;
     const wallet = lc(b.wallet);
     if (!isAddr(wallet)) return res.status(400).json({ error: 'wallet required' });
-    const { data: cur, error: readErr } = await supabase.from('game_players').select('nonce').eq('wallet', wallet).maybeSingle();
+    const { data: cur, error: readErr } = await supabase.from('game_players').select('nonce,milk,loadout').eq('wallet', wallet).maybeSingle();
     if (readErr) return res.status(500).json({ error: readErr.message });
     const nonce = Number(cur?.nonce ?? 0);
     try {
@@ -34,14 +34,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (signer !== wallet) return res.status(401).json({ error: 'bad signature' });
     } catch { return res.status(401).json({ error: 'bad signature' }); }
     const loadout = sanitizeLoadout(b.loadout);
-    // Optimistic nonce check so a replayed signature can't win a race.
-    const q = cur
-      ? supabase.from('game_players').update({ loadout, nonce: nonce + 1, updated_at: new Date().toISOString() }).eq('wallet', wallet).eq('nonce', nonce)
-      : supabase.from('game_players').insert({ wallet, loadout, nonce: 1 });
-    const { data, error } = await q.select('wallet,milk,loadout,nonce').maybeSingle();
-    if (error) return res.status(500).json({ error: error.message });
-    if (!data) return res.status(409).json({ error: 'nonce changed, retry' });
-    return res.status(200).json({ ...data, milk: Number(data.milk) });
+    const cost = loadoutCost(sanitizeLoadout(cur?.loadout), loadout);
+    if (cost === null) return res.status(400).json({ error: 'loadout change not allowed' });
+    if (cost > Number(cur?.milk ?? 0)) return res.status(402).json({ error: 'insufficient milk', cost });
+    // Charge and save in one transaction; the nonce check makes a replayed signature fail.
+    const { data, error } = await supabase.rpc('game_save_loadout', { p_wallet: wallet, p_nonce: nonce, p_loadout: loadout, p_cost: cost });
+    if (error) return res.status(error.message.includes('insufficient') ? 402 : error.message.includes('nonce') ? 409 : 500).json({ error: error.message });
+    return res.status(200).json({ wallet, loadout: data.loadout, milk: Number(data.milk), nonce: Number(data.nonce) });
   }
 
   res.setHeader('Allow', 'GET, PUT');

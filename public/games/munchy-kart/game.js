@@ -68,7 +68,63 @@ const KEY = 'mk_save_v1';
 const fresh = () => ({ milk: 0, cars: [1], car: 1, inv: { nitro: 0, shield: 0, magnet: 0 }, up: { engine: 0, zap: 0, tires: 0 }, best: 0, races: 0 });
 let save = fresh();
 try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s) save = { ...fresh(), ...s, inv: { ...fresh().inv, ...s.inv }, up: { ...fresh().up, ...s.up } }; } catch (e) {}
-const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(save)); } catch (e) {} };
+const persist = () => { if (!cloud.addr) { try { localStorage.setItem(KEY, JSON.stringify(save)); } catch (e) {} } cloudQueue(); };
+
+// ---------- cloud (optional wallet sync) ----------
+// When a wallet is connected the server is the source of truth for milk and the loadout (so Telegram and
+// the site share one balance); the on-device save is left untouched. Purchases are charged server-side.
+const cloud = { addr: null, last: '', timer: null, busy: false, say: null, refresh: null };
+const loadoutOf = (s) => ({ car: s.car, cars: s.cars, inv: s.inv, up: s.up });
+const loadoutMessage = (w, n) => `Mon-Pad Munchy Kart: save loadout for ${w} nonce ${n}`;
+const linkMessage = (code) => `Mon-Pad Munchy Kart: link Telegram with code ${code}`;
+const shortAddr = (a) => a.slice(0, 6) + '…' + a.slice(-4);
+async function api(path, method, body) {
+  const r = await fetch('/api/game/' + path, { method, headers: { 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || 'HTTP ' + r.status);
+  return d;
+}
+const sign = (message) => window.ethereum.request({ method: 'personal_sign', params: [message, cloud.addr] });
+function applyServer(d) {
+  const lo = d.loadout;
+  save.car = lo.car; save.cars = lo.cars; save.inv = lo.inv; save.up = lo.up; save.milk = d.milk;
+  cloud.last = JSON.stringify(loadoutOf(save));
+  if (cloud.refresh) cloud.refresh();
+}
+async function cloudSave() {
+  if (!cloud.addr || cloud.busy) return;
+  const lo = loadoutOf(save);
+  if (JSON.stringify(lo) === cloud.last) return;
+  cloud.busy = true;
+  try {
+    const cur = await api('loadout?wallet=' + cloud.addr, 'GET');
+    const signature = await sign(loadoutMessage(cloud.addr, cur.nonce));
+    applyServer(await api('loadout', 'PUT', { wallet: cloud.addr, loadout: lo, signature }));
+  } catch (e) {
+    // Not saved (declined, not enough milk, offline): fall back to what the server has.
+    if (cloud.say) cloud.say(/insufficient/.test(e.message) ? 'Not enough milk' : 'Not saved', '#ff6d8a');
+    try { applyServer(await api('loadout?wallet=' + cloud.addr, 'GET')); } catch (e2) { /* offline */ }
+  }
+  cloud.busy = false;
+}
+function cloudQueue() { if (!cloud.addr) return; clearTimeout(cloud.timer); cloud.timer = setTimeout(cloudSave, 3000); }
+async function cloudConnect() {
+  if (!window.ethereum) throw new Error('No wallet found');
+  const [addr] = await window.ethereum.request({ method: 'eth_requestAccounts' });
+  cloud.addr = addr.toLowerCase();
+  try { applyServer(await api('loadout?wallet=' + cloud.addr, 'GET')); } catch (e) { cloud.addr = null; throw e; }
+  return cloud.addr;
+}
+async function cloudLink(code) {
+  const c = String(code || '').trim().toUpperCase();
+  await api('link/confirm', 'POST', { wallet: cloud.addr, code: c, signature: await sign(linkMessage(c)) });
+}
+// A connected wallet races on a server-issued seed so the claim can be checked against a ticket.
+async function nextRaceOpts(extra = {}) {
+  if (!cloud.addr) return { seed: (Math.random() * 1e9 | 0) >>> 0, autopilot: true, ...extra };
+  const d = await api('race/start', 'POST', { wallet: cloud.addr });
+  return { seed: d.seed >>> 0, autopilot: true, ticket: d.ticket, ...extra };
+}
 const carById = (id) => CARS.find((c) => c.id === id) || CARS[0];
 
 // ---------- track ----------
@@ -126,6 +182,19 @@ class Garage extends Phaser.Scene {
     this.add.image(52, 68, 'milk').setDisplaySize(40, 112).setOrigin(.5, .5);
     this.milkTxt = txt(this, 100, 68, '', 50, '#fff', { ox: 0 });
     txt(this, W - 40, 68, 'GARAGE', 44, '#d9ccff', { ox: 1 });
+    this.walletTxt = txt(this, W - 40, 112, cloud.addr ? shortAddr(cloud.addr) : 'CONNECT WALLET', 26, '#9a8cd8', { ox: 1 }).setInteractive({ useHandCursor: true });
+    this.walletTxt.on('pointerup', () => {
+      if (cloud.addr) return;
+      cloudConnect().then((a) => { this.walletTxt.setText(shortAddr(a)); this.linkTxt.setVisible(true); this.say('Wallet connected', '#39ff88'); })
+        .catch((e) => this.say(e.message === 'No wallet found' ? 'No wallet found' : 'Wallet connect failed', '#ff6d8a'));
+    });
+    this.linkTxt = txt(this, 40, 112, 'LINK TELEGRAM', 26, '#9a8cd8', { ox: 0 }).setInteractive({ useHandCursor: true }).setVisible(!!cloud.addr);
+    this.linkTxt.on('pointerup', () => {
+      const code = window.prompt('Send /link to the Mon-Pad bot in a private chat, then enter the code it gives you:');
+      if (!code) return;
+      cloudLink(code).then(() => this.say('Telegram linked', '#39ff88')).catch((e) => this.say(/expired|not found/.test(e.message) ? 'Code not found or expired' : 'Link failed', '#ff6d8a'));
+    });
+    cloud.say = (m, c) => this.say(m, c); cloud.refresh = () => { if (this.scene.isActive()) this.draw(); };
     this.body = this.add.container(0, 0);
     this.tabs = ['cars', 'boosts', 'upgrades'].map((t, i) => {
       const x = 130 + i * 230;
@@ -135,7 +204,7 @@ class Garage extends Phaser.Scene {
       return { t, r, l };
     });
     // One RACE button: the race plays itself (autopilot). Each race gets a fresh random seed; ?seed=...&auto=1 still replays one.
-    button(this, W / 2, H - 110, 560, 120, 'RACE', 0x39ff88, () => { persist(); this.scene.start('race', { seed: (Math.random() * 1e9 | 0) >>> 0, autopilot: true }); });
+    button(this, W / 2, H - 110, 560, 120, 'RACE', 0x39ff88, () => { persist(); nextRaceOpts().then((o) => this.scene.start('race', o)).catch(() => this.say('Could not start race', '#ff6d8a')); });
     this.toast = txt(this, W / 2, 232, '', 30, '#ffd75e').setAlpha(0).setDepth(50);
     this.draw();
     const qp = new URLSearchParams(location.search);
@@ -201,6 +270,7 @@ class Race extends Phaser.Scene {
     this.raceSeed = data.seed != null ? data.seed >>> 0 : null;
     this.autopilot = !!data.autopilot;
     this.skipPersist = !!data.skipPersist;
+    this.ticket = data.ticket || null;
     this.syncSim = !!data.syncSim;
     this.fixedStep = (this.autopilot && this.raceSeed != null) || this.syncSim;
     this.stepAcc = 0;
@@ -566,15 +636,17 @@ class Race extends Phaser.Scene {
     const result = this.raceResult();
     window.MunchyKart.lastRaceResult = result;
     if (!this.skipPersist) {
-      save.milk += this.milkN; save.races++; const newBest = this.milkN > save.best; if (newBest) save.best = this.milkN; persist();
+      if (!this.ticket) save.milk += this.milkN; save.races++; const newBest = this.milkN > save.best; if (newBest) save.best = this.milkN; persist();
     }
     if (window.MunchyKart && window.MunchyKart.onFinish) window.MunchyKart.onFinish(result);
     this.add.rectangle(W / 2, H / 2, W, H, 0x07040f, .75).setDepth(1000);
     const z = (y, s, size, color) => txt(this, W / 2, y, s, size, color).setDepth(1001);
     const newBest = !this.skipPersist && this.milkN > save.best;
     z(300, 'FINISH!', 100, '#39ff88'); z(440, '+' + this.milkN + ' MILK', 84, '#ffffff');
-    if (!this.skipPersist) { z(560, 'WALLET  ' + save.milk, 44, '#ffd75e'); z(630, newBest ? 'NEW BEST!' : 'BEST  ' + save.best, 40, newBest ? '#39ff88' : '#d9ccff'); }
-    const again = () => this.scene.restart({ seed: (Math.random() * 1e9 | 0) >>> 0, autopilot: true, skipPersist: this.skipPersist });
+    let walletTxt;
+    if (!this.skipPersist) { walletTxt = z(560, this.ticket ? 'SAVING…' : 'WALLET  ' + save.milk, 44, '#ffd75e'); z(630, newBest ? 'NEW BEST!' : 'BEST  ' + save.best, 40, newBest ? '#39ff88' : '#d9ccff'); }
+    if (this.ticket) api('race/claim', 'POST', { ticket: this.ticket, milk: this.milkN }).then((d) => { save.milk = d.milk; if (walletTxt && walletTxt.active) walletTxt.setText('WALLET  ' + save.milk); }).catch(() => { if (walletTxt && walletTxt.active) walletTxt.setText('NOT SAVED'); });
+    const again = () => nextRaceOpts({ skipPersist: this.skipPersist }).then((o) => this.scene.restart(o)).catch(() => {});
     const b1 = button(this, W / 2, 780, 520, 120, 'RACE AGAIN', 0x39ff88, again); const b2 = button(this, W / 2, 930, 520, 110, 'GARAGE', 0x6a45f0, () => this.scene.start('garage'), '#ffffff');
     [b1.r, b1.t, b2.r, b2.t].forEach((o) => o.setDepth(1002));
   }

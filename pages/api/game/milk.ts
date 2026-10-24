@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { timingSafeEqual } from 'crypto';
+import { gameKeyOk } from '@/lib/gameAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 // GET  /api/game/milk?wallet=0x…  -> { wallet, milk }   (public, read-only; the bot uses this)
@@ -9,13 +9,6 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 const lc = (s?: string) => (s || '').toLowerCase();
 const isAddr = (s?: string) => !!s && /^0x[0-9a-f]{40}$/.test(lc(s));
 const MAX_DELTA = 1_000_000;
-
-function keyOk(got: string | undefined) {
-  const want = process.env.GAME_API_KEY;
-  if (!want || !got) return false;
-  const a = Buffer.from(got), b = Buffer.from(want);
-  return a.length === b.length && timingSafeEqual(a, b);
-}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   res.setHeader('Cache-Control', 'no-store');
@@ -31,7 +24,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === 'POST') {
-    if (!keyOk(req.headers['x-game-key'] as string | undefined)) return res.status(401).json({ error: 'unauthorized' });
+    if (!gameKeyOk(req.headers['x-game-key'] as string | undefined)) return res.status(401).json({ error: 'unauthorized' });
     const b = (req.body || {}) as Record<string, any>;
     const wallet = lc(b.wallet);
     const delta = Math.trunc(Number(b.delta));
