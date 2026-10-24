@@ -4,7 +4,7 @@ import { useGLTF } from '@react-three/drei';
 import { Box3, Quaternion, Euler, Vector3, type Bone, type Group, type Object3D } from 'three';
 import { currentMood, heroBus } from './bus';
 
-export const MONSHI_GLB = '/models/monshi.glb';
+export const MONSHI_GLB = '/models/monshi-hq.glb';
 
 const damp = (a: number, b: number, k: number) => a + (b - a) * k;
 const BONES = ['Head', 'neck', 'Spine01', 'Spine02', 'RightArm', 'RightForeArm', 'LeftArm', 'LeftForeArm'] as const;

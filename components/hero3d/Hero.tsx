@@ -102,7 +102,7 @@ export function Hero({ symbols }: Props) {
       <div className="pad-hero-copy">
         <p className="pad-kicker">Monad · 143</p>
         <h1>Launch fair. Burn Monshi.</h1>
-        <p>Fair launches straight into a Uniswap V3 pool. On the DEX and DexScreener from block one.</p>
+        <p>Fair launches straight into a Uniswap pool. On the DEX and DexScreener from block one.</p>
         <div className="pad-hero-actions">
           <Link
             href="/create"
