@@ -133,15 +133,15 @@ export default function Docs() {
               <tbody className="text-white/75 divide-y divide-white/10">
                 <tr><td className="p-3">70%</td><td className="p-3">The creator, claimable at any time</td></tr>
                 <tr><td className="p-3">10%</td><td className="p-3">The platform</td></tr>
-                <tr><td className="p-3">10%</td><td className="p-3">Buys and burns MONSHI</td></tr>
+                <tr><td className="p-3">10%</td><td className="p-3">Sent to the MONSHI burn wallet, converted to MONSHI and burned by the team</td></tr>
                 <tr><td className="p-3">10%</td><td className="p-3">Buys and burns the launched token</td></tr>
               </tbody>
             </table>
           </div>
           <P><b className="text-white">Creator tax.</b> Anything above the base 1% is the creator tax. It is not paid to the creator or the platform. All of it buys and burns the launched token, so it can only reduce supply. The creator cannot take it out or change it later. The total fee is always shown before you trade.</P>
-          <P><b className="text-white">Paid in USDC.</b> The fee on the USDC side of a swap is collected in USDC, and so are the creator payout and the platform share. The two burn shares are held in USDC until a buyback swaps them: one into MONSHI, one into the launched token.</P>
+          <P><b className="text-white">Paid in USDC.</b> The fee on the USDC side of a swap is collected in USDC, and so are the creator payout and the platform share. The token-burn share is held in USDC until the buyback swaps it into the launched token. The MONSHI share is credited, in USDC, to a Monpad burn wallet.</P>
           <P><b className="text-white">Fees paid in the token.</b> On the token side of a swap, the creator and platform keep their 70% and 10%, and the two burn shares are burned directly in the token, 20% in total.</P>
-          <P><b className="text-white">Buyback and burn.</b> Anyone can run the token buyback. It only executes when the pool price is close to a reference price the hook samples before swaps, which makes it hard to manipulate. The MONSHI buyback runs from a designated keeper with a minimum-out set from an off-chain price.</P>
+          <P><b className="text-white">Buyback and burn.</b> Anyone can run the token buyback. It only executes when the pool price is close to a reference price the hook samples before swaps, which makes it hard to manipulate. The MONSHI share is different: the contract does not swap it. The team collects it from the burn wallet, buys MONSHI and burns it by hand, and the burns can be checked on-chain at the dead address.</P>
 
           <H2 id="trading">Trading</H2>
           <P>Tokens trade in the Uniswap V4 pool like any other pair, against USDC. On monpad.net, every token page has a trade box and a chart. Bots and aggregators can swap in the pool directly. The fee is charged either way.</P>
@@ -238,10 +238,11 @@ await monpad.launch({ name: 'Example', symbol: 'EX', creatorTaxBps: 200, devBuyU
           <H2 id="security">Security &amp; risks</H2>
           <ul className="list-disc pl-5 space-y-2 text-white/75 mb-4">
             <li><Lock className="inline mr-1" size={14} /><b className="text-white">Not yet audited.</b> The contracts are tested on a fork of Monad mainnet. They go live only after an independent audit.</li>
-            <li><b className="text-white">Admin powers are limited and visible.</b> The owner can pause new launches and change the platform address, the creation fee and the keeper. The owner has no function to withdraw user funds or remove liquidity. Ownership belongs in a multisig.</li>
+            <li><b className="text-white">Admin powers are limited and visible.</b> The owner can pause new launches and change the platform address, the MONSHI wallet and the creation fee. The owner has no function to withdraw user funds or remove liquidity. Ownership belongs in a multisig.</li>
             <li><b className="text-white">USDC is a dependency.</b> USDC is issued by Circle, which can pause it or blacklist an address. If USDC is paused, or blacklists the launcher, the router or the pool manager, launches, trades and fee claims in USDC stop until Circle lifts it. A blacklisted wallet cannot send or receive USDC. Monpad&apos;s tools check for this before they send.</li>
-            <li><b className="text-white">Keepers are needed.</b> Harvests and buybacks run when someone calls them. Monpad runs a keeper, and anyone can call harvest.</li>
+            <li><b className="text-white">Harvests and buybacks need a caller.</b> They run when someone calls them. Monpad runs a bot, and anyone can call harvest or the token buyback.</li>
             <li><b className="text-white">Protocol fees.</b> Uniswap governance can switch on a protocol fee for pools. That would take a slice before the fee reaches Monpad.</li>
+            <li><b className="text-white">The MONSHI burn is manual.</b> Nothing on-chain forces the MONSHI share to be burned. It is paid to a wallet the owner sets, and the team burns it. Trust it only as far as you trust that wallet&apos;s published burns.</li>
             <li><b className="text-white">Memecoins are risky.</b> Tokens can go to zero, and liquidity being locked does not protect the price.</li>
           </ul>
 
