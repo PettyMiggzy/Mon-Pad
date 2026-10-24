@@ -50,17 +50,18 @@ export default function V4TokenView({ address: tokenAddr }: { address: Address }
   return (
     <div style={{ maxWidth: 1240, margin: '0 auto', padding: '16px 16px 64px', display: 'grid', gap: 20, gridTemplateColumns: 'minmax(0,1fr)' }} className="v4-token">
       <Head><title>{`${t.name} (${t.symbol}) | MONPAD`}</title></Head>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-        {imageUrl ? <img src={imageUrl} alt="" width={72} height={72} style={{ borderRadius: 16, objectFit: 'cover' }} /> : <span className="pad-card-pfp pad-card-letter" style={{ width: 72, height: 72, fontSize: 32 }}>{t.symbol.slice(0, 1)}</span>}
+      <div className="tk-head">
+        {imageUrl ? <img src={imageUrl} alt="" width={64} height={64} style={{ borderRadius: 16, objectFit: 'cover' }} /> : <span className="pad-card-pfp pad-card-letter" style={{ width: 64, height: 64, fontSize: 28 }}>{t.symbol.slice(0, 1)}</span>}
         <div>
-          <h1 style={{ margin: 0 }}>{t.name} <span style={{ color: 'var(--pink)' }}>${t.symbol}</span></h1>
-          <div style={{ color: '#999', fontSize: 13 }}>by {shortAddr(t.creator)} · <a href={`${MONAD_EXPLORER}/token/${t.address}`} target="_blank" rel="noreferrer" style={{ color: '#a78bfa' }}>{shortAddr(t.address)}</a></div>
+          <h1>{t.name} <span style={{ color: 'var(--p2)', fontSize: 16 }}>${t.symbol}</span></h1>
+          <div className="tk-badges">
+            <span className="tk-badge">🔒 Liquidity locked</span>
+            <span className="tk-badge">Fee {t.totalFeeBps / 100}% (1% + {t.taxBps / 100}% creator tax)</span>
+            <span className="tk-badge">by {shortAddr(t.creator)}</span>
+            <a className="tk-badge" href={`${MONAD_EXPLORER}/token/${t.address}`} target="_blank" rel="noreferrer">{shortAddr(t.address)} ↗</a>
+          </div>
         </div>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12 }}>
-        {[['Price', usd(t.priceUsdc)], ['Market cap', usd(t.mcapUsdc)], ['Trade fee', `${t.totalFeeBps / 100}% (1% + ${t.taxBps / 100}% creator tax)`], ['Pool', 'Uniswap V4 · USDC']].map(([k, v]) => (
-          <div key={k} style={{ padding: 12, border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10 }}><div style={{ fontSize: 11, color: '#999' }}>{k}</div><div style={{ fontWeight: 700, marginTop: 2 }}>{v}</div></div>
-        ))}
+        <div className="tk-price"><b>{usd(t.priceUsdc)}</b><span style={{ color: '#9B94B0', fontSize: 13 }}>Market cap {usd(t.mcapUsdc)}</span></div>
       </div>
       <div className="xch-tok">
         <div style={{ padding: 16, border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, fontSize: 14, lineHeight: 1.6, color: '#bbb' }}>

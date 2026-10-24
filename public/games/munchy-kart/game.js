@@ -919,5 +919,8 @@ if (mkHost && typeof ResizeObserver !== 'undefined') {
 }
 window.addEventListener('orientationchange', mkRefresh);
 mkGame.events.once('ready', () => { mkRefresh(); requestAnimationFrame(mkRefresh); });
+// Inside an iframe the first measurement can be 0x0 and no resize event follows; re-measure shortly after load.
+window.addEventListener('load', mkRefresh);
+[250, 1000, 2500].forEach((ms) => setTimeout(mkRefresh, ms));
 window.addEventListener('error', (e) => { const el = document.getElementById('err'); if (el) { el.style.display = 'block'; el.textContent = e.message; } });
 })();

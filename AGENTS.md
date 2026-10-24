@@ -25,7 +25,7 @@ Pool fee tier: **1%** (`POOL_FEE = 10000` on Uniswap V3).
 
 Display the four slices from `lib/fees.ts` (`LP_FEE_SLICES`): **70% creator payout / 10% platform / 10% burn MONSHI / 10% burn project token**. The on-chain creator headline is 80% because the project-token burn is nested inside it. Do not hardcode the percents in UI.
 
-The home hero is a full-bleed 3D stage (Monshi on the logotype). That is intentional.
+With the V4 pad live (`NEXT_PUBLIC_*_UV4` set) the home page uses the exchange look: a compact hero with the Monshi statue, live stats, a price tape and a board table. The old full-bleed 3D hero (`components/hero3d`) still renders when V4 is not configured.
 
 Optional **dev bot**: atomic first buy in `createLaunch` (Minta `firstBuy` pattern).
 

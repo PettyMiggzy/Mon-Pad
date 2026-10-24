@@ -15,6 +15,8 @@ import { DEMO_BOARD, pickCrown } from '@/lib/demo';
 import { v4Configured } from '@/lib/v4/config';
 import { listV4Tokens } from '@/lib/v4/chain';
 import V4Board from '@/components/v4/V4Board';
+import { HomeHero } from '@/components/home/HomeHero';
+import { PriceTape } from '@/components/home/PriceTape';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 
@@ -23,7 +25,7 @@ type FilterKey = 'trending' | 'new' | 'hot';
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'trending', label: 'Trending' },
   { key: 'new', label: 'New' },
-  { key: 'hot', label: 'Hottest' },
+  { key: 'hot', label: 'Market cap' },
 ];
 
 export default function Home() {
@@ -173,6 +175,16 @@ export default function Home() {
     );
   }, [tokens, query]);
 
+  const isV4 = v4Configured() && !demo;
+  const mcapUsd = (t: TokenSummary) => Number(BigInt(t.marketCapMon || '0') / 10n ** 12n) / 1e6;
+  const board = useMemo(() => {
+    if (!isV4) return visible;
+    const rows = [...visible];
+    if (filter === 'new') return rows; // listV4Tokens is newest first
+    return rows.sort((a, b) => mcapUsd(b) - mcapUsd(a));
+  }, [visible, filter, isV4]);
+  const totalMcapUsd = useMemo(() => tokens.reduce((a, t) => a + mcapUsd(t), 0), [tokens]);
+
   const crown = useMemo(() => pickCrown(tokens), [tokens]);
 
   const symbols = useMemo(() => visible.slice(0, 3).map((t) => t.symbol), [visible]);
@@ -194,13 +206,14 @@ export default function Home() {
         <link rel="preload" as="image" href="/meshy/monshi-mascot.webp" fetchPriority="high" />
       </Head>
 
-      <LiveTicker maxItems={24} />
-      <Hero symbols={symbols} />
+      {isV4 ? <PriceTape tokens={tokens} /> : <LiveTicker maxItems={24} />}
+      {!isV4 && <Hero symbols={symbols} />}
 
       <div className="pad-wrap">
-        <WhyRow />
-        <FeeSplit />
-        <MostWanted token={crown} />
+        {isV4 && <HomeHero listed={loading ? null : tokens.length} totalMcapUsd={loading ? null : totalMcapUsd} />}
+        {!isV4 && <WhyRow />}
+        {!isV4 && <FeeSplit />}
+        {!isV4 && <MostWanted token={crown} />}
 
         {demo && <div className="pad-empty">Demo board: these tokens are sample data, not real launches.</div>}
 
@@ -214,7 +227,7 @@ export default function Home() {
         </div>
 
         {v4Configured() && !demo ? (
-          <V4Board tokens={visible} loading={loading} query={query} />
+          <V4Board tokens={board} loading={loading} query={query} />
         ) : (
         <div className="pad-layout">
           <div className="pad-grid">
