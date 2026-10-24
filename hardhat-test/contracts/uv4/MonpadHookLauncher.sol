@@ -91,6 +91,7 @@ contract MonpadHookLauncher is Ownable2Step, ReentrancyGuard, IUnlockCallback {
         uint16 taxBps;
         uint64 lastBuyback;
         bool quoteIs0;
+        int24 tick0; // start tick in THIS pool's orientation (see launch)
         PoolKey key;
     }
 
@@ -195,14 +196,18 @@ contract MonpadHookLauncher is Ownable2Step, ReentrancyGuard, IUnlockCallback {
             MonpadPoolLib.buildMonpadKey(quoteAsset, token, address(hook));
         PoolKey memory key = sorted.key;
         hook.configure(key, uint24(uint256(BASE_FEE_BPS + creatorTaxBps) * 100));
-        poolManager.initialize(key, TickMath.getSqrtPriceAtTick(startTick));
-        _addLiquidity(key, sorted);
+        // `startTick` is the price in "launch tokens per USDC" (raw units). When the token sorts first the pool price
+        // is USDC per token, the reciprocal, so the tick flips sign.
+        int24 tick0 = sorted.quoteIs0 ? startTick : -startTick;
+        poolManager.initialize(key, TickMath.getSqrtPriceAtTick(tick0));
+        _addLiquidity(key, sorted, tick0);
 
         Launch storage L = _launches[token];
         L.token = token;
         L.creator = msg.sender;
         L.taxBps = creatorTaxBps;
         L.quoteIs0 = sorted.quoteIs0;
+        L.tick0 = tick0;
         L.key = key;
         allTokens.push(token);
 
@@ -219,20 +224,20 @@ contract MonpadHookLauncher is Ownable2Step, ReentrancyGuard, IUnlockCallback {
         emit Launched(token, msg.sender, PoolId.unwrap(key.toId()), creatorTaxBps, name_, symbol_, bought);
     }
 
-    function _addLiquidity(PoolKey memory key, MonpadPoolLib.SortedKey memory sorted) internal {
-        uint160 sqrtU = TickMath.getSqrtPriceAtTick(startTick);
+    function _addLiquidity(PoolKey memory key, MonpadPoolLib.SortedKey memory sorted, int24 tick0) internal {
+        uint160 sqrtU = TickMath.getSqrtPriceAtTick(tick0);
         bytes memory out;
         if (sorted.quoteIs0) {
             uint160 sqrtL = TickMath.getSqrtPriceAtTick(MIN_TICK);
             uint128 liq = uint128(FullMath.mulDiv(SUPPLY, FixedPoint96.Q96, uint256(sqrtU) - uint256(sqrtL)));
-            out = _unlock(abi.encode(Op.ADD_LIQUIDITY, key, abi.encode(true, liq)));
+            out = _unlock(abi.encode(Op.ADD_LIQUIDITY, key, abi.encode(true, liq, tick0)));
         } else {
             int24 upper = int24(TickMath.MAX_TICK - (TickMath.MAX_TICK % TICK_SPACING));
-            uint160 sqrtL = TickMath.getSqrtPriceAtTick(startTick);
+            uint160 sqrtL = TickMath.getSqrtPriceAtTick(tick0);
             uint160 sqrtH = TickMath.getSqrtPriceAtTick(upper);
             uint256 intermediate = FullMath.mulDiv(sqrtL, sqrtH, FixedPoint96.Q96);
             uint128 liq = uint128(FullMath.mulDiv(SUPPLY, intermediate, sqrtH - sqrtL));
-            out = _unlock(abi.encode(Op.ADD_LIQUIDITY, key, abi.encode(false, liq)));
+            out = _unlock(abi.encode(Op.ADD_LIQUIDITY, key, abi.encode(false, liq, tick0)));
         }
         uint256 owed = abi.decode(out, (uint256));
         require(owed >= SUPPLY - SUPPLY / 1_000_000, "position too small");
@@ -255,7 +260,7 @@ contract MonpadHookLauncher is Ownable2Step, ReentrancyGuard, IUnlockCallback {
     function harvest(address token) external nonReentrant {
         Launch storage L = _launches[token];
         require(L.token != address(0), "unknown token");
-        bytes memory out = _unlock(abi.encode(Op.COLLECT, L.key, bytes("")));
+        bytes memory out = _unlock(abi.encode(Op.COLLECT, L.key, abi.encode(L.tick0)));
         (uint256 quoteFees, uint256 tokenFees) = abi.decode(out, (uint256, uint256));
 
         uint256 total = uint256(BASE_FEE_BPS) + L.taxBps;
@@ -398,11 +403,11 @@ contract MonpadHookLauncher is Ownable2Step, ReentrancyGuard, IUnlockCallback {
         (Op op, PoolKey memory key, bytes memory args) = abi.decode(raw, (Op, PoolKey, bytes));
 
         if (op == Op.ADD_LIQUIDITY) {
-            (bool tokenIsCurrency1, uint128 liq) = abi.decode(args, (bool, uint128));
+            (bool tokenIsCurrency1, uint128 liq, int24 tick0) = abi.decode(args, (bool, uint128, int24));
             if (tokenIsCurrency1) {
                 (BalanceDelta d,) = poolManager.modifyLiquidity(
                     key,
-                    ModifyLiquidityParams({tickLower: MIN_TICK, tickUpper: startTick, liquidityDelta: int256(uint256(liq)), salt: bytes32(0)}),
+                    ModifyLiquidityParams({tickLower: MIN_TICK, tickUpper: tick0, liquidityDelta: int256(uint256(liq)), salt: bytes32(0)}),
                     ""
                 );
                 require(d.amount0() == 0, "not single-sided");
@@ -413,7 +418,7 @@ contract MonpadHookLauncher is Ownable2Step, ReentrancyGuard, IUnlockCallback {
             int24 upper = int24(TickMath.MAX_TICK - (TickMath.MAX_TICK % TICK_SPACING));
             (BalanceDelta d,) = poolManager.modifyLiquidity(
                 key,
-                ModifyLiquidityParams({tickLower: startTick, tickUpper: upper, liquidityDelta: int256(uint256(liq)), salt: bytes32(0)}),
+                ModifyLiquidityParams({tickLower: tick0, tickUpper: upper, liquidityDelta: int256(uint256(liq)), salt: bytes32(0)}),
                 ""
             );
             require(d.amount1() == 0, "not single-sided");
@@ -424,10 +429,11 @@ contract MonpadHookLauncher is Ownable2Step, ReentrancyGuard, IUnlockCallback {
 
         if (op == Op.COLLECT) {
             bool quoteIs0 = Currency.unwrap(key.currency0) == quoteAsset;
+            int24 tick0 = abi.decode(args, (int24));
             int24 upper = int24(TickMath.MAX_TICK - (TickMath.MAX_TICK % TICK_SPACING));
             ModifyLiquidityParams memory p = quoteIs0
-                ? ModifyLiquidityParams({tickLower: MIN_TICK, tickUpper: startTick, liquidityDelta: 0, salt: bytes32(0)})
-                : ModifyLiquidityParams({tickLower: startTick, tickUpper: upper, liquidityDelta: 0, salt: bytes32(0)});
+                ? ModifyLiquidityParams({tickLower: MIN_TICK, tickUpper: tick0, liquidityDelta: 0, salt: bytes32(0)})
+                : ModifyLiquidityParams({tickLower: tick0, tickUpper: upper, liquidityDelta: 0, salt: bytes32(0)});
             (, BalanceDelta fees) = poolManager.modifyLiquidity(key, p, "");
             uint256 a0 = fees.amount0() > 0 ? uint256(uint128(fees.amount0())) : 0;
             uint256 a1 = fees.amount1() > 0 ? uint256(uint128(fees.amount1())) : 0;
