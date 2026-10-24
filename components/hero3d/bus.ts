@@ -1,4 +1,4 @@
-export type HeroMood = 'idle' | 'launch' | 'wave' | 'celebrate' | 'facepalm';
+export type HeroMood = 'idle' | 'launch' | 'wave' | 'celebrate' | 'facepalm' | 'dance';
 
 /** Shared with the canvas without forcing React re-renders every pointer move. */
 export const heroBus = {
