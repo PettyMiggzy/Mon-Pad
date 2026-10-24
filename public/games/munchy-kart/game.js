@@ -68,7 +68,49 @@ const KEY = 'mk_save_v1';
 const fresh = () => ({ milk: 0, cars: [1], car: 1, inv: { nitro: 0, shield: 0, magnet: 0 }, up: { engine: 0, zap: 0, tires: 0 }, best: 0, races: 0 });
 let save = fresh();
 try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s) save = { ...fresh(), ...s, inv: { ...fresh().inv, ...s.inv }, up: { ...fresh().up, ...s.up } }; } catch (e) {}
-const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(save)); } catch (e) {} };
+const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(save)); } catch (e) {} cloudQueue(); };
+
+// ---------- cloud (optional wallet sync) ----------
+// Loadout (car, cars, boosts, upgrades) syncs to /api/game/loadout with a wallet signature.
+// Milk stays on this device until the server can verify races.
+const cloud = { addr: null, last: '', timer: null, busy: false };
+const loadoutOf = (s) => ({ car: s.car, cars: s.cars, inv: s.inv, up: s.up });
+const loadoutMessage = (w, n) => `Mon-Pad Munchy Kart: save loadout for ${w} nonce ${n}`;
+const shortAddr = (a) => a.slice(0, 6) + '…' + a.slice(-4);
+async function cloudApi(method, body) {
+  const q = method === 'GET' ? `?wallet=${cloud.addr}` : '';
+  const r = await fetch('/api/game/loadout' + q, { method, headers: { 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || 'HTTP ' + r.status);
+  return d;
+}
+async function cloudSave() {
+  if (!cloud.addr || cloud.busy) return;
+  const lo = loadoutOf(save), snap = JSON.stringify(lo);
+  if (snap === cloud.last) return;
+  cloud.busy = true;
+  try {
+    const cur = await cloudApi('GET');
+    const signature = await window.ethereum.request({ method: 'personal_sign', params: [loadoutMessage(cloud.addr, cur.nonce), cloud.addr] });
+    await cloudApi('PUT', { wallet: cloud.addr, loadout: lo, signature });
+    cloud.last = snap;
+  } catch (e) { /* offline or signature declined: local save still holds */ }
+  cloud.busy = false;
+}
+function cloudQueue() { if (!cloud.addr) return; clearTimeout(cloud.timer); cloud.timer = setTimeout(cloudSave, 3000); }
+async function cloudConnect() {
+  if (!window.ethereum) throw new Error('No wallet found');
+  const [addr] = await window.ethereum.request({ method: 'eth_requestAccounts' });
+  cloud.addr = addr.toLowerCase();
+  const d = await cloudApi('GET');
+  if (d.nonce > 0) { // this wallet already has a saved loadout: it wins
+    const lo = d.loadout;
+    save.car = lo.car; save.cars = lo.cars; save.inv = { ...save.inv, ...lo.inv }; save.up = { ...save.up, ...lo.up };
+    cloud.last = JSON.stringify(loadoutOf(save));
+    persist();
+  } else { cloud.last = ''; await cloudSave(); }
+  return cloud.addr;
+}
 const carById = (id) => CARS.find((c) => c.id === id) || CARS[0];
 
 // ---------- track ----------
@@ -126,6 +168,12 @@ class Garage extends Phaser.Scene {
     this.add.image(52, 68, 'milk').setDisplaySize(40, 112).setOrigin(.5, .5);
     this.milkTxt = txt(this, 100, 68, '', 50, '#fff', { ox: 0 });
     txt(this, W - 40, 68, 'GARAGE', 44, '#d9ccff', { ox: 1 });
+    this.walletTxt = txt(this, W - 40, 112, cloud.addr ? shortAddr(cloud.addr) : 'CONNECT WALLET', 26, '#9a8cd8', { ox: 1 }).setInteractive({ useHandCursor: true });
+    this.walletTxt.on('pointerup', () => {
+      if (cloud.addr) return;
+      cloudConnect().then((a) => { this.walletTxt.setText(shortAddr(a)); this.say('Wallet synced', '#39ff88'); this.draw(); })
+        .catch((e) => this.say(e.message === 'No wallet found' ? 'No wallet found' : 'Wallet sync failed', '#ff6d8a'));
+    });
     this.body = this.add.container(0, 0);
     this.tabs = ['cars', 'boosts', 'upgrades'].map((t, i) => {
       const x = 130 + i * 230;
