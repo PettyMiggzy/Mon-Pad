@@ -2,6 +2,7 @@
 // MonpadHook needs BEFORE_INITIALIZE (1<<13) | BEFORE_SWAP (1<<7) = 0x2080 in the low 14 bits.
 // We deploy it with CREATE2 through the canonical deployer and mine a salt that produces such an address.
 const { ethers } = require("hardhat");
+const routes = require("../config/uv4-fork.routes.json");
 
 const CREATE2_DEPLOYER = "0x4e59b44847b379578588920cA78FbF26c0B4956C";
 const FLAGS = 0x2080n;
@@ -21,13 +22,14 @@ async function mineHookSalt(poolManager, launcher) {
 
 /// Deploys MonpadHook (CREATE2, mined) then MonpadHookLauncher. The hook needs the launcher's address and the launcher
 /// needs the hook's, so the launcher address is predicted from the deployer's next nonces.
-async function deployHookAndLauncher(deployer, { poolManager, owner, platform, quoteAsset, monshi, startTick, creationFee }) {
+async function deployHookAndLauncher(deployer, { poolManager, owner, platform, quoteAsset, monshi, startTick, creationFee, monUsdcKey }) {
+  const mk = monUsdcKey || { currency0: routes.monUsdcPool.currency0, currency1: routes.monUsdcPool.currency1, fee: routes.monUsdcPool.fee, tickSpacing: routes.monUsdcPool.tickSpacing, hooks: routes.monUsdcPool.hooks };
   const nonce = await deployer.getNonce();
   const launcherAddr = ethers.getCreateAddress({ from: deployer.address, nonce: nonce + 1 });
   const { salt, addr, initCode } = await mineHookSalt(poolManager, launcherAddr);
   await (await deployer.sendTransaction({ to: CREATE2_DEPLOYER, data: ethers.concat([salt, initCode]) })).wait();
   const F = await ethers.getContractFactory("MonpadHookLauncher", deployer);
-  const launcher = await F.deploy(owner, platform, poolManager, addr, quoteAsset, monshi, startTick, creationFee);
+  const launcher = await F.deploy(owner, platform, poolManager, addr, quoteAsset, monshi, startTick, creationFee, mk);
   await launcher.waitForDeployment();
   if ((await launcher.getAddress()).toLowerCase() !== launcherAddr.toLowerCase()) throw new Error("launcher address prediction failed");
   const hook = await ethers.getContractAt("MonpadHook", addr, deployer);

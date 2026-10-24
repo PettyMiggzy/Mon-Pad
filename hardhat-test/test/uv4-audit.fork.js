@@ -124,8 +124,51 @@ const pmAbi = ["function initialize((address,address,uint24,int24,address) key, 
   });
 
   it("A7: creator tax cap and fee ceiling", async function () {
+    await ensureUsdc(creator.address, U(100));
+    await new ethers.Contract(USDC, erc20, creator).approve(launcher.target, U(100));
     await expect(launcher.connect(creator).launch("T", "T", nextSalt(), 501, 0)).to.be.revertedWith("tax too high");
     await expect(launcher.connect(owner).setCreationFee(U(10_001))).to.be.revertedWith("fee too high");
     await expect(launcher.connect(owner).renounceOwnership()).to.be.revertedWith("disabled");
+  });
+  describe("launchWithMon", function () {
+    const tokenOf = (rc) => {
+      const ev = rc.logs.map((x) => { try { return launcher.interface.parseLog(x); } catch { return null; } }).find((e) => e && e.name === "Launched");
+      return ev.args;
+    };
+    it("M1: fee 0, pay in MON: dev buy is bought with converted MON, nothing is left in the launcher, excess MON refunded", async function () {
+      await launcher.connect(owner).setCreationFee(0);
+      const usdc = new ethers.Contract(USDC, erc20, ethers.provider);
+      const usdcBefore = await usdc.balanceOf(launcher.target);
+      const monBefore = await ethers.provider.getBalance(creator.address);
+      const rc = await (await launcher.connect(creator).launchWithMon("Mon Coin", "MONC", nextSalt(), 100, 1n, { value: E(1000) })).wait();
+      const a = tokenOf(rc);
+      const token = new ethers.Contract(a.token, erc20, ethers.provider);
+      const got = await token.balanceOf(creator.address);
+      console.log("      1000 MON -> tokens bought:", ethers.formatEther(got), "| devBuyTokens event:", ethers.formatEther(a.devBuyTokens));
+      expect(got).to.be.gt(0n);
+      expect(got).to.equal(a.devBuyTokens);
+      expect(await usdc.balanceOf(launcher.target)).to.equal(usdcBefore); // no stray USDC
+      expect(await ethers.provider.getBalance(launcher.target)).to.equal(0n); // no stray MON
+      const monAfter = await ethers.provider.getBalance(creator.address);
+      expect(monBefore - monAfter).to.be.lte(E(1000) + E(1)); // never charged more than sent + gas
+    });
+    it("M2: minUsdc is enforced", async function () {
+      await expect(launcher.connect(creator).launchWithMon("X", "X", nextSalt(), 0, U(1_000_000), { value: E(10) })).to.be.revertedWith("not enough USDC");
+    });
+    it("M3: fee 0 and no MON = plain launch, no dev buy", async function () {
+      const rc = await (await launcher.connect(creator).launchWithMon("Free", "FREE", nextSalt(), 0, 0)).wait();
+      expect(tokenOf(rc).devBuyTokens).to.equal(0n);
+    });
+    it("M4: with a fee, MON must cover it; the rest is the dev buy", async function () {
+      await launcher.connect(owner).setCreationFee(U(1));
+      await expect(launcher.connect(creator).launchWithMon("F", "F", nextSalt(), 0, 0, { value: 1n })).to.be.revertedWith("not enough USDC");
+      const rc = await (await launcher.connect(creator).launchWithMon("F", "F", nextSalt(), 0, 0, { value: E(500) })).wait();
+      expect(tokenOf(rc).devBuyTokens).to.be.gt(0n);
+      expect(await launcher.claimable(platform.address, USDC)).to.be.gte(U(1));
+      await launcher.connect(owner).setCreationFee(0);
+    });
+    it("M5: dev buy cap still applies to the MON path", async function () {
+      await expect(launcher.connect(creator).launchWithMon("Big", "BIG", nextSalt(), 0, 0, { value: E(5_000_000) })).to.be.reverted;
+    });
   });
 });
