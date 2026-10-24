@@ -21,5 +21,15 @@ if (require.main === module) {
   console.log(JSON.stringify(params(process.env.START_MCAP_MON || 250000), null, 2));
 }
 
-// Uniswap V4 pools are native-MON / token, so the price is tokens per MON and the start tick is positive.
+// Legacy native-MON / token (deprecated).
 module.exports.uv4StartTick = (startMcapMon) => -params(startMcapMon).startTick;
+
+// USDC-quoted pools. Returns the start tick for a pool where the LAUNCH TOKEN is currency1 (USDC is currency0):
+// the raw price is token-wei per USDC-base-unit, so the 18 vs 6 decimal gap (1e12) must be included.
+// The launcher negates this tick for pools where the token sorts first.
+module.exports.uv4StartTickUsdc = (startMcapUsdc) => {
+  const rawTokensPerRawUsdc = (1e9 / Number(startMcapUsdc)) * 1e12;
+  let tick = Math.round(Math.log(rawTokensPerRawUsdc) / Math.log(1.0001));
+  tick = Math.round(tick / 200) * 200;
+  return tick;
+};
