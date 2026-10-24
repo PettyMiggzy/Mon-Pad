@@ -1,4 +1,4 @@
-/** Mean red-candle hits (spills) over N seeded autopilot runs. */
+/** Mean red-candle hits (spills) over 20 fibonacci-ish seeds (not tuning set). */
 import { chromium } from 'playwright';
 
 const base = process.env.MK_URL || 'http://localhost:3000/games/munchy-kart/index.html';
@@ -10,7 +10,7 @@ const save = {
   best: 0, races: 0,
 };
 
-const seeds = [42424242, 987654321, 135791113, 246813579, 11111111, 22222222, 33333333, 44444444, 55555555, 66666666];
+const seeds = [1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181, 6765, 10946];
 
 const browser = await chromium.launch();
 const page = await browser.newPage();
@@ -28,6 +28,7 @@ for (const seed of seeds) {
 await browser.close();
 
 const avg = rows.reduce((a, b) => a + b.spills, 0) / rows.length;
-console.log('AUTOPILOT_SPILL_AVG_10', avg.toFixed(2));
-console.log('AUTOPILOT_SPILL_MAX', Math.max(...rows.map((r) => r.spills)));
-if (avg >= 5) process.exit(1);
+const max = Math.max(...rows.map((r) => r.spills));
+console.log('AUTOPILOT_SPILL_AVG_20', avg.toFixed(2));
+console.log('AUTOPILOT_SPILL_MAX_20', max);
+if (avg >= 5 || max >= 12) process.exit(1);

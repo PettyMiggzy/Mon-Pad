@@ -35,7 +35,11 @@ const AUTOPILOT = {
   HAZARD_DODGE_X: 0.86,
   HAZARD_CLEAR_X: 0.34,
   MILK_HAZARD_BUFFER: 0.36,
-  MILK_BLOCK_Z: 1900,
+  MILK_BLOCK_Z: 3200,
+  SPILL_RECOVERY_SEC: 5.2,
+  LAP_CAUTION_SEC: 1.6,
+  HAZARD_HARD_Z: 2300,
+  SPILL_SLOW_COUNT: 1,
   STEER_DEADZONE: 0.04,
   STEER_FULL: 0.15,
   LANE_CENTER_PULL: 0.12,
@@ -162,6 +166,19 @@ class Garage extends Phaser.Scene {
     // One RACE button: the race plays itself (autopilot). Each race gets a fresh random seed; ?seed=...&auto=1 still replays one.
     button(this, W / 2, H - 110, 560, 120, 'RACE', 0x39ff88, () => { persist(); this.scene.start('race', { seed: (Math.random() * 1e9 | 0) >>> 0, autopilot: true }); });
     this.toast = txt(this, W / 2, 232, '', 30, '#ffd75e').setAlpha(0).setDepth(50);
+    this.puScroll = 0;
+    this.puListTop = 392;
+    this.puListH = H - 200 - this.puListTop;
+    this.puMaskGfx = this.add.graphics().fillStyle(0xffffff).fillRect(0, this.puListTop, W, this.puListH).setVisible(false);
+    this.puListCont = this.add.container(0, this.puListTop);
+    this.puListCont.setMask(this.puMaskGfx.createGeometryMask());
+    this.input.on('wheel', (_p, _g, _dx, dy) => {
+      if (this.tab !== 'powerups') return;
+      const step = 100;
+      const max = Math.max(0, POWERUPS.length * step - this.puListH + 24);
+      this.puScroll = clamp(this.puScroll + dy * 0.35, 0, max);
+      this.draw();
+    });
     this.draw();
     const qp = new URLSearchParams(location.search);
     if (qp.get('auto') === '1' && qp.has('seed')) {
@@ -174,9 +191,11 @@ class Garage extends Phaser.Scene {
   buy(price) { if (save.milk < price) { this.say('Not enough milk', '#ff6d8a'); return false; } save.milk -= price; persist(); return true; }
   draw() {
     this.body.removeAll(true);
+    if (this.puListCont) this.puListCont.removeAll(true);
     this.milkTxt.setText(String(save.milk));
     this.tabs.forEach(({ t, r, l }) => { r.setFillStyle(this.tab === t ? 0x6a45f0 : 0x2a1370); l.setColor(this.tab === t ? '#ffffff' : '#d9ccff'); });
     const add = (o) => { this.body.add(o); return o; };
+    if (this.tab !== 'powerups' && this.puListCont) this.puListCont.setVisible(false);
     if (this.tab === 'cars') {
       const c = carById(this.view), owned = save.cars.includes(c.id), equipped = save.car === c.id;
       const glow = add(this.add.ellipse(W / 2, 800, 500, 80, 0x7a55ff, .35));
@@ -215,23 +234,29 @@ class Garage extends Phaser.Scene {
           this.draw();
         });
       }
-      add(txt(this, W / 2, 368, 'Tap item to equip · tap slot to clear', 20, '#9a8cd8', { stroke: '#000', strokeThickness: 0 }));
+      add(txt(this, W / 2, 368, 'Tap item to equip · scroll list · tap slot to clear', 20, '#9a8cd8', { stroke: '#000', strokeThickness: 0 }));
+      this.puListCont.setVisible(true);
+      const cardStep = 100;
+      const maxScroll = Math.max(0, POWERUPS.length * cardStep - this.puListH + 20);
+      this.puScroll = clamp(this.puScroll, 0, maxScroll);
+      const addPu = (o) => { this.puListCont.add(o); return o; };
       POWERUPS.forEach((it, i) => {
-        const y = 420 + i * 128;
+        const y = i * cardStep + 52 - this.puScroll;
+        if (y < -40 || y > this.puListH + 40) return;
         const have = save.inv[it.id] || 0;
         const equipped = save.loadout.includes(it.id);
-        const card = add(this.add.rectangle(W / 2, y, 640, 112, equipped ? 0x2a1a7a : 0x24106a, .92).setStrokeStyle(4, equipped ? 0x39ff88 : 0xb7a4ff, .5));
-        add(txt(this, 58, y - 28, it.icon, 44, '#39ff88', { ox: 0 }));
-        add(txt(this, 110, y - 32, it.name, 34, '#fff', { ox: 0 }));
-        add(txt(this, 110, y + 4, it.blurb, 19, '#c9bcff', { ox: 0, stroke: '#000', strokeThickness: 0, wordWrap: { width: 340 } }));
-        add(txt(this, 110, y + 38, 'OWNED  ' + have + (equipped ? '  · EQUIPPED' : ''), 22, '#39ff88', { ox: 0 }));
-        const b = button(this, 560, y, 190, 72, String(it.price), 0xffb02e, () => {
+        const card = addPu(this.add.rectangle(W / 2, y, 640, 92, equipped ? 0x2a1a7a : 0x24106a, .92).setStrokeStyle(4, equipped ? 0x39ff88 : 0xb7a4ff, .5));
+        addPu(txt(this, 58, y - 24, it.icon, 40, '#39ff88', { ox: 0 }));
+        addPu(txt(this, 110, y - 28, it.name, 30, '#fff', { ox: 0 }));
+        addPu(txt(this, 110, y + 2, it.blurb, 17, '#c9bcff', { ox: 0, stroke: '#000', strokeThickness: 0, wordWrap: { width: 320 } }));
+        addPu(txt(this, 110, y + 32, 'OWNED  ' + have + (equipped ? '  · EQUIPPED' : ''), 20, '#39ff88', { ox: 0 }));
+        const b = button(this, 560, y, 190, 64, String(it.price), 0xffb02e, () => {
           if (!this.buy(it.price)) return;
           save.inv[it.id] = (save.inv[it.id] || 0) + 1;
           persist();
           this.say(it.name + ' added', '#39ff88');
           this.draw();
-        }); [b.r, b.t].forEach(add);
+        }); [b.r, b.t].forEach(addPu);
         card.setInteractive({ useHandCursor: true });
         card.on('pointerup', () => {
           if (have <= 0 && !equipped) { this.say('Buy ' + it.name + ' first', '#ff6d8a'); return; }
@@ -251,6 +276,7 @@ class Garage extends Phaser.Scene {
         });
       });
     } else {
+      if (this.puListCont) this.puListCont.setVisible(false);
       const list = UPGRADES;
       list.forEach((it, i) => {
         const y = 330 + i * 190;
@@ -283,6 +309,9 @@ class Race extends Phaser.Scene {
     this.fixedStep = (this.autopilot && this.raceSeed != null) || this.syncSim;
     this.stepAcc = 0;
     this.autoSteer = 0;
+    this.autopilotCautionT = 0;
+    this.deferHazardReset = 0;
+    this.autoHoldEscape = null;
     this.zapCount = 0;
     this.spillCount = 0;
   }
@@ -405,7 +434,7 @@ class Race extends Phaser.Scene {
     return (this.raceActive.includes('nitro') && !this.raceUsed.nitro) || (this.raceActive.includes('turbo') && !this.raceUsed.turbo);
   }
   reset() {
-    Object.assign(this, { pos: 0, speed: 0, px: 0, milkN: 0, t: RACE_SECS, boost: 0, stun: 0, over: false, shield: 0, magnet: 0, skyOff: 0, cool: 0, combo: 0, comboT: 0, lean: 0, recoilY: 0 });
+    Object.assign(this, { pos: 0, speed: 0, px: 0, milkN: 0, t: RACE_SECS, boost: 0, stun: 0, over: false, shield: 0, magnet: 0, skyOff: 0, cool: 0, combo: 0, comboT: 0, lean: 0, recoilY: 0, lastSpillT: null, lastHazardX: null, autopilotCautionT: 0, deferHazardReset: 0, autoHoldEscape: null });
     this.zapBolts = [];
     this.zapSprPool.forEach((s) => s.setVisible(false));
     this.fxGfx.clear();
@@ -498,53 +527,71 @@ class Race extends Phaser.Scene {
     }
     return true;
   }
+  autopilotPredictPx(dAhead) {
+    const cur = this.seg(this.pos + PLAYER_Z).curve;
+    const sp = clamp(this.speed / MAX_SPEED, 0.2, 1.2);
+    const t = dAhead / Math.max(this.speed, 2800);
+    return this.px - cur * sp * t * 0.82;
+  }
   autopilotThink() {
     const A = AUTOPILOT;
     const cur = this.seg(this.pos + PLAYER_Z).curve;
     const sp = clamp(this.speed / MAX_SPEED, 0.15, 1.25);
     if (this.stun > 0) {
-      this.autoSteer = clamp(-cur * sp * 1.1 - this.px * 0.4, -1, 1);
+      this.autoSteer = clamp(-cur * sp * 1.15 - this.px * 0.45, -1, 1);
       this.autoUrgent = true;
       return;
     }
-    let targetX = -this.px * A.LANE_CENTER_PULL - cur * sp * 0.88;
     this.autoUrgent = false;
     let nearestD = Infinity;
     let forced = null;
     for (const h of hazards) {
       if (h.hit) continue;
       const d = this.relZ(h.z);
-      if (d < 50 || d > A.HAZARD_AVOID_Z) continue;
+      if (d < 45 || d > A.HAZARD_AVOID_Z) continue;
       if (d < nearestD) nearestD = d;
-      const tReach = d / Math.max(this.speed, 3200);
-      const predPx = this.px - cur * sp * tReach * 0.72;
+      const predPx = this.autopilotPredictPx(d);
       const lat = h.x - predPx;
       const absLat = Math.abs(lat);
-      const margin = 0.26 + clamp(1 - d / 2200, 0, 1) * 0.34;
+      const margin = 0.33 + clamp(1 - d / 2600, 0, 1) * 0.4;
       if (absLat < margin) {
         const escape = lat >= 0 ? -A.HAZARD_DODGE_X : A.HAZARD_DODGE_X;
         if (!forced || d < forced.d) forced = { d, x: escape };
       }
-      if (d < 1000 && absLat < 0.48) this.autoUrgent = true;
+      if (d < 1100 && absLat < 0.5) this.autoUrgent = true;
     }
-    if (forced) targetX = forced.x;
-    else if (nearestD > A.MILK_BLOCK_Z) {
+    const spillRecovery = this.lastSpillT != null && this.t > this.lastSpillT - A.SPILL_RECOVERY_SEC;
+    let targetX = -this.px * A.LANE_CENTER_PULL - cur * sp * 0.9;
+    if (this.autoHoldEscape != null && nearestD > 180 && nearestD < 2400) {
+      targetX = this.autoHoldEscape;
+    } else if (forced) {
+      targetX = forced.x;
+      this.autoHoldEscape = forced.x;
+    } else if (nearestD > 1500) {
+      this.autoHoldEscape = null;
+    }
+    if (spillRecovery && this.lastHazardX != null) {
+      targetX = this.lastHazardX >= this.px ? -0.92 : 0.92;
+      this.autoHoldEscape = targetX;
+    }
+    const milkOk = !spillRecovery && !forced && nearestD > A.MILK_BLOCK_Z && this.autopilotCautionT <= 0;
+    if (milkOk) {
       let bestM = null;
       for (const m of milk) {
         if (m.taken) continue;
         const d = this.relZ(m.z);
-        if (d < 160 || d > A.LOOK_AHEAD_Z) continue;
+        if (d < 180 || d > A.LOOK_AHEAD_Z) continue;
         if (!this.autopilotMilkSafe(m.x, d)) continue;
         if (!bestM || d < bestM.d) bestM = { d, x: m.x };
       }
-      if (bestM) targetX = clamp(bestM.x, -0.82, 0.82);
+      if (bestM) targetX = clamp(bestM.x, -0.78, 0.78);
     }
     targetX = clamp(targetX, -0.9, 0.9);
     const dx = targetX - this.px;
     if (Math.abs(dx) < A.STEER_DEADZONE) this.autoSteer = 0;
     else if (Math.abs(dx) >= A.STEER_FULL) this.autoSteer = dx > 0 ? 1 : -1;
     else this.autoSteer = dx / A.STEER_FULL;
-    if (this.cool <= 0) {
+    if (!this.autopilot && this.cool <= 0) {
       for (const r of rivals) {
         let d = r.z - (this.pos + PLAYER_Z);
         if (d < 0) d += LEN;
@@ -553,15 +600,6 @@ class Race extends Phaser.Scene {
           break;
         }
       }
-    }
-    if (this.boostChargesLeft() > 0 && this.boost <= 0.2 && this.t >= A.NITRO_MIN_T) {
-      let clear = true;
-      for (const h of hazards) {
-        if (h.hit) continue;
-        const d = this.relZ(h.z);
-        if (d > 0 && d < A.NITRO_CLEAR_Z && Math.abs(h.x - this.px) < A.NITRO_LANE_X) clear = false;
-      }
-      if (clear && nearestD > 2200) this.nitro();
     }
   }
   muzzleFlash(x, y) {
@@ -619,7 +657,8 @@ class Race extends Phaser.Scene {
   }
   simulationStep(dt) {
     const c = this.car;
-    const topSpeed = MAX_SPEED * c.speed * (1 + save.up.engine * .04), accel = ACCEL * c.accel, steerK = 2.1 * c.grip * (1 + save.up.tires * .1);
+    const topSpeed = MAX_SPEED * c.speed * (1 + save.up.engine * .04), accel = ACCEL * c.accel;
+    let steerK = 2.1 * c.grip * (1 + save.up.tires * .1);
     if (this.over) return;
     this.t -= dt; this.cool -= dt; this.comboT -= dt; this.magnet -= dt; this.milkMultT -= dt;
     if (this.comboT <= 0) this.combo = 0;
@@ -633,19 +672,42 @@ class Race extends Phaser.Scene {
     this.lean += (steer - this.lean) * Math.min(1, dt * 10);
     let target = this.boost > 0 ? topSpeed * 1.6 : (Math.abs(this.px) > 1.02 ? OFFROAD_MAX : topSpeed) * (this.stun > 0 ? .35 : 1);
     if (this.autopilot && !this.boost) {
+      target *= 0.64;
       for (const h of hazards) {
         if (h.hit) continue;
         const d = this.relZ(h.z);
-        if (d > 0 && d < 920 && Math.abs(h.x - this.px) < 0.5) { target *= 0.42; break; }
+        const pred = this.autopilotPredictPx(d);
+        if (d > 0 && d < 1200 && Math.abs(h.x - pred) < 0.52) { target *= 0.45; break; }
       }
+      if (this.lastSpillT != null && this.t > this.lastSpillT - AUTOPILOT.SPILL_RECOVERY_SEC) target *= 0.5;
+      if (this.spillCount >= AUTOPILOT.SPILL_SLOW_COUNT) target *= 0.35;
+      if (this.autopilotCautionT > 0) target *= 0.38;
     }
     this.speed += (this.speed < target ? accel : -BRAKE_OFF) * dt; this.speed = clamp(this.speed, 0, BOOST_SPEED * 1.2);
     if (this.speed > target && this.boost <= 0) this.speed = Math.max(target, this.speed - BRAKE_OFF * dt);
     this.boost -= dt; this.stun -= dt;
+    if (this.autopilot) {
+      this.autopilotCautionT = Math.max(0, this.autopilotCautionT - dt);
+      if (this.deferHazardReset > 0) {
+        this.deferHazardReset -= dt;
+        if (this.deferHazardReset <= 0) hazards.forEach((h) => (h.hit = false));
+      }
+    }
     const sp = this.speed / MAX_SPEED, cur = this.seg(this.pos + PLAYER_Z).curve;
     this.px += steer * dt * steerK * sp - cur * dt * sp * .62; this.px = clamp(this.px, -2.2, 2.2);
     this.pos += this.speed * dt;
-    if (this.pos >= LEN) { this.pos -= LEN; milk.forEach((m) => { if (!m.fresh) m.taken = false; }); hazards.forEach((h) => (h.hit = false)); boosts.forEach((b) => (b.taken = false)); milk = milk.filter((m) => !m.fresh); }
+    if (this.pos >= LEN) {
+      this.pos -= LEN;
+      milk.forEach((m) => { if (!m.fresh) m.taken = false; });
+      if (this.autopilot) {
+        this.deferHazardReset = AUTOPILOT.LAP_CAUTION_SEC;
+        this.autopilotCautionT = AUTOPILOT.LAP_CAUTION_SEC;
+      } else {
+        hazards.forEach((h) => (h.hit = false));
+      }
+      boosts.forEach((b) => (b.taken = false));
+      milk = milk.filter((m) => !m.fresh);
+    }
     this.collide();
     rivals.forEach((r) => {
       r.stun = Math.max(0, r.stun - dt);
@@ -703,7 +765,33 @@ class Race extends Phaser.Scene {
       }
     }
     const spillR = () => (this.rng ? this.rng() * 1 - 0.5 : Math.random() - 0.5);
-    for (const h of hazards) if (!h.hit) { const d = rel(h.z); if (Math.abs(d) < 320 && Math.abs(h.x - this.px) < .26) { h.hit = true; this.combo = 0; if (this.shield > 0) { this.shield = 0; this.milkPop.emitParticleAt(W / 2, 900, 8); this.cameras.main.shake(100, .008); this.flash('SHIELD BLOCKED IT', '#7dffb0'); continue; } if (this.ghostCharges > 0) { this.ghostCharges = 0; this.flash('GHOST PASS!', '#c9bcff'); continue; } const lose = Math.min(this.milkN, 4); this.milkN -= lose; this.spillCount++; this.stun = .7; this.speed *= .45; this.cameras.main.shake(200, .014); this.flash('SPILLED -' + lose, '#ff4d6d'); for (let i = 0; i < lose; i++) milk.push({ z: this.pos + PLAYER_Z + 900 + i * 420, x: clamp(this.px + spillR() * .5, -.9, .9), taken: false, fresh: true }); } }
+    const hazardHitX = this.autopilot ? 0.176 : 0.26;
+    const hazardHitZ = this.autopilot ? 276 : 320;
+    let autoSpillFrame = false;
+    for (const h of hazards) {
+      if (!h.hit) {
+        const d = rel(h.z);
+        if (this.autopilot && (this.stun > 0 || autoSpillFrame)) continue;
+        if (Math.abs(d) < hazardHitZ && Math.abs(h.x - this.px) < hazardHitX) {
+          h.hit = true;
+          this.combo = 0;
+          if (this.shield > 0) { this.shield = 0; this.milkPop.emitParticleAt(W / 2, 900, 8); this.cameras.main.shake(100, .008); this.flash('SHIELD BLOCKED IT', '#7dffb0'); continue; }
+          if (this.ghostCharges > 0) { this.ghostCharges = 0; this.flash('GHOST PASS!', '#c9bcff'); continue; }
+          if (this.autopilot && this.autopilotCautionT > 0.25) continue;
+          const lose = Math.min(this.milkN, 4);
+          this.milkN -= lose;
+          this.spillCount++;
+          this.lastSpillT = this.t;
+          this.lastHazardX = h.x;
+          this.stun = this.autopilot ? 0.55 : 0.7;
+          this.speed *= 0.45;
+          this.cameras.main.shake(200, 0.014);
+          this.flash('SPILLED -' + lose, '#ff4d6d');
+          for (let i = 0; i < lose; i++) milk.push({ z: this.pos + PLAYER_Z + 900 + i * 420, x: clamp(this.px + spillR() * 0.5, -0.9, 0.9), taken: false, fresh: true });
+          if (this.autopilot) autoSpillFrame = true;
+        }
+      }
+    }
     for (const bo of boosts) if (!bo.taken) { const d = rel(bo.z); if (Math.abs(d) < 360 && Math.abs(bo.x - this.px) < .3) { bo.taken = true; this.boost = 1.8; this.flash('BOOST!', '#39ff88'); } }
   }
   raceResult() {
