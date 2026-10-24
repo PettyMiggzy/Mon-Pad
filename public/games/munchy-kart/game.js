@@ -105,9 +105,6 @@ class Garage extends Phaser.Scene {
     button(this, W / 2, H - 110, 560, 120, 'RACE', 0x39ff88, () => { persist(); this.scene.start('race'); });
     this.toast = txt(this, W / 2, 232, '', 30, '#ffd75e').setAlpha(0).setDepth(50);
     this.draw();
-    if (typeof location !== 'undefined' && new URLSearchParams(location.search).get('demoZap') === '1') {
-      this.time.delayedCall(700, () => { persist(); this.scene.start('race'); });
-    }
   }
   say(m, c = '#ffd75e') { this.toast.setText(m).setColor(c).setAlpha(1); this.tweens.killTweensOf(this.toast); this.tweens.add({ targets: this.toast, alpha: 0, delay: 1100, duration: 400 }); }
   buy(price) { if (save.milk < price) { this.say('Not enough milk', '#ff6d8a'); return false; } save.milk -= price; persist(); return true; }
@@ -212,10 +209,6 @@ class Race extends Phaser.Scene {
     if (save.inv.nitro > 0) { this.nitroBtn = true; btn(455, 1100, 'NITRO', () => this.nitro()); }
     this.input.keyboard.on('keydown-SPACE', () => this.zap()); this.input.keyboard.on('keydown-N', () => this.nitro());
     this.reset();
-    if (typeof location !== 'undefined' && new URLSearchParams(location.search).get('demoZap') === '1') {
-      this.time.delayedCall(900, () => this.zap());
-      this.time.delayedCall(1400, () => this.zap());
-    }
   }
   reset() {
     Object.assign(this, { pos: 0, speed: 0, px: 0, milkN: 0, t: RACE_SECS, boost: 0, stun: 0, over: false, shield: 0, magnet: 0, skyOff: 0, cool: 0, combo: 0, comboT: 0, lean: 0 });
@@ -233,17 +226,10 @@ class Race extends Phaser.Scene {
   zapAim() {
     const { sx, sy } = this.zapOrigin();
     let best = null;
-    let hazardHit = null;
     for (const r of rivals) {
       let d = r.z - (this.pos + PLAYER_Z);
       if (d < 0) d += LEN;
       if (d > 400 && d < SEG * 40 && Math.abs(r.x - this.px) < .42 && (!best || d < best.d)) best = { r, d };
-    }
-    for (const h of hazards) {
-      if (h.hit) continue;
-      let d = h.z - (this.pos + PLAYER_Z);
-      if (d < 0) d += LEN;
-      if (d > 260 && d < SEG * 30 && Math.abs(h.x - this.px) < .36 && (!hazardHit || d < hazardHit.d)) hazardHit = { h, d };
     }
     let ex = sx;
     let ey = HY + 100;
@@ -253,9 +239,8 @@ class Race extends Phaser.Scene {
       ey = HY + sc * CAM_H * H / 2 * .62 + yOff;
     };
     if (best) aimAt(best.r.x, best.d, -60);
-    else if (hazardHit) aimAt(hazardHit.h.x, hazardHit.d, -36);
     else aimAt(this.px + (Math.random() < .5 ? -.15 : .15), 2200, -20);
-    return { sx, sy, ex, ey, best, hazardHit };
+    return { sx, sy, ex, ey, best };
   }
   muzzleFlash(x, y) {
     const g = this.zapMuzzleGfx;
@@ -264,7 +249,7 @@ class Race extends Phaser.Scene {
     this.tweens.killTweensOf(g);
     this.tweens.add({ targets: g, alpha: 0, duration: 140, onComplete: () => { g.clear(); g.setAlpha(1); } });
   }
-  resolveZapHit(best, hazardHit, ex, ey) {
+  resolveZapHit(best, ex, ey) {
     this.zapImpactFx.emitParticleAt(ex, ey, 14);
     const ring = this.add.circle(ex, ey, 8, 0x39ff88, 0.85).setDepth(923);
     this.tweens.add({ targets: ring, scale: 3.2, alpha: 0, duration: 220, onComplete: () => ring.destroy() });
@@ -272,13 +257,10 @@ class Race extends Phaser.Scene {
       const r = best.r;
       r.stun = 1.4;
       r.v *= .6;
+      r.spin = 1.1;
       for (let i = 0; i < 3; i++) milk.push({ z: r.z + (i + 1) * 380, x: clamp(r.x + rnd(-.4, .4), -.9, .9), taken: false, fresh: true });
       this.flash('ZAPPED!  +MILK DROP', '#39ff88');
       this.cameras.main.shake(120, .006);
-    } else if (hazardHit) {
-      hazardHit.h.hit = true;
-      this.flash('RED CANDLE DOWN', '#39ff88');
-      this.cameras.main.shake(80, .004);
     }
   }
   updateZapBolts(dt) {
@@ -295,7 +277,7 @@ class Race extends Phaser.Scene {
       if (p >= 1 && !b.resolved) {
         b.resolved = true;
         b.spr.setVisible(false);
-        this.resolveZapHit(b.best, b.hazardHit, b.ex, b.ey);
+        this.resolveZapHit(b.best, b.ex, b.ey);
         this.zapBolts.splice(i, 1);
       }
     }
