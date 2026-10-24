@@ -284,6 +284,27 @@ class Race extends Phaser.Scene {
 }
 
 window.MunchyKart = window.MunchyKart || {};
-new Phaser.Game({ type: Phaser.AUTO, parent: 'game', width: W, height: H, backgroundColor: '#07040f', scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH }, render: { antialias: true, powerPreference: 'high-performance' }, scene: [Boot, Garage, Race] });
+const mkGame = new Phaser.Game({
+  type: Phaser.AUTO,
+  parent: 'game',
+  width: W,
+  height: H,
+  backgroundColor: '#07040f',
+  scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+  render: { antialias: true, powerPreference: 'high-performance' },
+  scene: [Boot, Garage, Race],
+});
+window.MunchyKart.game = mkGame;
+const mkHost = document.getElementById('game');
+const mkRefresh = () => {
+  const sm = mkGame.scale;
+  if (!sm || !sm.canvas) return;
+  try { sm.refresh(); } catch (_) { /* scale not ready yet */ }
+};
+if (mkHost && typeof ResizeObserver !== 'undefined') {
+  new ResizeObserver(() => mkRefresh()).observe(mkHost);
+}
+window.addEventListener('orientationchange', mkRefresh);
+mkGame.events.once('ready', () => { mkRefresh(); requestAnimationFrame(mkRefresh); });
 window.addEventListener('error', (e) => { const el = document.getElementById('err'); if (el) { el.style.display = 'block'; el.textContent = e.message; } });
 })();

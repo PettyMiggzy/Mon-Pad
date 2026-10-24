@@ -5,12 +5,97 @@
 <title>Munchy Kart | Monpad</title>
 <style>
 @font-face{font-family:'Russo One';src:url('/fonts/RussoOne-Regular.ttf');font-display:block}
+:root{
+  --bezel:#0c0818;
+  --bezel-edge:#2a1766;
+  --screen-radius:28px;
+  --frame-pad:14px;
+  --notch-w:38%;
+  --notch-h:22px;
+}
 html,body{margin:0;height:100%;background:#07040f;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none}
-#game{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
-canvas{display:block}
-#err{position:fixed;left:8px;bottom:8px;color:#f66;font:12px monospace;display:none}
+#shell{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse 80% 60% at 50% 20%,#2a1370 0%,#07040f 55%,#030208 100%)}
+#phone{
+  position:relative;
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  box-sizing:border-box;
+  max-width:100%;
+  max-height:100%;
+}
+#phone-notch{
+  position:absolute;
+  top:calc(var(--frame-pad) + 6px);
+  left:50%;
+  transform:translateX(-50%);
+  width:var(--notch-w);
+  max-width:160px;
+  height:var(--notch-h);
+  border-radius:0 0 14px 14px;
+  background:#000;
+  box-shadow:inset 0 -2px 8px rgba(255,255,255,.08);
+  z-index:5;
+  pointer-events:none;
+}
+#phone-label{
+  position:absolute;
+  bottom:calc(var(--frame-pad) + 8px);
+  left:50%;
+  transform:translateX(-50%);
+  font:600 11px/1 system-ui,sans-serif;
+  letter-spacing:.18em;
+  color:rgba(201,188,255,.35);
+  z-index:5;
+  pointer-events:none;
+}
+#game{
+  position:relative;
+  flex:1 1 auto;
+  min-height:0;
+  width:100%;
+  height:100%;
+  overflow:hidden;
+  background:#07040f;
+}
+#game canvas{display:block;margin:0 auto}
+#err{position:fixed;left:8px;bottom:8px;color:#f66;font:12px monospace;display:none;z-index:9999;max-width:90vw}
+
+/* Phone: edge-to-edge game (Telegram / mobile browsers) */
+@media (max-width:767px),(max-height:520px){
+  #shell{background:#07040f;padding:0}
+  #phone{width:100%;height:100%;padding:0;border-radius:0;box-shadow:none;background:transparent}
+  #phone-notch,#phone-label{display:none}
+  #game{border-radius:0;height:100%}
+}
+
+/* Desktop / tablet landscape: fixed 9:16 viewport inside a phone bezel */
+@media (min-width:768px) and (min-height:521px){
+  #shell{padding:24px}
+  #phone{
+    width:min(390px,calc(100vw - 48px));
+    height:min(844px,calc(100vh - 48px));
+    aspect-ratio:390/844;
+    padding:var(--frame-pad);
+    border-radius:44px;
+    background:linear-gradient(145deg,var(--bezel-edge),var(--bezel));
+    box-shadow:
+      0 0 0 2px rgba(183,164,255,.25),
+      0 24px 80px rgba(0,0,0,.65),
+      inset 0 1px 0 rgba(255,255,255,.12);
+  }
+  #game{border-radius:var(--screen-radius);box-shadow:inset 0 0 0 1px rgba(0,0,0,.4)}
+}
 </style></head>
-<body><div id="game"></div><div id="err"></div>
+<body>
+<div id="shell">
+  <div id="phone" aria-label="Munchy Kart mobile viewport">
+    <div id="phone-notch" aria-hidden="true"></div>
+    <div id="game"></div>
+    <div id="phone-label" aria-hidden="true">MUNCHY KART</div>
+  </div>
+</div>
+<div id="err"></div>
 <script src="phaser.min.js"></script>
 <script src="game.js"></script>
 </body></html>
