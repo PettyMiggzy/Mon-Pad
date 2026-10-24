@@ -168,7 +168,8 @@ class Garage extends Phaser.Scene {
     this.toast = txt(this, W / 2, 232, '', 30, '#ffd75e').setAlpha(0).setDepth(50);
     this.puScroll = 0;
     this.puListTop = 392;
-    this.puListH = H - 200 - this.puListTop;
+    const raceBtnTop = H - 110 - 60;
+    this.puListH = raceBtnTop - this.puListTop - 14;
     this.puMaskGfx = this.add.graphics().fillStyle(0xffffff).fillRect(0, this.puListTop, W, this.puListH).setVisible(false);
     this.puListCont = this.add.container(0, this.puListTop);
     this.puListCont.setMask(this.puMaskGfx.createGeometryMask());
@@ -817,13 +818,8 @@ class Race extends Phaser.Scene {
     const newBest = !this.skipPersist && this.milkN > save.best;
     z(300, 'FINISH!', 100, '#39ff88'); z(440, '+' + this.milkN + ' MILK', 84, '#ffffff');
     if (!this.skipPersist) { z(560, 'WALLET  ' + save.milk, 44, '#ffd75e'); z(630, newBest ? 'NEW BEST!' : 'BEST  ' + save.best, 40, newBest ? '#39ff88' : '#d9ccff'); }
-<<<<<<< HEAD
     const again = () => this.scene.restart({ seed: (Math.random() * 1e9 | 0) >>> 0, autopilot: true, skipPersist: this.skipPersist });
-    const b1 = button(this, W / 2, 780, 520, 120, 'RACE AGAIN', 0x39ff88, again); const b2 = button(this, W / 2, 930, 520, 110, 'GARAGE', 0x6a45f0, () => this.scene.start('garage'), '#ffffff');
-=======
-    const again = () => this.scene.restart({ seed: this.raceSeed, autopilot: this.autopilot, skipPersist: this.skipPersist });
     const b1 = button(this, W / 2, 780, 520, 120, 'RACE AGAIN', 0x39ff88, again); const b2 = button(this, W / 2, 930, 520, 110, 'LOADOUT', 0x6a45f0, () => this.scene.start('garage'), '#ffffff');
->>>>>>> 06ad448 (feat(munchy-kart): loadout tabs, 2 power-up slots, expanded catalog)
     [b1.r, b1.t, b2.r, b2.t].forEach((o) => o.setDepth(1002));
   }
   proj(z, x, camX) { const sc = CAM_D / z; return { sc, x: W / 2 + sc * (x - camX) * W / 2, y: HY + sc * CAM_H * H / 2 * .62, w: sc * ROAD * W / 2 }; }

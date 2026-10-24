@@ -69,8 +69,8 @@ await page.waitForTimeout(400);
 snap = await page.evaluate(() => JSON.parse(localStorage.getItem('mk_save_v1') || '{}'));
 log(`   loadout=${JSON.stringify(snap.loadout)} inv=${JSON.stringify(snap.inv)}`);
 
-log('9. Tap RACE (footer left)');
-await tapNorm(0.347, 0.906);
+log('9. Tap RACE (full-width footer, autopilot race)');
+await tapNorm(0.5, 0.914);
 await page.waitForTimeout(2500);
 
 const inRace = await page.evaluate(() => window.MunchyKart?.game?.scene?.isActive('race'));
