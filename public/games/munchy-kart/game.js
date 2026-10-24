@@ -134,12 +134,8 @@ class Garage extends Phaser.Scene {
       r.on('pointerup', () => { this.tab = t; this.draw(); });
       return { t, r, l };
     });
-    this.seedVal = (Math.random() * 1e9 | 0) >>> 0;
-    this.seedTxt = txt(this, W / 2 - 60, H - 36, 'SEED  ' + this.seedVal, 24, '#9a8cd8');
-    const bumpSeed = () => { this.seedVal = (Math.random() * 1e9 | 0) >>> 0; this.seedTxt.setText('SEED  ' + this.seedVal); };
-    button(this, W - 100, H - 36, 120, 48, 'NEW', 0x2a1370, bumpSeed, '#d9ccff');
-    button(this, 250, H - 120, 360, 110, 'RACE', 0x39ff88, () => { persist(); this.scene.start('race'); });
-    button(this, 565, H - 120, 250, 110, 'AUTO', 0x6a45f0, () => { persist(); this.scene.start('race', { seed: this.seedVal, autopilot: true }); }, '#ffffff');
+    // One RACE button: the race plays itself (autopilot). Each race gets a fresh random seed; ?seed=...&auto=1 still replays one.
+    button(this, W / 2, H - 110, 560, 120, 'RACE', 0x39ff88, () => { persist(); this.scene.start('race', { seed: (Math.random() * 1e9 | 0) >>> 0, autopilot: true }); });
     this.toast = txt(this, W / 2, 232, '', 30, '#ffd75e').setAlpha(0).setDepth(50);
     this.draw();
     const qp = new URLSearchParams(location.search);
@@ -283,8 +279,6 @@ class Race extends Phaser.Scene {
     this.milkTxt = this.add.text(100, 28, '0', f(64)).setDepth(950);
     this.timeTxt = this.add.text(W - 36, 30, '60', f(64, '#39ff88')).setOrigin(1, 0).setDepth(950);
     this.msg = this.add.text(W / 2, 330, '', f(58, '#ffd75e')).setOrigin(.5).setDepth(960).setAlpha(0);
-    if (this.autopilot) txt(this, W / 2, 175, 'AUTOPILOT', 34, '#7dffb0').setDepth(960);
-    if (this.raceSeed != null) txt(this, W / 2, 210, 'SEED  ' + this.raceSeed, 24, '#9a8cd8').setDepth(960);
     this.speedBar = this.add.graphics().setDepth(950);
     this.input.addPointer(3);
     this.keys = this.input.keyboard.addKeys({ l: 'LEFT', r: 'RIGHT', a: 'A', d: 'D', f: 'SPACE', n: 'N' });
@@ -579,9 +573,8 @@ class Race extends Phaser.Scene {
     const z = (y, s, size, color) => txt(this, W / 2, y, s, size, color).setDepth(1001);
     const newBest = !this.skipPersist && this.milkN > save.best;
     z(300, 'FINISH!', 100, '#39ff88'); z(440, '+' + this.milkN + ' MILK', 84, '#ffffff');
-    if (this.raceSeed != null) z(520, 'SEED  ' + this.raceSeed, 32, '#9a8cd8');
     if (!this.skipPersist) { z(560, 'WALLET  ' + save.milk, 44, '#ffd75e'); z(630, newBest ? 'NEW BEST!' : 'BEST  ' + save.best, 40, newBest ? '#39ff88' : '#d9ccff'); }
-    const again = () => this.scene.restart({ seed: this.raceSeed, autopilot: this.autopilot, skipPersist: this.skipPersist });
+    const again = () => this.scene.restart({ seed: (Math.random() * 1e9 | 0) >>> 0, autopilot: true, skipPersist: this.skipPersist });
     const b1 = button(this, W / 2, 780, 520, 120, 'RACE AGAIN', 0x39ff88, again); const b2 = button(this, W / 2, 930, 520, 110, 'GARAGE', 0x6a45f0, () => this.scene.start('garage'), '#ffffff');
     [b1.r, b1.t, b2.r, b2.t].forEach((o) => o.setDepth(1002));
   }
