@@ -111,7 +111,7 @@ async function main() {
     const nonceBefore = await client.getTransactionCount({ address: simulateFrom });
 
     const dryBuy = JSON.parse(
-      (await buy({ token: deployed.sampleToken, monIn: '1', minTokensOut: '0', dryRun: true })).content[0].text,
+      (await buy({ token: deployed.sampleToken, monIn: '1', minTokensOut: '1', dryRun: true })).content[0].text,
     );
     if (!dryBuy.dryRun || !dryBuy.simulated) throw new Error('buy dryRun should simulate');
 

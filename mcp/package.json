@@ -15,12 +15,15 @@
   ],
   "scripts": {
     "start": "node server.mjs",
-    "test": "node test/integration.mjs"
+    "test": "node test/integration.mjs",
+    "prestart": "npm run build --prefix ../sdk",
+    "pretest": "npm run build --prefix ../sdk"
   },
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
+    "@monpad/sdk": "file:../sdk",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "viem": "^2.21.40",
     "zod": "^3.24.0"
