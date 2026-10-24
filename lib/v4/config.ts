@@ -24,3 +24,7 @@ export const TICK_SPACING = 200;
 export const BASE_FEE_BPS = 100; // 1% on every swap, plus the creator's tax
 export const MAX_CREATOR_TAX_BPS = 500;
 export const MAX_DEV_BUY_BPS = 500; // dev buy is capped at 5% of supply by the launcher
+
+// Hookless native-MON/USDC pool the launcher uses to convert MON for launchWithMon and the router uses for buyWithMon.
+export const MON_USDC_FEE = 500;
+export const MON_USDC_TICK_SPACING = 10;

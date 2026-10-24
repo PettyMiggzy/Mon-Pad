@@ -58,7 +58,7 @@ contract MonpadHookLauncher is Ownable2Step, ReentrancyGuard, IUnlockCallback {
 
     // ── buyback guards ───────────────────────────────────────────────────────────
     int24 public constant MAX_SPOT_REF_TICKS = 300; // spot must be within about 3% of the hook's reference tick
-    uint16 public constant MAX_SWAP_IMPACT_BPS = 300; // price limit of 1.5% from spot
+    uint16 public constant MAX_SWAP_IMPACT_BPS = 300; // price limit of about 3% from spot (1.5% on sqrt price)
     uint256 public constant BUYBACK_COOLDOWN = 10 minutes;
     uint256 public constant BUYBACK_FULL_BELOW = 400 * 1e6;
     uint256 public constant MIN_BUYBACK = 1e6; // 1 USDC
@@ -73,6 +73,8 @@ contract MonpadHookLauncher is Ownable2Step, ReentrancyGuard, IUnlockCallback {
     address public immutable quoteAsset; // USDC (6 decimals)
     address public immutable monshi; // informational: the MONSHI token the burn wallet converts to
     int24 public immutable startTick; // start price for the USDC/token pool
+    uint24 public immutable monUsdcFee; // hookless native-MON/USDC pool used by launchWithMon
+    int24 public immutable monUsdcTickSpacing;
 
     address public platform;
     address public monshiWallet; // receives the 10% MONSHI share as claimable USDC; the team converts it to MONSHI and burns it
@@ -99,7 +101,8 @@ contract MonpadHookLauncher is Ownable2Step, ReentrancyGuard, IUnlockCallback {
     enum Op {
         ADD_LIQUIDITY,
         COLLECT,
-        SWAP_QUOTE_IN
+        SWAP_QUOTE_IN,
+        MON_TO_USDC
     }
 
     event Launched(
@@ -127,7 +130,8 @@ contract MonpadHookLauncher is Ownable2Step, ReentrancyGuard, IUnlockCallback {
         address quoteAsset_,
         address monshi_,
         int24 startTick_,
-        uint256 creationFee_
+        uint256 creationFee_,
+        PoolKey memory monUsdcKey_
     ) Ownable(owner_) {
         require(
             platform_ != address(0) && poolManager_ != address(0) && hook_ != address(0) && quoteAsset_ != address(0)
@@ -139,6 +143,11 @@ contract MonpadHookLauncher is Ownable2Step, ReentrancyGuard, IUnlockCallback {
         poolManager = IPoolManager(poolManager_);
         hook = MonpadHook(hook_);
         require(hook.launcher() == address(this) && address(hook.poolManager()) == poolManager_, "hook mismatch");
+        require(Currency.unwrap(monUsdcKey_.currency0) == address(0), "monUsdc: c0=MON");
+        require(Currency.unwrap(monUsdcKey_.currency1) == quoteAsset_, "monUsdc: c1=USDC");
+        require(address(monUsdcKey_.hooks) == address(0), "monUsdc: hookless");
+        monUsdcFee = monUsdcKey_.fee;
+        monUsdcTickSpacing = monUsdcKey_.tickSpacing;
         quoteAsset = quoteAsset_;
         monshi = monshi_;
         startTick = startTick_;
@@ -173,11 +182,58 @@ contract MonpadHookLauncher is Ownable2Step, ReentrancyGuard, IUnlockCallback {
         uint256 quoteDevBuy
     ) external nonReentrant returns (address token) {
         require(!launchPaused, "launches paused");
+        IERC20(quoteAsset).safeTransferFrom(msg.sender, address(this), creationFee + quoteDevBuy);
+        token = _launch(name_, symbol_, salt, creatorTaxBps, quoteDevBuy);
+    }
+
+    /// @notice Launch paying in native MON. The MON is swapped to USDC on the MON/USDC pool inside the same
+    ///         transaction; USDC beyond `creationFee` becomes the dev buy (capped at 5% of supply). Unspent MON is refunded.
+    ///         `minUsdc` protects against a bad MON/USDC price (it must cover at least the creation fee).
+    function launchWithMon(
+        string calldata name_,
+        string calldata symbol_,
+        bytes32 salt,
+        uint16 creatorTaxBps,
+        uint256 minUsdc
+    ) external payable nonReentrant returns (address token) {
+        require(!launchPaused, "launches paused");
+        uint256 fee = creationFee;
+        uint256 usdcGot;
+        uint256 monSpent;
+        if (msg.value > 0) {
+            bytes memory out = _unlock(abi.encode(Op.MON_TO_USDC, _monUsdcKey(), abi.encode(msg.value)));
+            (monSpent, usdcGot) = abi.decode(out, (uint256, uint256));
+        }
+        require(usdcGot >= minUsdc && usdcGot >= fee, "not enough USDC");
+        token = _launch(name_, symbol_, salt, creatorTaxBps, usdcGot - fee);
+        uint256 refund = msg.value - monSpent;
+        if (refund > 0) {
+            (bool ok,) = msg.sender.call{value: refund}("");
+            require(ok, "refund failed");
+        }
+    }
+
+    function _monUsdcKey() internal view returns (PoolKey memory) {
+        return PoolKey({
+            currency0: CurrencyLibrary.ADDRESS_ZERO,
+            currency1: Currency.wrap(quoteAsset),
+            fee: monUsdcFee,
+            tickSpacing: monUsdcTickSpacing,
+            hooks: IHooks(address(0))
+        });
+    }
+
+    /// @dev `creationFee + quoteDevBuy` USDC must already be held by this contract.
+    function _launch(
+        string calldata name_,
+        string calldata symbol_,
+        bytes32 salt,
+        uint16 creatorTaxBps,
+        uint256 quoteDevBuy
+    ) internal returns (address token) {
         require(bytes(name_).length > 0 && bytes(name_).length <= 32, "bad name");
         require(bytes(symbol_).length > 0 && bytes(symbol_).length <= 10, "bad symbol");
         require(creatorTaxBps <= MAX_CREATOR_TAX_BPS, "tax too high");
-        uint256 totalQuote = creationFee + quoteDevBuy;
-        IERC20(quoteAsset).safeTransferFrom(msg.sender, address(this), totalQuote);
 
         token = address(new MonpadToken{salt: keccak256(abi.encode(msg.sender, salt))}(name_, symbol_, SUPPLY, address(this)));
 
@@ -396,6 +452,24 @@ contract MonpadHookLauncher is Ownable2Step, ReentrancyGuard, IUnlockCallback {
             uint256 owed = uint256(uint128(-d.amount0()));
             _settleToken(key.currency0, owed);
             return abi.encode(owed);
+        }
+
+        if (op == Op.MON_TO_USDC) {
+            uint256 monIn = abi.decode(args, (uint256));
+            BalanceDelta d = poolManager.swap(
+                key,
+                SwapParams({zeroForOne: true, amountSpecified: -int256(monIn), sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1}),
+                ""
+            );
+            require(d.amount0() <= 0 && d.amount1() >= 0, "bad swap");
+            uint256 monSpent = uint256(uint128(-d.amount0()));
+            uint256 usdcGot = uint256(uint128(d.amount1()));
+            if (monSpent > 0) {
+                poolManager.sync(CurrencyLibrary.ADDRESS_ZERO);
+                poolManager.settle{value: monSpent}();
+            }
+            if (usdcGot > 0) poolManager.take(key.currency1, address(this), usdcGot);
+            return abi.encode(monSpent, usdcGot);
         }
 
         if (op == Op.COLLECT) {

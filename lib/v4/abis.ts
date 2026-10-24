@@ -4,6 +4,7 @@ const KEY = '(address currency0, address currency1, uint24 fee, int24 tickSpacin
 
 export const launcherV4Abi = parseAbi([
   'function launch(string name, string symbol, bytes32 salt, uint16 creatorTaxBps, uint256 quoteDevBuy) returns (address token)',
+  'function launchWithMon(string name, string symbol, bytes32 salt, uint16 creatorTaxBps, uint256 minUsdc) payable returns (address token)',
   'function quoteAsset() view returns (address)',
   'function creationFee() view returns (uint256)',
   'function launchPaused() view returns (bool)',

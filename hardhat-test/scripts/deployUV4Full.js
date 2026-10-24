@@ -20,8 +20,8 @@ async function main() {
   if (live && process.env.CONFIRM_MAINNET !== "I_UNDERSTAND_UNAUDITED") throw new Error("set CONFIRM_MAINNET=I_UNDERSTAND_UNAUDITED");
   for (const k of ["OWNER_ADDRESS", "PLATFORM_ADDRESS", "MONSHI_WALLET"]) if (!ethers.isAddress(process.env[k] || "")) throw new Error(`${k} missing or invalid`);
   const { OWNER_ADDRESS: ownerTo, PLATFORM_ADDRESS: platform, MONSHI_WALLET: monshiWallet } = process.env;
-  const mcap = Number(process.env.START_MCAP_USDC || 250000);
-  const fee = BigInt(process.env.CREATION_FEE_USDC || 100) * 10n ** 6n;
+  const mcap = Number(process.env.START_MCAP_USDC || 3000);
+  const fee = BigInt(process.env.CREATION_FEE_USDC || 0) * 10n ** 6n;
   console.log("chain", net.chainId.toString(), "deployer", deployer.address, "balance", ethers.formatEther(await ethers.provider.getBalance(deployer.address)), "MON");
   console.log("owner(after accept)", ownerTo, "| platform", platform, "| monshiWallet", monshiWallet, "| start mcap", mcap, "| creation fee USDC", fee / 10n ** 6n);
 

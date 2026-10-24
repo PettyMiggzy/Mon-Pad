@@ -2,7 +2,7 @@
 import { encodeAbiParameters, keccak256, maxUint256, toHex, zeroAddress, type Address, type Hex } from 'viem';
 import { publicClient } from '../chainV3';
 import type { TokenSummary } from '../api';
-import { DYNAMIC_FEE, HOOK_V4, LAUNCHER_V4, ROUTER_V4, STATE_VIEW_V4, TICK_SPACING, BASE_FEE_BPS } from './config';
+import { DYNAMIC_FEE, HOOK_V4, LAUNCHER_V4, ROUTER_V4, STATE_VIEW_V4, TICK_SPACING, BASE_FEE_BPS, MON_USDC_FEE, MON_USDC_TICK_SPACING } from './config';
 import { erc20V4Abi, launcherV4Abi, routerV4Abi, stateViewV4Abi } from './abis';
 
 const pc = publicClient as any; // the app's client is typed loosely elsewhere; keep the V4 reads simple
@@ -163,4 +163,16 @@ export async function poolDepth(t: V4Token, sizesUsdc = [50, 250, 1000, 5000]): 
     } catch { return { usdc, avgPrice: null, impactPct: null }; }
   }));
   return { buys, sells };
+}
+
+/** USDC base units (6 dec) per 1 wei of MON, from the MON/USDC pool. Used to size the minimum-out of launchWithMon. */
+export async function monUsdcRaw(): Promise<number> {
+  const quote = await getQuoteAsset();
+  const id = keccak256(encodeAbiParameters(
+    [{ type: 'address' }, { type: 'address' }, { type: 'uint24' }, { type: 'int24' }, { type: 'address' }],
+    [zeroAddress, quote, MON_USDC_FEE, MON_USDC_TICK_SPACING, zeroAddress],
+  ));
+  const slot0 = (await pc.readContract({ address: STATE_VIEW_V4, abi: stateViewV4Abi, functionName: 'getSlot0', args: [id] })) as any;
+  const sqrt = slot0[0] as bigint;
+  return Number(sqrt * sqrt) / Number(2n ** 192n);
 }

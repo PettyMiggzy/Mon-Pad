@@ -3,11 +3,12 @@ import { useEffect, useState, type ChangeEvent } from 'react';
 import Head from 'next/head';
 import Image from 'next/image';
 import { useRouter } from 'next/router';
-import { useAccount, usePublicClient, useReadContract, useSignMessage, useWriteContract } from 'wagmi';
-import { decodeEventLog, formatUnits, parseUnits, type Address, type Hex } from 'viem';
+import { useAccount, useBalance, usePublicClient, useReadContract, useSignMessage, useWriteContract } from 'wagmi';
+import { decodeEventLog, formatEther, formatUnits, parseEther, parseUnits, type Address, type Hex } from 'viem';
 import { api } from '@/lib/api';
 import { LAUNCHER_V4, MAX_CREATOR_TAX_BPS, MAX_DEV_BUY_BPS, QUOTE_DECIMALS } from '@/lib/v4/config';
 import { erc20V4Abi, launcherV4Abi } from '@/lib/v4/abis';
+import { monUsdcRaw } from '@/lib/v4/chain';
 import { setHeroMood } from '@/components/hero3d/bus';
 import { useToast } from '@/components/ui/Toast';
 
@@ -18,6 +19,7 @@ function friendly(e: any): string {
   const m = String(e?.shortMessage || e?.message || 'Launch failed');
   if (/dev buy over cap/i.test(m)) return `Dev buy is over the ${MAX_DEV_BUY_BPS / 100}% of supply cap. Lower it.`;
   if (/launches paused/i.test(m)) return 'Launches are paused right now.';
+  if (/not enough USDC/i.test(m)) return 'MON price moved while launching, or the amount is too small. Try again.';
   if (/blacklist|paused/i.test(m)) return 'USDC refused the transfer (paused or blacklisted). Try again later.';
   if (/User rejected|denied/i.test(m)) return 'Cancelled in wallet.';
   return m.slice(0, 120);
@@ -41,6 +43,10 @@ export default function V4Create() {
   const [uploading, setUploading] = useState(false);
   const [taxPct, setTaxPct] = useState('0');
   const [devBuy, setDevBuy] = useState('');
+  const [payWith, setPayWith] = useState<'MON' | 'USDC'>('MON');
+  const [monRaw, setMonRaw] = useState<number | null>(null);
+  useEffect(() => { monUsdcRaw().then(setMonRaw).catch(() => {}); }, []);
+  const { data: monBal } = useBalance({ address, query: { enabled: !!address } });
   const [tx, setTx] = useState<Tx>({ status: 'idle' });
 
   const { data: usdcAddr } = useReadContract({ address: LAUNCHER_V4, abi: launcherV4Abi, functionName: 'quoteAsset' });
@@ -56,9 +62,16 @@ export default function V4Create() {
   let devWei = 0n;
   let devBad = false;
   try { if (devBuy && Number(devBuy) > 0) devWei = parseUnits(devBuy, QUOTE_DECIMALS); } catch { devBad = true; }
-  const total = fee + devWei;
+  // MON path: the launcher converts MON to USDC inside the launch transaction. Only offered while the creation fee is 0.
+  const monMode = payWith === 'MON' && fee === 0n;
+  let devMon = 0n;
+  let devMonBad = false;
+  try { if (devBuy && Number(devBuy) > 0) devMon = parseEther(devBuy); } catch { devMonBad = true; }
+  const expectedUsdc = monRaw ? BigInt(Math.floor(Number(devMon) * monRaw)) : 0n;
+  const total = monMode ? 0n : fee + devWei;
   const paused = pausedRaw === true;
-  const short = bal < total;
+  const monHave = monBal?.value ?? 0n;
+  const short = monMode ? monHave < devMon : bal < total;
 
   useEffect(() => {
     if (!router.isReady) return;
@@ -82,8 +95,17 @@ export default function V4Create() {
   async function launch() {
     if (!address || !publicClient || !usdcAddr) return;
     if (!name.trim() || !symbol.trim()) return setTx({ status: 'error', message: 'Name and symbol required' });
-    if (devBad) return setTx({ status: 'error', message: 'Invalid dev buy amount' });
+    if (monMode ? devMonBad : devBad) return setTx({ status: 'error', message: 'Invalid dev buy amount' });
     try {
+      if (monMode) {
+        if (devMon > 0n && !monRaw) return setTx({ status: 'error', message: 'MON price not loaded yet, try again.' });
+        setTx({ status: 'pending', message: 'Launching' });
+        const sb = new Uint8Array(32); crypto.getRandomValues(sb);
+        const salt0 = `0x${Array.from(sb, (b) => b.toString(16).padStart(2, '0')).join('')}` as Hex;
+        const minUsdc = (expectedUsdc * 97n) / 100n; // 3% below the pool price; reverts if MON/USDC moved against us
+        const h0 = await writeContractAsync({ address: LAUNCHER_V4, abi: launcherV4Abi, functionName: 'launchWithMon', args: [name.trim(), symbol.trim(), salt0, taxBps, minUsdc], value: devMon } as any);
+        return await finish(h0);
+      }
       const allowance = (await publicClient.readContract({ address: usdcAddr as Address, abi: erc20V4Abi, functionName: 'allowance', args: [address, LAUNCHER_V4] })) as bigint;
       if (allowance < total) {
         setTx({ status: 'pending', message: `Step 1 of 2: approve ${usd(total)} USDC` });
@@ -94,6 +116,18 @@ export default function V4Create() {
       const saltBytes = new Uint8Array(32); crypto.getRandomValues(saltBytes);
       const salt = `0x${Array.from(saltBytes, (b) => b.toString(16).padStart(2, '0')).join('')}` as Hex;
       const hash = await writeContractAsync({ address: LAUNCHER_V4, abi: launcherV4Abi, functionName: 'launch', args: [name.trim(), symbol.trim(), salt, taxBps, devWei] } as any);
+      await finish(hash);
+    } catch (e: any) {
+      const message = friendly(e);
+      setTx({ status: 'error', message });
+      setHeroMood('facepalm', 1800);
+      toast.push(message, 'err');
+    }
+  }
+
+  async function finish(hash: Hex) {
+    if (!publicClient || !address) return;
+    {
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
       if (receipt.status !== 'success') throw new Error('Launch transaction failed');
       let newAddr: string | undefined;
@@ -117,16 +151,13 @@ export default function V4Create() {
         })();
         setTimeout(() => router.push(`/token/${dest}`), 1200);
       }
-    } catch (e: any) {
-      const message = friendly(e);
-      setTx({ status: 'error', message });
-      setHeroMood('facepalm', 1800);
-      toast.push(message, 'err');
     }
   }
 
-  const blocked = !address || !name.trim() || !symbol.trim() || tx.status === 'pending' || paused || short || devBad;
-  const label = !address ? 'Connect wallet' : paused ? 'Launches paused' : short ? `Need ${usd(total)} USDC (you have ${usd(bal)})` : `Launch (${usd(total)} USDC)`;
+  const blocked = !address || !name.trim() || !symbol.trim() || tx.status === 'pending' || paused || short || devBad || devMonBad;
+  const label = !address ? 'Connect wallet' : paused ? 'Launches paused'
+    : monMode ? (short ? `Need ${formatEther(devMon)} MON` : devMon > 0n ? `Launch (${devBuy} MON dev buy)` : 'Launch (free)')
+    : short ? `Need ${usd(total)} USDC (you have ${usd(bal)})` : `Launch (${usd(total)} USDC)`;
 
   return (
     <div className="pad-create">
@@ -161,17 +192,28 @@ export default function V4Create() {
         <div style={{ marginTop: 16, padding: 16, background: 'rgba(236,72,153,0.06)', border: '1px solid rgba(236,72,153,0.28)', borderRadius: 8 }}>
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4, color: 'var(--pink, #EC4899)' }}>Dev buy (optional)</div>
           <div style={{ fontSize: 11, color: '#aaa', marginBottom: 10, lineHeight: 1.45 }}>
-            Your first buy lands in the launch transaction, before anyone else can trade. Paid in USDC, capped at {MAX_DEV_BUY_BPS / 100}% of supply.
+            Your first buy lands in the launch transaction, before anyone else can trade. Capped at {MAX_DEV_BUY_BPS / 100}% of supply.
+            {fee === 0n ? ' Pay in MON and we convert it to USDC for you in the same transaction.' : ''}
           </div>
-          <label className="pad-field"><span>Dev buy (USDC)</span><input type="text" inputMode="decimal" value={devBuy} placeholder="0" onChange={(e) => setDevBuy(e.target.value)} /></label>
+          {fee === 0n && (
+            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+              {(['MON', 'USDC'] as const).map((k) => (
+                <button key={k} type="button" onClick={() => setPayWith(k)} aria-pressed={payWith === k} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(167,139,250,0.5)', color: '#fff', background: payWith === k ? 'rgba(167,139,250,0.35)' : 'transparent', cursor: 'pointer' }}>{k}</button>
+              ))}
+            </div>
+          )}
+          <label className="pad-field"><span>Dev buy ({monMode ? 'MON' : 'USDC'})</span><input type="text" inputMode="decimal" value={devBuy} placeholder="0" onChange={(e) => setDevBuy(e.target.value)} /></label>
         </div>
 
         <div style={{ marginTop: 16, padding: 16, background: 'rgba(255,255,255,0.03)', borderRadius: 8, fontSize: 13 }}>
           <div style={{ fontWeight: 600, marginBottom: 8 }}>Launch summary</div>
-          {[['Creation fee', `${usd(fee)} USDC`], ['Dev buy', `${usd(devWei)} USDC`], ['Total', `${usd(total)} USDC`], ['Your USDC', address ? `${usd(bal)} USDC` : 'connect a wallet'], ['Trade fee', `${(100 + taxBps) / 100}% (1% + ${taxBps / 100}% tax)`], ['Supply', '1,000,000,000']].map(([k, v]) => (
+          {(monMode
+            ? [['Creation fee', 'Free'], ['Dev buy', devMon > 0n ? `${devBuy} MON (about $${(Number(expectedUsdc) / 1e6).toFixed(2)})` : 'none'], ['Your MON', address ? `${Number(formatEther(monHave)).toLocaleString(undefined, { maximumFractionDigits: 2 })} MON` : 'connect a wallet']]
+            : [['Creation fee', `${usd(fee)} USDC`], ['Dev buy', `${usd(devWei)} USDC`], ['Total', `${usd(total)} USDC`], ['Your USDC', address ? `${usd(bal)} USDC` : 'connect a wallet']]
+          ).concat([ ['Trade fee', `${(100 + taxBps) / 100}% (1% + ${taxBps / 100}% tax)`], ['Supply', '1,000,000,000']]).map(([k, v]) => (
             <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}><span style={{ color: '#aaa' }}>{k}</span><span>{v}</span></div>
           ))}
-          <div style={{ color: '#888', fontSize: 11, marginTop: 6 }}>Gas is paid in MON. USDC is the only token you spend on the launch.</div>
+          <div style={{ color: '#888', fontSize: 11, marginTop: 6 }}>Gas is paid in MON.{monMode ? ' Any unused MON is refunded.' : ' USDC is the only token you spend on the launch.'}</div>
         </div>
 
         <button type="button" className="pad-launch" onClick={launch} disabled={blocked} style={{ width: '100%', marginTop: 16, opacity: blocked ? 0.5 : 1 }}>{tx.status === 'pending' ? tx.message : label}</button>

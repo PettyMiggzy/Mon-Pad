@@ -32,6 +32,7 @@ const E = (n) => ethers.parseEther(String(n));
       monshi: quote,
       startTick: START_TICK,
       creationFee: U(100),
+      monUsdcKey: { currency0: ethers.ZeroAddress, currency1: quote, fee: 500, tickSpacing: 10, hooks: ethers.ZeroAddress }, // unused here; the launcher only checks its shape
     });
 
     const monKey = monUsdcPoolKey(ethers);

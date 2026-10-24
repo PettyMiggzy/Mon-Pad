@@ -33,3 +33,7 @@ Checked and found sound:
 
 ## Not covered
 Formal verification, fuzzing, an independent human review, mainnet-state behavior beyond the fork, USDC pause or blacklist against the real token, frontend, SDK, MCP and the bot.
+
+## Addendum: `launchWithMon` (added after the first pass)
+New launcher entry point that takes native MON, swaps it to USDC on the hookless MON/USDC pool inside the launch transaction, and uses the USDC beyond `creationFee` as the dev buy (still capped at 5% of supply). Unspent MON is refunded after all state changes, under `nonReentrant`. `minUsdc` guards the MON/USDC price.
+Tests M1 to M5 in `uv4-audit.fork.js` (7 plus 5 pass): converted MON buys the dev buy, nothing is left in the launcher (USDC or MON), the sender is never charged more than sent plus gas, `minUsdc` is enforced, fee 0 with no MON is a plain launch, a fee larger than the converted MON reverts, and the dev-buy cap applies. The first-pass findings are unchanged. This path is new unaudited code on top of the reviewed contracts. Its extra risk is the MON/USDC pool price (protected by `minUsdc`; the site sets it 3% below the pool price).
