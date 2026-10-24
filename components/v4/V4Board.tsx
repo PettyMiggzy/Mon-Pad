@@ -7,15 +7,8 @@ const px = (n: number) => (n >= 1 ? n.toFixed(4) : n.toPrecision(3));
 const mcapOf = (t: TokenSummary) => Number(BigInt(t.marketCapMon || '0') / 10n ** 12n) / 1e6;
 
 export default function V4Board({ tokens, loading, query }: { tokens: TokenSummary[]; loading: boolean; query: string }) {
-  const totalMcap = tokens.reduce((a, t) => a + mcapOf(t), 0);
   return (
     <div className="xch">
-      <div className="xch-idx">
-        <div><small>LISTED</small><b>{tokens.length}</b></div>
-        <div><small>TOTAL MARKET CAP</small><b>{usd(totalMcap)}</b></div>
-        <div><small>QUOTE</small><b>USDC</b></div>
-        <div><small>LIQUIDITY</small><b>🔒 Locked</b></div>
-      </div>
       <div className="xch-panel">
         <table className="xch-tbl">
           <thead><tr><th>SYMBOL</th><th>LAST (USDC)</th><th>MKT CAP</th><th className="xch-hm">FEE</th><th /></tr></thead>
