@@ -261,7 +261,7 @@ function buyButtons(info, enr, tx) {
   return { reply_markup: { inline_keyboard: [
     row1,
     [{ text: '🤖 Trade with your AI', url: AI_URL }],
-    [styled({ text: '🟣 Buy on Monpad', url: `${SITE}/token/${info.token}` }, 'primary')],
+    [styled({ text: info.buyUrl ? '🟣 Buy on nad.fun' : '🟣 Buy on Monpad', url: info.buyUrl || `${SITE}/token/${info.token}` }, 'primary')],
   ] } };
 }
 
@@ -375,7 +375,7 @@ function buyCaption(info, mon, usd, tokensOut, trader, enr, x = {}) {
   const sc = x.socials || {};
   const links = [x.tx ? `<a href="${EXPLORER}/tx/${x.tx}">Tx</a>` : `<a href="${EXPLORER}/address/${trader}">Wallet</a>`];
   if (enr?.listed && enr.pairUrl) links.push(`<a href="${enr.pairUrl}">DS</a>`);
-  links.push(`<a href="${SITE}/token/${info.token}">WEB</a>`);
+  links.push(`<a href="${info.buyUrl || `${SITE}/token/${info.token}`}">WEB</a>`);
   if (sc.x) links.push(`<a href="${sc.x}">X</a>`);
   if (sc.tg) links.push(`<a href="${sc.tg}">TG</a>`);
   if (sc.web) links.push(`<a href="${sc.web}">Site</a>`);
@@ -890,7 +890,7 @@ async function initWatch() {
   if (!WATCH_MONSHI) return;
   try {
     const t0 = await client.readContract({ address: MONSHI_POOL, abi: [parseAbiItem('function token0() view returns (address)')], functionName: 'token0' });
-    watchPools.set(MONSHI_POOL, { token: MONSHI_TOKEN, symbol: 'MONSHI', name: 'Monshi', tokenIsToken0: t0.toLowerCase() === MONSHI_TOKEN.toLowerCase() });
+    watchPools.set(MONSHI_POOL, { token: MONSHI_TOKEN, symbol: 'MONSHI', name: 'Monshi', buyUrl: `https://nad.fun/tokens/${MONSHI_TOKEN}`, tokenIsToken0: t0.toLowerCase() === MONSHI_TOKEN.toLowerCase() });
   } catch (e) { console.error('watch init failed:', e.message); }
 }
 
