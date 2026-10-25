@@ -892,6 +892,12 @@ async function main() {
   if (testArg) { await runTestAlert(testArg, process.argv.find((a) => a.startsWith('--chat='))); return; }
   console.log(`monpad-bot → chat ${TELEGRAM_CHAT_ID} | V4 launcher ${LAUNCHER_V4}${LEGACY_V3 ? ` | legacy V3 factory ${FACTORY_V3}` : ''} | min buy $${MIN_BUY_USD}, min sell $${MIN_SELL_USD}`);
   console.log(BOOST_CONTRACT ? `boost contract ${BOOST_CONTRACT} (MONSHI-paid, tiered)` : 'boost contract: (not set — paid trending disabled)');
+  // Fill the "/" menu in Telegram (default scope covers groups and DMs)
+  await tg('setMyCommands', { commands: [
+    { command: 'meow', description: 'Meow 🥛' },
+    { command: 'milk', description: 'A wallet’s Monshi Kart milk: /milk 0x…' },
+    { command: 'help', description: 'What this bot does' },
+  ] }).catch((e) => console.error('setMyCommands failed:', e.message));
   await refreshV4Tokens();
   console.log(`tracking ${v4Pools.size} V4 coins`);
   setInterval(refreshV4Tokens, Math.min(TOKENS_REFRESH_MS, 30_000));

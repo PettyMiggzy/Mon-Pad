@@ -138,6 +138,28 @@ export async function quoteSell(token: Address, tokensIn: bigint, from?: Address
   return result as bigint;
 }
 
+/** MON in → tokens out (router swaps MON→USDC→token). Simulated with the caller's MON balance topped up so a quote never fails on funds. */
+export async function quoteBuyMon(token: Address, monIn: bigint, from?: Address): Promise<bigint> {
+  const quote = await getQuoteAsset();
+  const account = from ?? SIM_FROM;
+  const { result } = await pc.simulateContract({
+    address: ROUTER_V4, abi: routerV4Abi, functionName: 'buyWithMon',
+    args: [poolKeyFor(token, quote), 0n, 0n, dl(), 0n, 0n], account, value: monIn, stateOverride: [{ address: account, balance: monIn + 10n ** 18n }],
+  });
+  return result as bigint;
+}
+
+/** Tokens in → MON out (token→USDC→MON). */
+export async function quoteSellMon(token: Address, tokensIn: bigint, from?: Address): Promise<bigint> {
+  const quote = await getQuoteAsset();
+  const account = from ?? SIM_FROM;
+  const { result } = await pc.simulateContract({
+    address: ROUTER_V4, abi: routerV4Abi, functionName: 'sellToMon',
+    args: [poolKeyFor(token, quote), tokensIn, 0n, 0n, dl(), 0n, 0n], account, stateOverride: [tokenOverride(token, account, ROUTER_V4, from ? undefined : tokensIn)],
+  });
+  return result as bigint;
+}
+
 export const deadline = dl;
 
 export type DepthRow = { usdc: number; avgPrice: number | null; impactPct: number | null };
