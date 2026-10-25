@@ -3,7 +3,7 @@ import '@rainbow-me/rainbowkit/styles.css';
 import type { AppProps } from 'next/app';
 import Head from 'next/head';
 import { useEffect, useState } from 'react';
-import { Russo_One, Outfit, JetBrains_Mono } from 'next/font/google';
+import { Russo_One, Outfit, JetBrains_Mono, Bowlby_One, Kaushan_Script } from 'next/font/google';
 import { WagmiProvider } from 'wagmi';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RainbowKitProvider, darkTheme } from '@rainbow-me/rainbowkit';
@@ -14,7 +14,9 @@ import { ToastProvider } from '@/components/ui/Toast';
 const display = Russo_One({ weight: '400', subsets: ['latin'], variable: '--font-display', display: 'optional' });
 const sans = Outfit({ subsets: ['latin'], variable: '--font-sans', display: 'optional' });
 const mono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-mono', display: 'optional' });
-const fontVars = `${display.variable} ${sans.variable} ${mono.variable}`;
+const wordmark = Bowlby_One({ weight: '400', subsets: ['latin'], variable: '--font-wordmark', display: 'swap' });
+const script = Kaushan_Script({ weight: '400', subsets: ['latin'], variable: '--font-script', display: 'swap' });
+const fontVars = `${display.variable} ${sans.variable} ${mono.variable} ${wordmark.variable} ${script.variable}`;
 
 const monPadTheme = darkTheme({
   accentColor: '#B57BFF',

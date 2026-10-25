@@ -3,8 +3,9 @@ import { useRouter } from 'next/router';
 import { FormEvent, useEffect, useState, type ReactNode } from 'react';
 import { ConnectButton, useConnectModal } from '@rainbow-me/rainbowkit';
 import { useAccount, useSwitchChain } from 'wagmi';
-import { Home, ArrowLeftRight, User, Trophy, Bot, MessageCircle } from 'lucide-react';
+import { Home, ArrowLeftRight, User, Trophy, Bot, MessageCircle, Send } from 'lucide-react';
 import { isAdmin, MONAD_CHAIN_ID } from '@/lib/constants';
+import { v4Configured } from '@/lib/v4/config';
 import { AddressGuard } from './AddressGuard';
 import { Splash } from './ui/Splash';
 
@@ -67,9 +68,10 @@ export function Layout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const admin = address ? isAdmin(address) : false;
   const onProfile = router.pathname.startsWith('/profile');
+  const isHome = router.pathname === '/' && v4Configured();
 
   return (
-    <div className="pad-root">
+    <div className={`pad-root${isHome ? ' is-home' : ''}`}>
       <Splash />
       <AddressGuard />
       <WrongChainBar />
@@ -81,23 +83,34 @@ export function Layout({ children }: { children: ReactNode }) {
               MON<em>PAD</em>
             </span>
           </Link>
-          <NavSearch />
+          {!isHome && <NavSearch />}
           <nav className="pad-links" aria-label="Primary">
+            {isHome && <a href="#board" className="on">Launches</a>}
+            <Link href="/how-it-works">How it works</Link>
+            <a href="/monshi-kart">Play</a>
             <Link href="/docs" className={router.pathname === '/docs' ? 'on' : ''}>
               Docs
             </Link>
             <Link href="/chat" className={router.pathname === '/chat' ? 'on' : ''}>Chat</Link>
             <Link href="/ai" className={router.pathname === '/ai' ? 'on' : ''}>AI</Link>
-            <a href="/monshi-kart">Play</a>
-            <Link href="/how-it-works">How it works</Link>
             {admin && <Link href="/admin">Admin</Link>}
           </nav>
+          {isHome && (
+            <span className="pad-built"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round"><path d="M12 2.5 21.5 12 12 21.5 2.5 12Z" /><path d="M12 8 16 12 12 16 8 12Z" /></svg>Built on Monad</span>
+          )}
+          {isHome && (
+            <a className="pad-soc" href="https://t.me/monshionmonad" target="_blank" rel="noopener noreferrer" aria-label="Telegram">
+              <Send size={17} />
+            </a>
+          )}
           <div className="pad-wallet">
             <ConnectButton chainStatus="icon" showBalance={false} accountStatus="address" />
           </div>
-          <Link href="/create" className="pad-launch">
-            + Launch
-          </Link>
+          {!isHome && (
+            <Link href="/create" className="pad-launch">
+              + Launch
+            </Link>
+          )}
         </div>
       </header>
       <main className="pad-main">{children}</main>
