@@ -21,6 +21,8 @@ export const launcherV4Abi = parseAbi([
 export const routerV4Abi = parseAbi([
   `function buyWithUsdc(${KEY} key, uint256 usdcIn, uint256 minTokensOut, uint256 deadline, uint160 limit) returns (uint256 tokensOut)`,
   `function sellToUsdc(${KEY} key, uint256 tokensIn, uint256 minUsdcOut, uint256 deadline, uint160 limit) returns (uint256 usdcOut)`,
+  `function buyWithMon(${KEY} key, uint256 minTokensOut, uint256 minUsdcOut, uint256 deadline, uint160 monUsdcLimit, uint160 tokenPoolLimit) payable returns (uint256 tokensOut)`,
+  `function sellToMon(${KEY} key, uint256 tokensIn, uint256 minMonOut, uint256 minUsdcOut, uint256 deadline, uint160 tokenLimit, uint160 monLimit) returns (uint256 monOut)`,
 ]);
 
 export const stateViewV4Abi = parseAbi([
