@@ -15,7 +15,9 @@ import { DEMO_BOARD, pickCrown } from '@/lib/demo';
 import { v4Configured } from '@/lib/v4/config';
 import { listV4Tokens } from '@/lib/v4/chain';
 import V4Board from '@/components/v4/V4Board';
-import { HomeHero } from '@/components/home/HomeHero';
+import { LaunchHero } from '@/components/home/LaunchHero';
+import { FeaturedLaunches } from '@/components/home/FeaturedLaunches';
+import { HowItWorks } from '@/components/home/HowItWorks';
 import { PriceTape } from '@/components/home/PriceTape';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
@@ -206,11 +208,19 @@ export default function Home() {
         <link rel="preload" as="image" href="/meshy/monshi-mascot.webp" fetchPriority="high" />
       </Head>
 
-      {isV4 ? <PriceTape tokens={tokens} /> : <LiveTicker maxItems={24} />}
+      {!isV4 && <LiveTicker maxItems={24} />}
       {!isV4 && <Hero symbols={symbols} />}
 
+      {isV4 && (
+        <div className="lh">
+          <LaunchHero listed={loading ? null : tokens.length} totalMcapUsd={loading ? null : totalMcapUsd} />
+          <FeaturedLaunches tokens={tokens} loading={loading} />
+          <HowItWorks />
+        </div>
+      )}
+
       <div className="pad-wrap">
-        {isV4 && <HomeHero listed={loading ? null : tokens.length} totalMcapUsd={loading ? null : totalMcapUsd} />}
+        {isV4 && <PriceTape tokens={tokens} />}
         {!isV4 && <WhyRow />}
         {!isV4 && <FeeSplit />}
         {!isV4 && <MostWanted token={crown} />}
@@ -224,6 +234,7 @@ export default function Home() {
             </button>
           ))}
           <span className="pad-count">{loading ? '…' : visible.length}</span>
+          {isV4 && <input className="pad-tab-search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search coins, tickers, address" aria-label="Search coins" />}
         </div>
 
         {v4Configured() && !demo ? (
