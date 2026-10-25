@@ -715,7 +715,9 @@ async function announceLaunch(info) {
 // ── Cards: found milk / lost milk / spilled milk (bot/assets/*.png) ───────────────
 // First send uploads the file; Telegram's file_id is cached in video-cache.json so later posts are instant.
 async function sendCard(chatId, kind, caption, extra = {}) {
-  const key = `card:${kind}`;
+  // The cache key includes the file size, so replacing bot/assets/<kind>.png makes the bot upload the new art.
+  let sig = '0'; try { sig = String(fs.statSync(new URL(`${kind}.png`, ASSETS)).size); } catch { /* missing file: handled below */ }
+  const key = `card:${kind}:${sig}`;
   const base = { chat_id: chatId, caption, parse_mode: 'HTML', ...extra };
   if (videoCache[key]) {
     const r = await tg('sendPhoto', { ...base, photo: videoCache[key] });
