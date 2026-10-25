@@ -400,6 +400,22 @@ async function runTestAlert(arg, chatArg) {
   console.log(r.ok ? `sample ${kind} alert sent` : `failed: ${r.description || 'see log'}`);
 }
 
+// Sample V4 card (buy | win | loss | sell) so the art and caption can be checked without a trade.
+async function runTestV4(kind, chatArg) {
+  const chat = chatArg ? chatArg.split('=')[1] : TELEGRAM_CHAT_ID;
+  const info = { name: 'Monpad Test', symbol: 'MPT', token: '0x23A13ca5476f02D4DbDfB0987AC3cFF9B27FC4a5', poolId: '0xc4cb3a9bfbb758ddb26ae97bdbb92333f0f1a2b9f336166722630b52ebd74486' };
+  const trader = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
+  const tx = '0x' + 'cd'.repeat(32);
+  const price = 0.00005;
+  const buy = kind === 'buy';
+  const pnl = kind === 'win' ? { pnlUsd: 42, pct: 60 } : kind === 'loss' ? { pnlUsd: -18, pct: -35 } : null;
+  const usd = buy ? 120 : 70, tokens = usd / price;
+  const cap = '🧪 <i>test card</i>\n' + v4Caption(info, buy ? 'buy' : 'sell', usd, tokens, trader, price, { tx, position: buy ? 'New Holder' : undefined, pnl, paid: true });
+  const art = buy ? 'buy-card' : kind === 'win' ? 'found-milk' : kind === 'loss' ? 'lost-milk' : 'spilled-milk';
+  const r = await sendCard(chat, art, cap, buyButtons(info, v4Enr(info), tx));
+  console.log(r.ok ? `sample ${kind} card sent` : `failed: ${r.description || 'see log'}`);
+}
+
 // ── Trending ───────────────────────────────────────────────────────────────
 function loadBoosts() {
   // boosts.json: [{ "token": "0x..", "until": <unix seconds>, "by": "@handle" }]
@@ -687,7 +703,7 @@ async function refreshV4Tokens() {
         client.readContract({ address: token, abi: erc20Abi, functionName: 'symbol' }).catch(() => '?'),
         client.readContract({ address: token, abi: erc20Abi, functionName: 'name' }).catch(() => ''),
       ]);
-      const info = { token, symbol, name, creator, taxBps: Number(taxBps), quoteIs0: BigInt(USDC) < BigInt(token) };
+      const info = { token, symbol, name, creator, taxBps: Number(taxBps), poolId, quoteIs0: BigInt(USDC) < BigInt(token) };
       v4Pools.set(poolId.toLowerCase(), info);
       v4Count = i + 1;
       if (v4Ready) await announceLaunch(info).catch((e) => console.error('launch announce failed:', e.message));
@@ -768,10 +784,10 @@ function v4Caption(info, side, usd, tokens, trader, price, x = {}) {
   if (x.rank) lines.push(`🔥 <b>#${x.rank} on Monpad Trending</b>`);
   if (side === 'buy') {
     const tier = buyTier(usd, tokens);
-    lines.push(`🥛 <b>FOUND MILK</b> · ${tier.emoji} ${tier.label} BUY`);
-    lines.push(`<b>${esc(info.name || info.symbol)}</b> ($${esc(info.symbol)})`);
+    lines.push(`${tier.emoji} <b>${tier.label} BUY</b> · <b>${esc(info.name || info.symbol)}</b> ($${esc(info.symbol)})`);
     lines.push(emojiWall(usd, tier));
-    lines.push(`<b>Bought:</b> ${fmtMon(tokens)} ${esc(info.symbol)}  for  <b>${fmtUsd(usd)}</b>`);
+    lines.push(`<b>Tokens:</b> ${fmtMon(tokens)} (${esc(info.symbol)})`);
+    lines.push(`<b>Amount:</b> ${fmtUsd(usd)} USDC`);
   } else {
     const head = !x.pnl ? '🥛💦 <b>SPILLED MILK</b> · SELL' : x.pnl.pnlUsd >= 0 ? '🥛 <b>FOUND MILK</b> · SOLD FOR A WIN' : '🩸 <b>LOST MILK</b> · SOLD AT A LOSS';
     lines.push(head);
@@ -779,16 +795,21 @@ function v4Caption(info, side, usd, tokens, trader, price, x = {}) {
     lines.push(`<b>Sold:</b> ${fmtMon(tokens)} ${esc(info.symbol)}  for  <b>${fmtUsd(usd)}</b>`);
     if (x.pnl) lines.push(`<b>PnL:</b> ${signedUsd(x.pnl.pnlUsd)} (${x.pnl.pct >= 0 ? '+' : ''}${x.pnl.pct.toFixed(0)}%) <i>on buys the bot has seen</i>`);
   }
-  lines.push(`<b>Wallet:</b> <a href="${EXPLORER}/address/${trader}">${short(trader)}</a>${side === 'buy' && x.position ? `  ·  ${esc(x.position)}` : ''}`);
-  if (mcap > 0) lines.push(`<b>MCap:</b> ${fmtUsd(mcap)}  ·  <b>Price:</b> ${fmtPrice(price)}`);
+  lines.push(`<b>${side === 'buy' ? 'Buyer' : 'Wallet'}:</b> <a href="${EXPLORER}/address/${trader}">${short(trader)}</a>${side === 'buy' && x.position ? `  ·  ${esc(x.position)}` : ''}`);
+  if (mcap > 0) lines.push(`<b>MCap:</b> ${fmtUsd(mcap)}`);
+  if (price > 0) lines.push(`<b>Price:</b> ${fmtPrice(price)}`);
   const sc = x.socials || {};
   const links = [`<a href="${EXPLORER}/tx/${x.tx}">Tx</a>`, `<a href="${SITE}/token/${info.token}">WEB</a>`];
   if (sc.x) links.push(`<a href="${sc.x}">X</a>`);
   if (sc.tg) links.push(`<a href="${sc.tg}">TG</a>`);
   if (sc.web) links.push(`<a href="${sc.web}">Site</a>`);
   lines.push(links.join(' · '));
+  if (x.paid) lines.push('✅ <b>DEX PAID</b>');
   return lines.join('\n');
 }
+
+// DexScreener / GeckoTerminal both index V4 pools by poolId
+const v4Enr = (info) => ({ listed: !!info.poolId, pairUrl: info.poolId ? `https://dexscreener.com/monad/${info.poolId}` : '' });
 
 async function handleV4Swap(info, lg, silent) {
   const key = `v4:${lg.transactionHash}:${lg.logIndex}`;
@@ -816,8 +837,8 @@ async function handleV4Swap(info, lg, silent) {
     isDexPaid(info.token).catch(() => false),
   ]);
   const caption = v4Caption(info, side, usd, tokens, trader, price, { position, socials, paid, pnl, tx: lg.transactionHash, rank: trendRank(info.token.toLowerCase()) });
-  const extra = buyButtons(info, null, lg.transactionHash);
-  const kind = side === 'buy' ? 'found-milk' : !pnl ? 'spilled-milk' : pnl.pnlUsd >= 0 ? 'found-milk' : 'lost-milk';
+  const extra = buyButtons(info, v4Enr(info), lg.transactionHash);
+  const kind = side === 'buy' ? 'buy-card' : !pnl ? 'spilled-milk' : pnl.pnlUsd >= 0 ? 'found-milk' : 'lost-milk';
   const r = await sendCard(TELEGRAM_CHAT_ID, kind, caption, extra);
   if (!r.ok) await send(caption, extra); // never lose an alert if the image fails
 }
@@ -889,6 +910,8 @@ async function pollCommands() {
 // ── Boot ─────────────────────────────────────────────────────────────────
 async function main() {
   const testArg = process.argv.find((a) => a.startsWith('--test-alert'));
+  const testV4 = process.argv.find((a) => a.startsWith('--test-v4'));
+  if (testV4) { await runTestV4(testV4.split('=')[1] || 'buy', process.argv.find((a) => a.startsWith('--chat='))); return; }
   if (testArg) { await runTestAlert(testArg, process.argv.find((a) => a.startsWith('--chat='))); return; }
   console.log(`monpad-bot → chat ${TELEGRAM_CHAT_ID} | V4 launcher ${LAUNCHER_V4}${LEGACY_V3 ? ` | legacy V3 factory ${FACTORY_V3}` : ''} | min buy $${MIN_BUY_USD}, min sell $${MIN_SELL_USD}`);
   console.log(BOOST_CONTRACT ? `boost contract ${BOOST_CONTRACT} (MONSHI-paid, tiered)` : 'boost contract: (not set — paid trending disabled)');
