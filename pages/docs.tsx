@@ -2,57 +2,62 @@ import Link from 'next/link';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { useState } from 'react';
-import { AlertTriangle, Bot, BookOpen, Code2, Coins, Flame, Layers, Lock, MessageCircle, Rocket, Shield, Terminal, Wallet } from 'lucide-react';
+import { AlertTriangle, Bot, BookOpen, Bug, Coins, FileCode2, Layers, Rocket, Shield, Wallet, Zap } from 'lucide-react';
+import { CodeBlock, CopyButton } from '@/components/ui/CopyButton';
+import { feePct, LP_FEE_SLICES } from '@/lib/fees';
+import { HOOK_V4, LAUNCHER_V4, ROUTER_V4 } from '@/lib/v4/config';
+import { MONAD_EXPLORER, MONSHI_TOKEN } from '@/lib/constants';
 
-/* Public documentation. Deliberately contains no wallet addresses: platform and treasury wallets are
-   readable on-chain from the verified contracts, and contract addresses are published here at launch. */
+/* Public documentation. Contract addresses come from the same env the site uses, so this page never drifts from what is live. */
+
+const ZERO = '0x0000000000000000000000000000000000000000';
+const CONTRACTS: [string, string, string][] = [
+  ['Launcher', LAUNCHER_V4 === ZERO ? '0x2d55391d4170C7cAF9eE53Cf8BAD00748452ec84' : LAUNCHER_V4, 'Launches coins, holds the locked liquidity, splits fees.'],
+  ['Hook', HOOK_V4 === ZERO ? '0xaff86Dd6e66df26b971767959e854e12b5f7a080' : HOOK_V4, 'Sets the fee on every swap, inside the pool.'],
+  ['Router', ROUTER_V4 === ZERO ? '0xC20A50750a75d2d8FFF47E63003636C3CF0bb18c' : ROUTER_V4, 'Buy and sell with MON or USDC in one transaction.'],
+  ['USDC', '0x754704Bc059F8C67012fEd69BC8A327a5aafb603', 'The quote asset of every pool.'],
+  ['Uniswap V4 PoolManager', '0x188d586ddcf52439676ca21a244753fa19f9ea8e', 'Where the pools live.'],
+  ['MONSHI', MONSHI_TOKEN, 'Bought and burned from fees.'],
+];
 
 const SECTIONS = [
-  { id: 'overview', label: 'Overview', icon: BookOpen },
+  { id: 'start', label: 'Start here', icon: Zap },
   { id: 'launch', label: 'How a launch works', icon: Rocket },
   { id: 'fees', label: 'Fees', icon: Coins },
   { id: 'trading', label: 'Trading', icon: Layers },
-  { id: 'chat', label: 'Launch by chat', icon: MessageCircle },
-  { id: 'agents', label: 'AI & MCP', icon: Bot },
-  { id: 'sdk', label: 'SDK', icon: Code2 },
-  { id: 'api', label: 'HTTP API', icon: Terminal },
-  { id: 'events', label: 'On-chain data', icon: Flame },
+  { id: 'ai', label: 'Use your AI', icon: Bot },
+  { id: 'bots', label: 'Bots & developers', icon: FileCode2 },
+  { id: 'contracts', label: 'Contracts', icon: BookOpen },
   { id: 'security', label: 'Security & risks', icon: Shield },
   { id: 'wallet', label: 'Wallet setup', icon: Wallet },
-];
-
-const MCP_TOOLS: [string, 'read' | 'write', string][] = [
-  ['monpad_list_launches', 'read', 'Recent launches, newest first.'],
-  ['monpad_get_token', 'read', 'Price, liquidity, creator tax and approximate volume for one token.'],
-  ['monpad_trending', 'read', 'Tokens ranked by swap volume over a recent window.'],
-  ['monpad_get_spec', 'read', 'Fee policy, safety limits and contract readiness.'],
-  ['monpad_get_monshi_burn', 'read', 'Live MONSHI burn counter.'],
-  ['monpad_launch_token', 'write', 'Launch a token, with an optional dev buy. Dry run by default.'],
-  ['monpad_buy', 'write', 'Buy with MON. Requires a minimum-out. Dry run by default.'],
-  ['monpad_sell', 'write', 'Sell for MON. Requires a minimum-out. Dry run by default.'],
-];
-
-const SDK_METHODS: [string, string][] = [
-  ['createMonpad({ publicClient, walletClient?, addresses? })', 'Create a client. Read methods need only a public client. Writes need a wallet client.'],
-  ['monpad.listLaunches({ limit })', 'Recent launches with creator, creator tax, pool id, name and symbol.'],
-  ['monpad.getToken(token)', 'Price, liquidity, total swap fee, creator tax and volume for one token.'],
-  ['monpad.quoteBuy({ token, monIn })', 'Simulates a buy and returns the expected tokens out and the fee paid.'],
-  ['monpad.buy({ token, monIn, minTokensOut, deadline?, simulate? })', 'One payable transaction. Reverts if you would receive less than minTokensOut.'],
-  ['monpad.sell({ token, tokensIn, minMonOut, deadline?, simulate? })', 'Sells tokens for MON, with the same protections. Handles the approval if needed.'],
-  ['monpad.launch({ name, symbol, creatorTaxBps?, devBuyMon?, salt?, simulate? })', 'Deploys the token and its pool in one transaction. Creator tax 0 to 500 bps.'],
-  ['monpad.creatorEarnings(address)', 'Fees a creator can claim, per asset.'],
-  ['monpad.claim() / monpad.harvest(token)', 'Claim creator earnings, or trigger the fee split for a pool. Anyone can call harvest.'],
-  ['monpad.getMonshiBurned()', 'MONSHI held at the dead address.'],
 ];
 
 function H2({ id, children }: { id: string; children: React.ReactNode }) {
   return <h2 id={id} className="scroll-mt-24 text-2xl md:text-3xl font-bold text-white mt-14 mb-4">{children}</h2>;
 }
 const P = ({ children }: { children: React.ReactNode }) => <p className="text-white/75 leading-relaxed mb-4">{children}</p>;
-const Code = ({ children }: { children: string }) => (
-  <pre className="rounded-xl border border-white/10 bg-black/40 p-4 text-sm text-white/90 overflow-x-auto mb-4"><code>{children}</code></pre>
-);
 const Ic = ({ children }: { children: React.ReactNode }) => <code className="rounded bg-white/10 px-1.5 py-0.5 text-[0.9em] text-purple-200">{children}</code>;
+const Btn = ({ href, children, ghost = false }: { href: string; children: React.ReactNode; ghost?: boolean }) => (
+  <Link href={href} className={`inline-flex items-center justify-center rounded-xl px-5 py-3 font-semibold text-white ${ghost ? 'bg-white/10 border border-white/15' : 'bg-purple-600 hover:bg-purple-500'}`}>{children}</Link>
+);
+
+function AddMonad() {
+  const [msg, setMsg] = useState('');
+  async function add() {
+    const eth = (window as any).ethereum;
+    if (!eth) { setMsg('No wallet found in this browser. Use the values below.'); return; }
+    try {
+      await eth.request({ method: 'wallet_addEthereumChain', params: [{ chainId: '0x8f', chainName: 'Monad Mainnet', nativeCurrency: { name: 'MON', symbol: 'MON', decimals: 18 }, rpcUrls: ['https://rpc.monad.xyz'], blockExplorerUrls: [MONAD_EXPLORER] }] });
+      setMsg('Monad added.');
+    } catch (e: any) { setMsg(e?.code === 4001 ? 'Cancelled.' : 'Your wallet could not add it. Use the values below.'); }
+  }
+  return (
+    <div className="mb-4 flex items-center gap-3 flex-wrap">
+      <button type="button" onClick={add} className="rounded-xl bg-purple-600 hover:bg-purple-500 px-5 py-3 font-semibold text-white">Add Monad to my wallet</button>
+      {msg && <span className="text-white/70 text-sm">{msg}</span>}
+    </div>
+  );
+}
 
 export default function Docs() {
   const router = useRouter();
@@ -62,22 +67,20 @@ export default function Docs() {
     <div className="max-w-6xl mx-auto px-4 py-10">
       <Head>
         <title>Docs | Monpad</title>
-        <meta key="description" name="description" content="How Monpad works: launches on Uniswap V4 with an enforced creator tax, fees, trading, launch by chat, AI and MCP, the SDK and the HTTP API." />
+        <meta key="description" name="description" content="How Monpad works: free launches on Uniswap V4 with locked liquidity, pay in MON, fees, trading, AI in one click, bots and contract addresses." />
         <link key="canonical" rel="canonical" href={canonical} />
       </Head>
 
       <header className="mb-8">
         <div className="text-sm text-white/55 mb-2">Documentation</div>
-        <h1 className="text-4xl md:text-5xl font-bold text-white mb-3">Build on and trade with Monpad</h1>
-        <p className="text-white/70 max-w-3xl leading-relaxed">
-          Everything you need to launch a token, trade it, or plug a bot or an AI into Monpad on Monad.
-        </p>
+        <h1 className="text-4xl md:text-5xl font-bold text-white mb-3">Monpad, explained</h1>
+        <p className="text-white/70 max-w-3xl leading-relaxed">Launch a coin, trade it, or plug in your AI. Most things here are one click.</p>
       </header>
 
       <div className="rounded-2xl border border-yellow-400/30 bg-yellow-400/5 p-4 mb-8 flex gap-3">
         <AlertTriangle className="shrink-0 mt-0.5" size={20} />
         <div className="text-white/80 text-sm leading-relaxed">
-          <b className="text-white">Status.</b> The launch contracts have been tested on a fork of Monad mainnet and are going through an independent security review. This page describes how they work. Verified contract addresses are published here and on Monadscan at mainnet launch. Nothing on this page is financial advice.
+          <b className="text-white">Status.</b> Live on Monad mainnet. The contracts are verified and were reviewed in-house against a fork of mainnet. They have not had an outside audit yet. Only use money you can afford to lose. See <a href="#security" className="underline">Security &amp; risks</a>.
         </div>
       </div>
 
@@ -99,153 +102,139 @@ export default function Docs() {
         </nav>
 
         <main className="min-w-0">
-          <H2 id="overview">Overview</H2>
-          <P>Monpad is a launchpad on Monad. A token launches straight into a Uniswap V4 pool, paired with native MON, from the first block. There is no bonding curve and no waiting period. The pool is on the DEX from the moment the launch transaction lands.</P>
-          <P>The pool uses a Monpad hook, a small contract that runs on every swap. The hook sets the swap fee and enforces the creator&apos;s tax inside the pool itself. Because the rule lives in the pool, every router, aggregator and bot pays the same fee, and no one can route around it.</P>
+          <H2 id="start">Start here</H2>
+          <P>Monpad is a fair launchpad on Monad. A coin goes straight into a Uniswap V4 pool on the first block. There is no bonding curve, no waiting period and no creation fee. The liquidity is locked from the start.</P>
+          <div className="grid sm:grid-cols-2 gap-3 mb-6">
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+              <h3 className="text-lg font-semibold text-white mb-1">I want to launch a coin</h3>
+              <p className="text-white/65 text-sm mb-3">Name, ticker, picture. One transaction, paid in MON.</p>
+              <Btn href="/create">Launch a coin</Btn>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+              <h3 className="text-lg font-semibold text-white mb-1">I want to buy or sell</h3>
+              <p className="text-white/65 text-sm mb-3">Pay with MON or USDC. We convert for you.</p>
+              <Btn href="/#board">See the coins</Btn>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+              <h3 className="text-lg font-semibold text-white mb-1">I want to use my AI</h3>
+              <p className="text-white/65 text-sm mb-3">Add one link to Claude, ChatGPT, Cursor or VS Code.</p>
+              <Btn href="/ai">Connect my AI</Btn>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+              <h3 className="text-lg font-semibold text-white mb-1">I need a wallet on Monad</h3>
+              <p className="text-white/65 text-sm mb-3">One click adds the network to your wallet.</p>
+              <a href="#wallet" className="inline-flex rounded-xl bg-white/10 border border-white/15 px-5 py-3 font-semibold text-white">Set up my wallet</a>
+            </div>
+          </div>
           <ul className="list-disc pl-5 space-y-2 text-white/75 mb-4">
-            <li><b className="text-white">Plain token.</b> A standard ERC-20 with a fixed supply of 1 billion. No token tax, no mint, no owner, no blacklist and no anti-sniper code. It works everywhere a normal token does.</li>
-            <li><b className="text-white">Locked liquidity.</b> The launcher holds the pool position and has no function that removes liquidity.</li>
-            <li><b className="text-white">Open to bots.</b> There is no sniper protection, delay or whitelist. Bots and AI agents are first-class users.</li>
+            <li><b className="text-white">Plain coin.</b> A standard token with a fixed supply of 1 billion. No token tax, no mint, no owner and no blacklist. It works with every wallet and app.</li>
+            <li><b className="text-white">Locked liquidity.</b> The launcher holds the pool position and has no way to take it out.</li>
+            <li><b className="text-white">Open to bots.</b> No sniper protection, delay or whitelist. Bots and AI agents are welcome.</li>
           </ul>
 
           <H2 id="launch">How a launch works</H2>
-          <P>A launch is one transaction to the launcher contract:</P>
+          <P>One transaction does all of this:</P>
           <ol className="list-decimal pl-5 space-y-2 text-white/75 mb-4">
-            <li>Deploys the token (1 billion supply, held entirely by the launcher).</li>
-            <li>Creates the Uniswap V4 pool, native MON against the token, using the Monpad hook.</li>
-            <li>Places the whole supply in one single-sided position at the starting price.</li>
-            <li>Optionally spends your <b className="text-white">dev buy</b> in the same transaction, so you buy before anyone else can. The dev buy is capped at 5% of supply.</li>
+            <li>Creates the token (1 billion supply, all held by the launcher).</li>
+            <li>Opens the Uniswap V4 pool, the coin against USDC, with the Monpad hook.</li>
+            <li>Puts the whole supply in one single-sided position at the starting price.</li>
+            <li>Optionally buys for you first (the <b className="text-white">dev buy</b>), before anyone else can. It is capped at 5% of supply.</li>
           </ol>
-          <P>You pay a flat creation fee, which the launch form shows before you confirm, plus any dev buy. A launch costs far less gas than a classic launcher, roughly 870k gas in our tests.</P>
-          <P>You choose a <b className="text-white">creator tax</b> from 0% to 5% at launch. It is fixed forever. See Fees for what it does.</P>
-          <Code>{`launch(name, symbol, salt, creatorTaxBps)   // payable: creation fee + optional dev buy`}</Code>
+          <P>You can pay in MON. The launcher swaps what it needs to USDC inside the same transaction. There is <b className="text-white">no creation fee</b>. You choose a <b className="text-white">creator tax</b> from 0% to 5% at launch. It is fixed forever; see Fees.</P>
 
           <H2 id="fees">Fees</H2>
-          <P>Every swap in a Monpad pool pays <b className="text-white">1% plus the creator tax</b>, so between 1% and 6% in total. The hook sets this on every swap. Anyone can trigger the split by calling <Ic>harvest(token)</Ic>.</P>
+          <P>Every swap pays <b className="text-white">1% plus the creator tax</b>, so between 1% and 6%. The hook sets this inside the pool on every swap, so no router or app can skip it.</P>
           <div className="overflow-x-auto mb-6">
             <table className="w-full text-sm text-left border border-white/10 rounded-xl overflow-hidden">
               <thead className="bg-white/5 text-white/80"><tr><th className="p-3">Share of the base 1%</th><th className="p-3">Goes to</th></tr></thead>
               <tbody className="text-white/75 divide-y divide-white/10">
-                <tr><td className="p-3">70%</td><td className="p-3">The creator, claimable at any time</td></tr>
-                <tr><td className="p-3">10%</td><td className="p-3">The platform</td></tr>
-                <tr><td className="p-3">10%</td><td className="p-3">Buys and burns MONSHI</td></tr>
-                <tr><td className="p-3">10%</td><td className="p-3">Buys and burns the launched token</td></tr>
+                <tr><td className="p-3">{feePct(LP_FEE_SLICES[0].bps)}</td><td className="p-3">The creator, claimable any time</td></tr>
+                <tr><td className="p-3">{feePct(LP_FEE_SLICES[1].bps)}</td><td className="p-3">The platform</td></tr>
+                <tr><td className="p-3">{feePct(LP_FEE_SLICES[2].bps)}</td><td className="p-3">Buys and burns MONSHI</td></tr>
+                <tr><td className="p-3">{feePct(LP_FEE_SLICES[3].bps)}</td><td className="p-3">Buys and burns the launched coin</td></tr>
               </tbody>
             </table>
           </div>
-          <P><b className="text-white">Creator tax.</b> Anything above the base 1% is the creator tax. It is not paid to the creator or the platform. All of it buys and burns the launched token, so it can only reduce supply. The creator cannot take it out or change it later. The total fee is always shown before you trade.</P>
-          <P><b className="text-white">Fees paid in the token.</b> On the token side of a swap, the creator and platform keep their 70% and 10%, and the two burn shares are burned directly in the token, 20% in total.</P>
-          <P><b className="text-white">Buyback and burn.</b> Anyone can run the token buyback. It only executes when the pool price is close to a reference price the hook samples before swaps, which makes it hard to manipulate. The MONSHI buyback runs from a designated keeper with a minimum-out set from an off-chain price.</P>
+          <P><b className="text-white">Creator tax.</b> Anything above the base 1% is the creator tax. It is not paid to anyone. All of it buys and burns the coin, so a higher tax means a faster burn.</P>
+          <P><b className="text-white">Collecting.</b> The token page has a <Ic>Collect fees</Ic> button that anyone can press. It splits what the pool has earned. Creators then claim their share from the same page.</P>
 
           <H2 id="trading">Trading</H2>
-          <P>Tokens trade in the Uniswap V4 pool like any other pair. On monpad.net, every token page has a trade box and a chart. Bots and aggregators can swap in the pool directly. The fee is charged either way.</P>
+          <P>Every coin page has a trade box and a chart. Choose <Ic>MON</Ic> or <Ic>USDC</Ic>, type an amount, press Buy. Pick MON and the router converts to USDC and back inside the same transaction.</P>
           <ul className="list-disc pl-5 space-y-2 text-white/75 mb-4">
-            <li><b className="text-white">Always set a minimum out.</b> Prices move between quote and execution. Monpad&apos;s tools require a minimum-out on buys and sells.</li>
-            <li><b className="text-white">Check the total fee.</b> A creator tax raises the fee up to 6%. It is shown on the token page.</li>
-            <li><b className="text-white">Other pools can exist.</b> Anyone can create another pool for the same token elsewhere. Liquidity locked in Monpad&apos;s pool stays there, but volume can move.</li>
+            <li><b className="text-white">Slippage.</b> The trade box sets a minimum-out from a live quote (default 1%). If the price moves past it, the trade fails and you keep your money.</li>
+            <li><b className="text-white">Price impact.</b> The depth panel shows what a trade of each size would cost. New coins start thin on the sell side.</li>
+            <li><b className="text-white">Total fee.</b> Shown on the coin page. A creator tax raises it.</li>
+            <li><b className="text-white">Gas.</b> Keep a little MON for gas. The Max button leaves some behind.</li>
           </ul>
 
-          <H2 id="chat">Launch by chat</H2>
-          <P>Open <Link href="/chat" className="underline text-purple-300">Chat</Link> and describe your coin in a sentence. Monpad drafts the name, ticker, logo and a 3D character, and shows you the result. You confirm and sign the launch from your own wallet. Nothing is deployed until you approve the transaction.</P>
-          <P>Launched tokens can get a living 3D character that reacts to the chart. Character generation uses credits that are covered by the creation fee.</P>
+          <H2 id="ai">Use your AI</H2>
+          <P>Add one link and ask in plain English. The AI can look up coins and prepare a buy, sell or launch. It never touches your wallet: it hands you a link and you confirm.</P>
+          <div className="mb-4 flex flex-wrap items-center gap-3">
+            <Btn href="/ai">One-click setup</Btn>
+            <CopyButton text="https://www.monpad.net/api/mcp" label="Copy connector link" />
+          </div>
 
-          <H2 id="agents">AI &amp; MCP</H2>
-          <P>Monpad speaks the Model Context Protocol, so Claude, Cursor and other MCP-compatible assistants can read the market and, if you allow it, trade and launch. The server runs on your own machine. Your key stays there.</P>
-          <Code>{`{
-  "mcpServers": {
-    "monpad": {
-      "command": "npx",
-      "args": ["-y", "@monpad/mcp"],
-      "env": {
-        "RPC_URL": "https://rpc.monad.xyz",
-        "MONPAD_PRIVATE_KEY": "<a small burner wallet>"
-      }
-    }
-  }
-}`}</Code>
-          <div className="overflow-x-auto mb-4 rounded-xl border border-white/10">
-            {MCP_TOOLS.map(([name, kind, body]) => (
-              <div key={name} className="flex items-start justify-between gap-4 p-3 border-b border-white/10 last:border-0">
-                <div><Ic>{name}</Ic><div className="text-white/60 text-sm mt-1">{body}</div></div>
-                <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${kind === 'write' ? 'bg-red-500/20 text-red-200' : 'bg-green-500/20 text-green-200'}`}>{kind}</span>
+          <H2 id="bots">Bots &amp; developers</H2>
+          <P>Everything is on-chain, so bots can trade without any Monpad service. Pools are Uniswap V4 pools with a dynamic fee and the Monpad hook. Use the router for MON or USDC swaps in one call:</P>
+          <CodeBlock>{`buyWithMon(key, minTokensOut, minUsdcOut, deadline, monUsdcLimit, tokenPoolLimit)   // payable
+sellToMon(key, tokensIn, minMonOut, minUsdcOut, deadline, tokenLimit, monLimit)
+buyWithUsdc(key, usdcIn, minTokensOut, deadline, limit)
+sellToUsdc(key, tokensIn, minUsdcOut, deadline, limit)`}</CodeBlock>
+          <P><Ic>key</Ic> is the pool key: <Ic>currency0/currency1</Ic> are USDC and the coin, sorted by address; <Ic>fee</Ic> is <Ic>0x800000</Ic> (dynamic); <Ic>tickSpacing</Ic> is <Ic>200</Ic>; <Ic>hooks</Ic> is the hook address below. Pass <Ic>0</Ic> for a price limit to use the default. Always set a real minimum-out.</P>
+          <CodeBlock>{`const key = {
+  currency0: usdc < token ? usdc : token,
+  currency1: usdc < token ? token : usdc,
+  fee: 0x800000,
+  tickSpacing: 200,
+  hooks: HOOK,
+};
+await wallet.writeContract({
+  address: ROUTER, abi, functionName: 'buyWithMon',
+  args: [key, minTokensOut, 0n, BigInt(Math.floor(Date.now() / 1000) + 600), 0n, 0n],
+  value: parseEther('5'),
+});`}</CodeBlock>
+          <P>Read the list of coins from the launcher (<Ic>tokenCount</Ic>, <Ic>allTokens(i)</Ic>, <Ic>launches(token)</Ic>) and follow trades with the <Ic>Swap</Ic> event on the PoolManager, filtered by pool id. Public RPCs limit <Ic>eth_getLogs</Ic> to 100 blocks, so use your own node for history. Candles for any coin are at <Ic>/api/v1/candles?pool=&lt;poolId&gt;&amp;tf=5m</Ic>.</P>
+          <div className="rounded-xl border border-white/10 divide-y divide-white/10 mb-4">
+            <div className="p-3"><Ic>GET /api/v1/spec</Ic><div className="text-white/60 text-sm mt-1">Fees, split and contract addresses as JSON.</div></div>
+            <div className="p-3"><Ic>GET /api/v1/burn</Ic><div className="text-white/60 text-sm mt-1">Live MONSHI burned.</div></div>
+            <div className="p-3"><Ic>GET /api/v1/candles</Ic><div className="text-white/60 text-sm mt-1">Price candles for a pool (1m to 1d).</div></div>
+            <div className="p-3"><Ic>POST /api/mcp</Ic><div className="text-white/60 text-sm mt-1">The AI connector (MCP over HTTP).</div></div>
+          </div>
+          <P>A TypeScript SDK and a self-hosted MCP server for bots with their own wallet are being rebuilt for these contracts. Until they are back, use the router calls above.</P>
+
+          <H2 id="contracts">Contracts</H2>
+          <div className="rounded-xl border border-white/10 divide-y divide-white/10 mb-4">
+            {CONTRACTS.map(([name, addr, body]) => (
+              <div key={name} className="p-3 flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-white font-semibold">{name}</div>
+                  <div className="text-white/55 text-sm">{body}</div>
+                  <a href={`${MONAD_EXPLORER}/address/${addr}`} target="_blank" rel="noreferrer" className="text-purple-300 text-sm break-all underline">{addr}</a>
+                </div>
+                <CopyButton text={addr} label="Copy address" />
               </div>
             ))}
           </div>
-          <div className="rounded-xl border border-white/10 bg-white/5 p-4 mb-4 text-white/75 text-sm leading-relaxed">
-            <b className="text-white">Safety built in.</b> Write tools are dry runs unless you turn that off. Spend limits apply per transaction and per day (<Ic>MAX_MON_PER_TX</Ic>, <Ic>MAX_MON_PER_DAY</Ic>). Buys and sells need a minimum-out. Use a separate burner wallet funded with only what you can afford to lose. Never give an AI your main wallet key, and read what it is about to do before you approve a trade.
-          </div>
-          <P><b className="text-white">Availability.</b> The MCP package is published at mainnet launch, together with the contract addresses.</P>
-
-          <H2 id="sdk">SDK</H2>
-          <P><Ic>@monpad/sdk</Ic> is a TypeScript library built on viem for traders, bots and apps. It wraps the launcher and the router, simulates before it sends, and requires a minimum-out on every trade.</P>
-          <Code>{`npm i @monpad/sdk viem`}</Code>
-          <Code>{`import { createPublicClient, createWalletClient, http, parseEther } from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
-import { createMonpad, monad } from '@monpad/sdk';
-
-const publicClient = createPublicClient({ chain: monad, transport: http() });
-const walletClient = createWalletClient({
-  account: privateKeyToAccount(process.env.PRIVATE_KEY as \`0x\${string}\`),
-  chain: monad,
-  transport: http(),
-});
-const monpad = createMonpad({ publicClient, walletClient });
-
-// Read
-const { launches } = await monpad.listLaunches({ limit: 10 });
-const token = launches[0].token;
-
-// Quote, then buy with protection
-const q = await monpad.quoteBuy({ token, monIn: parseEther('0.5') });
-await monpad.buy({
-  token,
-  monIn: parseEther('0.5'),
-  minTokensOut: (q.tokensOut * 98n) / 100n, // 2% slippage
-});
-
-// Launch with a 2% creator tax and a 1 MON dev buy
-await monpad.launch({ name: 'Example', symbol: 'EX', creatorTaxBps: 200, devBuyMon: '1' });`}</Code>
-          <div className="rounded-xl border border-white/10 divide-y divide-white/10 mb-4">
-            {SDK_METHODS.map(([sig, body]) => (
-              <div key={sig} className="p-3"><code className="text-purple-200 text-sm break-words">{sig}</code><div className="text-white/60 text-sm mt-1">{body}</div></div>
-            ))}
-          </div>
-          <P>Every write method accepts <Ic>simulate: true</Ic> to run the transaction against the chain without sending it. Errors are typed, for example slippage exceeded, deadline passed, or unknown token.</P>
-          <P><b className="text-white">Availability.</b> SDK v0.2 for the V4 launcher is published at mainnet launch, together with the contract addresses.</P>
-
-          <H2 id="api">HTTP API</H2>
-          <P>Read-only JSON, open to any origin, for bots, dashboards and AI agents.</P>
-          <div className="rounded-xl border border-white/10 divide-y divide-white/10 mb-4">
-            <div className="p-3"><Ic>GET /api/v1/spec</Ic><div className="text-white/60 text-sm mt-1">Fee policy, chain and the current state of the contracts.</div></div>
-            <div className="p-3"><Ic>GET /api/v1/burn</Ic><div className="text-white/60 text-sm mt-1">Live MONSHI burned, circulating and total supply.</div></div>
-          </div>
-          <Code>{`curl https://www.monpad.net/api/v1/burn`}</Code>
-
-          <H2 id="events">On-chain data</H2>
-          <P>Everything is readable on-chain, including the platform address, creator earnings and every swap. Read it from the verified contracts on Monadscan once they are published.</P>
-          <ul className="list-disc pl-5 space-y-2 text-white/75 mb-4">
-            <li><b className="text-white">Launches.</b> The launcher emits an event for every launch with the token, creator, creator tax and pool id, and keeps a list you can read by index.</li>
-            <li><b className="text-white">Swaps.</b> Uniswap V4 emits <Ic>Swap</Ic> from the pool manager. Filter by the pool id to follow one token.</li>
-            <li><b className="text-white">Fees.</b> The hook exposes the live fee for a pool. The launcher exposes claimable balances and the reserves waiting to burn.</li>
-          </ul>
+          <P>The three Monpad contracts are verified on Sourcify, so you can read the source and ABI there.</P>
 
           <H2 id="security">Security &amp; risks</H2>
           <ul className="list-disc pl-5 space-y-2 text-white/75 mb-4">
-            <li><Lock className="inline mr-1" size={14} /><b className="text-white">Not yet audited.</b> The contracts are tested on a fork of Monad mainnet. They go live only after an independent audit.</li>
-            <li><b className="text-white">Admin powers are limited and visible.</b> The owner can pause new launches and change the platform address, the creation fee and the keeper. The owner has no function to withdraw user funds or remove liquidity. Ownership belongs in a multisig.</li>
-            <li><b className="text-white">Keepers are needed.</b> Harvests and buybacks run when someone calls them. Monpad runs a keeper, and anyone can call harvest.</li>
-            <li><b className="text-white">Protocol fees.</b> Uniswap governance can switch on a protocol fee for pools. That would take a slice before the fee reaches Monpad.</li>
-            <li><b className="text-white">Memecoins are risky.</b> Tokens can go to zero, and liquidity being locked does not protect the price.</li>
+            <li><Bug className="inline mr-1" size={14} /><b className="text-white">No outside audit yet.</b> The contracts were tested against a fork of Monad mainnet and reviewed in-house. An independent audit has not been done.</li>
+            <li><b className="text-white">Owner powers are small and visible.</b> The owner can pause new launches and change the platform wallet, the MONSHI wallet and the creation fee. The owner cannot touch locked liquidity or anyone&apos;s coins or USDC.</li>
+            <li><b className="text-white">USDC can be frozen.</b> USDC is issued by Circle, who can pause it or blacklist an address. If that happens, trades in USDC pools can fail.</li>
+            <li><b className="text-white">Fee collection needs a caller.</b> Splits and buybacks run when someone presses Collect fees. Anyone can press it.</li>
+            <li><b className="text-white">Protocol fee.</b> Uniswap governance can switch on a protocol fee for pools. That would take a slice before the fee reaches Monpad.</li>
+            <li><b className="text-white">Memecoins are risky.</b> Coins can go to zero. Locked liquidity does not protect the price. Nothing here is financial advice.</li>
           </ul>
 
           <H2 id="wallet">Wallet setup</H2>
-          <P>Add Monad mainnet to any EVM wallet:</P>
+          <AddMonad />
           <div className="rounded-xl border border-white/10 divide-y divide-white/10 mb-4 text-sm">
             {[['Network name', 'Monad Mainnet'], ['Chain ID', '143'], ['RPC URL', 'https://rpc.monad.xyz'], ['Currency', 'MON'], ['Explorer', 'https://monadscan.com']].map(([k, v]) => (
-              <div key={k} className="flex justify-between gap-4 p-3"><span className="text-white/60">{k}</span><span className="text-white break-all text-right">{v}</span></div>
+              <div key={k} className="flex items-center justify-between gap-4 p-3"><span className="text-white/60">{k}</span><span className="flex items-center gap-3"><span className="text-white break-all text-right">{v}</span><CopyButton text={v} label="Copy" /></span></div>
             ))}
           </div>
-          <P>Questions? Ask in the community Telegram or on X. Please never share your seed phrase or private key with anyone, including anyone claiming to be Monpad support.</P>
+          <P>Questions? Ask in the community Telegram. Never share your seed phrase or private key with anyone, including anyone who says they are Monpad support.</P>
         </main>
       </div>
     </div>

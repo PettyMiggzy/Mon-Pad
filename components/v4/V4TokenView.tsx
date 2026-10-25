@@ -1,5 +1,6 @@
 // Token page for a Monpad V4 pool.
 import { useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'next/router';
 import Head from 'next/head';
 import { useAccount, useReadContract, useWriteContract, usePublicClient } from 'wagmi';
 import { formatUnits, type Address } from 'viem';
@@ -13,9 +14,21 @@ import V4TradePanel from './V4TradePanel';
 import DepthPanel from './DepthPanel';
 import PriceChart from './PriceChart';
 
+const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) || '';
+/** Links from the AI connector open the coin with the trade box filled in: ?side=buy&pay=mon&amount=5 */
+function tradeInit(q: Record<string, string | string[] | undefined>) {
+  const amount = one(q.amount);
+  return {
+    side: one(q.side) === 'sell' ? ('sell' as const) : one(q.side) === 'buy' ? ('buy' as const) : undefined,
+    pay: one(q.pay) === 'usdc' ? ('usdc' as const) : one(q.pay) === 'mon' ? ('mon' as const) : undefined,
+    amount: /^\d+(\.\d+)?$/.test(amount) ? amount : undefined,
+  };
+}
+
 const usd = (n: number) => (n >= 1e6 ? `$${(n / 1e6).toFixed(2)}M` : n >= 1e3 ? `$${(n / 1e3).toFixed(2)}K` : `$${n.toLocaleString(undefined, { maximumFractionDigits: n < 1 ? 6 : 2 })}`);
 
 export default function V4TokenView({ address: tokenAddr }: { address: Address }) {
+  const router = useRouter();
   const { address: me } = useAccount();
   const publicClient = usePublicClient();
   const { writeContractAsync } = useWriteContract();
@@ -84,7 +97,7 @@ export default function V4TokenView({ address: tokenAddr }: { address: Address }
           )}
         </div>
         <DepthPanel token={t} />
-        <V4TradePanel token={t} onTraded={() => { load(); refetchClaim(); refetchTokClaim(); }} />
+        <V4TradePanel key={router.asPath} init={tradeInit(router.query)} token={t} onTraded={() => { load(); refetchClaim(); refetchTokClaim(); }} />
       </div>
     </div>
   );

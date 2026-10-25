@@ -18,14 +18,16 @@ function friendly(e: any): string {
   return m.slice(0, 140);
 }
 
-export default function V4TradePanel({ token, onTraded }: { token: V4Token; onTraded?: () => void }) {
+export type TradeInit = { side?: 'buy' | 'sell'; pay?: 'mon' | 'usdc'; amount?: string };
+
+export default function V4TradePanel({ token, onTraded, init }: { token: V4Token; onTraded?: () => void; init?: TradeInit }) {
   const { address } = useAccount();
   const publicClient = usePublicClient();
   const { writeContractAsync } = useWriteContract();
   const toast = useToast();
-  const [side, setSide] = useState<'buy' | 'sell'>('buy');
-  const [asset0, setAsset0] = useState<'mon' | 'usdc'>('mon'); // what you pay with (buy) / receive (sell)
-  const [amount, setAmount] = useState('');
+  const [side, setSide] = useState<'buy' | 'sell'>(init?.side ?? 'buy');
+  const [asset0, setAsset0] = useState<'mon' | 'usdc'>(init?.pay ?? 'mon'); // what you pay with (buy) / receive (sell)
+  const [amount, setAmount] = useState(init?.amount ?? '');
   const [slipBps, setSlipBps] = useState(100);
   const [quote, setQuote] = useState<{ out: bigint; approx: boolean } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);

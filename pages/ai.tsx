@@ -1,93 +1,113 @@
 import Link from 'next/link';
 import Head from 'next/head';
-import { Bot, MessageCircle, ShieldAlert, Terminal } from 'lucide-react';
+import { Bot, MessageCircle, ShieldCheck, Sparkles } from 'lucide-react';
+import { CopyButton } from '@/components/ui/CopyButton';
 
-const TOOLS = [
-  { name: 'monpad_list_launches', kind: 'read', body: 'Recent tokens and their curves.' },
-  { name: 'monpad_get_curve', kind: 'read', body: 'Price, amount raised, graduation status.' },
-  { name: 'monpad_get_spec', kind: 'read', body: 'Fees, platform wallet and bot policy.' },
-  { name: 'monpad_get_monshi_burn', kind: 'read', body: 'Live MONSHI burned.' },
-  { name: 'monpad_launch_token', kind: 'write', body: 'Deploy a token, with an optional dev buy in the same transaction.' },
-  { name: 'monpad_buy', kind: 'write', body: 'Buy a token with MON.' },
-  { name: 'monpad_sell', kind: 'write', body: 'Sell a token for MON.' },
+const URL_MCP = 'https://www.monpad.net/api/mcp';
+const CURSOR = `cursor://anysphere.cursor-deeplink/mcp/install?name=monpad&config=${typeof btoa === 'function' ? btoa(JSON.stringify({ url: URL_MCP })) : 'eyJ1cmwiOiJodHRwczovL3d3dy5tb25wYWQubmV0L2FwaS9tY3AifQ=='}`;
+const VSCODE = `vscode:mcp/install?${encodeURIComponent(JSON.stringify({ name: 'monpad', type: 'http', url: URL_MCP }))}`;
+const CLAUDE_CODE = `claude mcp add --transport http monpad ${URL_MCP}`;
+
+const PROMPTS = [
+  'What launched on Monpad in the last day? Which one is biggest?',
+  'Give me a link to buy 5 MON of the top coin on Monpad.',
+  'Launch a coin on Monpad called Milk Baron, ticker MILK, with a 2% creator tax.',
+  'How much MONSHI has been burned?',
 ];
 
-const CONFIG = `{
-  "mcpServers": {
-    "monpad": {
-      "command": "npx",
-      "args": ["-y", "@monpad/mcp"],
-      "env": {
-        "RPC_URL": "https://rpc.monad.xyz",
-        "MONPAD_PRIVATE_KEY": "<key of a small burner wallet>"
-      }
-    }
-  }
-}`;
+const TOOLS = [
+  ['monpad_list_launches', 'Newest coins with market cap and a link.'],
+  ['monpad_trending', 'Biggest coins by market cap.'],
+  ['monpad_get_token', 'Price, market cap, liquidity, creator tax and fee for one coin.'],
+  ['monpad_get_spec', 'Fees, fee split and contract addresses.'],
+  ['monpad_get_monshi_burn', 'MONSHI burned so far.'],
+  ['monpad_buy_link / monpad_sell_link', 'A link that opens the coin with the trade filled in.'],
+  ['monpad_launch_link', 'A link to the launch page with name, ticker and tax filled in.'],
+];
+
+const btn = 'inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 font-semibold text-white';
 
 export default function AiPage() {
   return (
     <div className="max-w-4xl mx-auto px-4 py-12">
       <Head>
-        <title>Trade and launch with your AI | Monpad</title>
-        <meta key="description" name="description" content="Connect Claude, Cursor or any MCP-compatible AI to Monpad. Ask it to find tokens, launch one or trade on Monad." />
+        <title>Use Monpad with your AI | Monpad</title>
+        <meta key="description" name="description" content="Add Monpad to Claude, ChatGPT, Cursor or VS Code in one click. Ask your AI to find coins, build a buy link or set up a launch." />
         <link key="canonical" rel="canonical" href="https://www.monpad.net/ai" />
       </Head>
 
-      <header className="text-center mb-12">
-        <div className="inline-flex items-center gap-2 text-sm text-white/60 mb-3"><Bot size={16} /> Agent-native launchpad</div>
-        <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">Trade and launch with your AI</h1>
+      <header className="text-center mb-10">
+        <div className="inline-flex items-center gap-2 text-sm text-white/60 mb-3"><Bot size={16} /> Works with any AI</div>
+        <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">Use Monpad with your AI</h1>
         <p className="text-base md:text-lg text-white/70 max-w-2xl mx-auto leading-relaxed">
-          Monpad speaks the Model Context Protocol. Plug in Claude, Cursor or any MCP-compatible assistant and tell it what you want in plain English.
+          Add one link. Then just ask in plain English. No install, no keys, no wallet in the AI.
         </p>
       </header>
 
-      <section className="grid md:grid-cols-2 gap-6 mb-12">
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-          <MessageCircle className="mb-3" size={22} />
-          <h2 className="text-xl font-semibold text-white mb-2">Launch by chat</h2>
-          <p className="text-white/70 mb-4">Describe your coin in a sentence. Monpad drafts the name, ticker, logo and a 3D character, then you confirm and launch.</p>
-          <Link href="/chat" className="inline-block rounded-xl bg-purple-600 px-4 py-2 font-semibold text-white">Open Chat</Link>
+      <section className="rounded-2xl border border-purple-400/30 bg-purple-500/10 p-6 mb-8">
+        <h2 className="text-xl font-semibold text-white mb-1">1. Add Monpad</h2>
+        <p className="text-white/70 mb-4">Pick your app:</p>
+        <div className="grid sm:grid-cols-2 gap-3 mb-5">
+          <a href={CURSOR} className={`${btn} bg-purple-600 hover:bg-purple-500`}>Add to Cursor</a>
+          <a href={VSCODE} className={`${btn} bg-purple-600 hover:bg-purple-500`}>Add to VS Code</a>
+          <div className={`${btn} justify-between bg-white/10 border border-white/15 font-normal`}>
+            <span className="font-semibold">Claude Code</span><CopyButton text={CLAUDE_CODE} label="Copy command" />
+          </div>
+          <div className={`${btn} justify-between bg-white/10 border border-white/15 font-normal`}>
+            <span className="font-semibold">Claude / ChatGPT</span><CopyButton text={URL_MCP} label="Copy link" />
+          </div>
         </div>
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-          <Terminal className="mb-3" size={22} />
-          <h2 className="text-xl font-semibold text-white mb-2">Bring your own AI</h2>
-          <p className="text-white/70">Add the Monpad MCP server to your assistant. Then ask things like “what launched in the last hour?”, “launch a coin called Milk Baron”, or “buy 5 MON of the top token”.</p>
-        </div>
+        <p className="text-white/60 text-sm">
+          In Claude or ChatGPT: <b>Settings → Connectors → Add custom connector</b>, paste the link, no sign-in needed. Any other MCP app: use the link <code className="text-purple-200">{URL_MCP}</code>.
+        </p>
       </section>
 
-      <section className="mb-12">
-        <h2 className="text-2xl font-bold text-white mb-3">Set it up</h2>
-        <p className="text-white/70 mb-3">Add this to your assistant&apos;s MCP settings (Claude Desktop, Cursor, and others use the same format):</p>
-        <pre className="rounded-xl border border-white/10 bg-black/40 p-4 text-sm text-white/90 overflow-x-auto">{CONFIG}</pre>
-        <p className="text-white/60 text-sm mt-3">The server runs on your machine. Your key never leaves it and Monpad never sees it. Read-only tools work without a key.</p>
-        <p className="text-yellow-200/90 text-sm mt-2"><b>Availability:</b> the <code>@monpad/mcp</code> package is published at mainnet launch, together with the verified contract addresses. Launch by chat works today.</p>
-      </section>
-
-      <section className="mb-12 rounded-2xl border border-yellow-400/30 bg-yellow-400/5 p-6">
-        <h2 className="flex items-center gap-2 text-xl font-semibold text-white mb-2"><ShieldAlert size={20} /> Use a burner wallet</h2>
-        <ul className="list-disc pl-5 space-y-1 text-white/75">
-          <li>Create a separate wallet just for your AI and fund it with only what you are willing to lose.</li>
-          <li>Never give an AI your main wallet key.</li>
-          <li>AI assistants make mistakes. Check what it is about to do before you approve any trade.</li>
-          <li>Nothing here is financial advice. Tokens can go to zero.</li>
-        </ul>
-      </section>
-
-      <section>
-        <h2 className="text-2xl font-bold text-white mb-4">Tools your AI gets</h2>
-        <div className="divide-y divide-white/10 rounded-2xl border border-white/10 overflow-hidden">
-          {TOOLS.map((t) => (
-            <div key={t.name} className="flex items-start justify-between gap-4 p-4">
-              <div>
-                <code className="text-purple-300">{t.name}</code>
-                <p className="text-white/65 text-sm mt-1">{t.body}</p>
-              </div>
-              <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${t.kind === 'write' ? 'bg-red-500/20 text-red-200' : 'bg-green-500/20 text-green-200'}`}>{t.kind}</span>
+      <section className="mb-8">
+        <h2 className="text-xl font-semibold text-white mb-1">2. Ask</h2>
+        <p className="text-white/70 mb-4">Click a prompt to copy it, then paste it into your AI.</p>
+        <div className="grid gap-2">
+          {PROMPTS.map((p) => (
+            <div key={p} className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3">
+              <span className="text-white/85"><Sparkles size={14} className="inline mr-2 text-purple-300" />{p}</span>
+              <CopyButton text={p} />
             </div>
           ))}
         </div>
-        <p className="text-white/50 text-sm mt-3">Also available over HTTP: <Link href="/api/v1/spec" className="underline">/api/v1/spec</Link>. More in the <Link href="/docs#agents" className="underline">docs</Link>.</p>
+      </section>
+
+      <section className="rounded-2xl border border-white/10 bg-white/5 p-6 mb-8">
+        <h2 className="text-xl font-semibold text-white mb-2 flex items-center gap-2"><ShieldCheck size={20} /> You stay in control</h2>
+        <p className="text-white/70 leading-relaxed">
+          The AI can look things up and hand you a link. It can&apos;t spend anything. When you open a buy, sell or launch link, your own wallet asks you to confirm, like any other trade on Monpad. Nothing here is financial advice, and coins can go to zero.
+        </p>
+      </section>
+
+      <section className="grid md:grid-cols-2 gap-6 mb-8">
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+          <MessageCircle className="mb-3" size={22} />
+          <h2 className="text-xl font-semibold text-white mb-2">No AI app? Use ours</h2>
+          <p className="text-white/70 mb-4">Describe your coin in a sentence. Monpad drafts the name, ticker and logo, then you confirm and launch.</p>
+          <Link href="/chat" className="inline-block rounded-xl bg-purple-600 px-4 py-2 font-semibold text-white">Open Chat</Link>
+        </div>
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+          <Bot className="mb-3" size={22} />
+          <h2 className="text-xl font-semibold text-white mb-2">Just want to launch?</h2>
+          <p className="text-white/70 mb-4">The launch page is one form and one confirm. Free to launch, pay in MON.</p>
+          <Link href="/create" className="inline-block rounded-xl bg-white/10 border border-white/15 px-4 py-2 font-semibold text-white">Launch a coin</Link>
+        </div>
+      </section>
+
+      <section>
+        <h2 className="text-2xl font-bold text-white mb-4">What your AI can do</h2>
+        <div className="divide-y divide-white/10 rounded-2xl border border-white/10 overflow-hidden">
+          {TOOLS.map(([name, body]) => (
+            <div key={name} className="p-4">
+              <code className="text-purple-300">{name}</code>
+              <p className="text-white/65 text-sm mt-1">{body}</p>
+            </div>
+          ))}
+        </div>
+        <p className="text-white/50 text-sm mt-3">Building a bot instead? See the <Link href="/docs#bots" className="underline">docs</Link>.</p>
       </section>
     </div>
   );
