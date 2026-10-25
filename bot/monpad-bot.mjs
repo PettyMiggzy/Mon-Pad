@@ -19,11 +19,18 @@ const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID   = process.env.TELEGRAM_CHAT_ID;              // e.g. @monpadtrending or -100...
 const RPC_URL            = process.env.RPC_URL || 'https://rpc.monad.xyz';
 const FACTORY_V3         = (process.env.FACTORY_V3 || '0x45Fb501E1167FbBfEBf42206A3C9945F13C70aaF').toLowerCase();
+const LEGACY_V3          = !!process.env.FACTORY_V3;                        // the old V3 curves are dead; only watch them if explicitly configured
+// Uniswap V4 launcher (USDC pools). Buys and sells come from the PoolManager's Swap events for our pools.
+const LAUNCHER_V4        = (process.env.LAUNCHER_V4 || '0x2d55391d4170C7cAF9eE53Cf8BAD00748452ec84').toLowerCase();
+const POOL_MANAGER       = (process.env.POOL_MANAGER || '0x188d586ddcf52439676ca21a244753fa19f9ea8e').toLowerCase();
+const USDC               = (process.env.USDC || '0x754704Bc059F8C67012fEd69BC8A327a5aafb603').toLowerCase();
+const V4_CATCHUP         = BigInt(process.env.V4_CATCHUP_BLOCKS || '5000');  // silent rescan on first start (builds PnL, announces nothing)
 const WMON               = '0x3bd359c1119da7da1d913d1c4d2b7c461115433a';
 const SITE               = process.env.SITE_URL || 'https://www.monpad.net';
 const EXPLORER           = 'https://monadscan.com';
 
-const MIN_BUY_USD        = Number(process.env.MIN_BUY_USD || '100');       // announce buys >= this
+const MIN_BUY_USD        = Number(process.env.MIN_BUY_USD || '10');        // announce buys >= this (USD)
+const MIN_SELL_USD       = Number(process.env.MIN_SELL_USD || '10');       // announce sells >= this (USD)
 const POLL_MS            = Number(process.env.POLL_MS || '6000');          // chain poll cadence
 const CHUNK              = BigInt(process.env.GETLOGS_CHUNK || '99');       // getLogs is 100-block capped
 const MAX_CATCHUP        = BigInt(process.env.MAX_CATCHUP_BLOCKS || '2000'); // on first run / after downtime
@@ -91,6 +98,7 @@ function loadJson(url, fallback) { try { return JSON.parse(fs.readFileSync(url, 
 function saveJson(url, obj) { try { fs.writeFileSync(url, JSON.stringify(obj)); } catch (e) { console.error('save failed', e.message); } }
 
 const state = loadJson(STATE_FILE, { lastBlock: null, seenTx: [] });
+if (!state.positions) state.positions = {};   // `${token}:${trader}` -> [tokens held, USD cost] built from swaps the bot has seen
 const curves = new Map();      // curveAddr(lower) -> { token, curve, symbol, name }
 const gradPools = new Map();   // poolAddr(lower) -> { token, curve, symbol, name, tokenIsToken0 }
 const recentTrades = [];       // { token, usd, mon, time } rolling window for trending
@@ -115,7 +123,7 @@ function send(text, extra = {}) {
 }
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const short = (a) => a ? `${a.slice(0, 6)}…${a.slice(-4)}` : '?';
-const fmtUsd = (n) => n >= 1000 ? `$${(n / 1000).toFixed(1)}k` : `$${n.toFixed(0)}`;
+const fmtUsd = (n) => n >= 1000 ? `$${(n / 1000).toFixed(1)}k` : n >= 100 ? `$${n.toFixed(0)}` : `$${n.toFixed(2)}`;
 const fmtMon = (n) => n.toLocaleString('en-US', { maximumFractionDigits: n < 1 ? 4 : 2 });
 
 // ── MON/USD (DexScreener, 60s cache) ──────────────────────────────────────
@@ -648,13 +656,223 @@ async function tick() {
   } catch (e) { console.error('tick failed:', e.message); }
 }
 
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Uniswap V4 pad: launches, buys and sells
+// ═════════════════════════════════════════════════════════════════════════════
+const launcherAbi = [
+  parseAbiItem('function tokenCount() view returns (uint256)'),
+  parseAbiItem('function allTokens(uint256) view returns (address)'),
+  parseAbiItem('function launches(address) view returns (address creator, uint16 taxBps, uint64 lastBuyback, bytes32 poolId)'),
+];
+const V4_SWAP_EVENT = parseAbiItem('event Swap(bytes32 indexed id, address indexed sender, int128 amount0, int128 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick, uint24 fee)');
+const v4Pools = new Map();      // poolId(lower) -> { token, symbol, name, creator, taxBps, quoteIs0 }
+let v4Count = 0;
+let v4Ready = false;            // false until the first registry load (so existing coins are not announced as new launches)
+
+/** USDC per whole token from sqrtPriceX96 (USDC has 6 decimals, tokens 18). */
+function usdcPerToken(sqrt, quoteIs0) {
+  const raw = Number(sqrt * sqrt) / Number(2n ** 192n);
+  if (!(raw > 0) || !Number.isFinite(raw)) return 0;
+  return quoteIs0 ? 1e12 / raw : raw * 1e12;
+}
+
+async function refreshV4Tokens() {
+  try {
+    const n = Number(await client.readContract({ address: LAUNCHER_V4, abi: launcherAbi, functionName: 'tokenCount' }));
+    for (let i = v4Count; i < n; i++) {
+      const token = await client.readContract({ address: LAUNCHER_V4, abi: launcherAbi, functionName: 'allTokens', args: [BigInt(i)] });
+      const [creator, taxBps, , poolId] = await client.readContract({ address: LAUNCHER_V4, abi: launcherAbi, functionName: 'launches', args: [token] });
+      const [symbol, name] = await Promise.all([
+        client.readContract({ address: token, abi: erc20Abi, functionName: 'symbol' }).catch(() => '?'),
+        client.readContract({ address: token, abi: erc20Abi, functionName: 'name' }).catch(() => ''),
+      ]);
+      const info = { token, symbol, name, creator, taxBps: Number(taxBps), quoteIs0: BigInt(USDC) < BigInt(token) };
+      v4Pools.set(poolId.toLowerCase(), info);
+      v4Count = i + 1;
+      if (v4Ready) await announceLaunch(info).catch((e) => console.error('launch announce failed:', e.message));
+    }
+    v4Count = Math.max(v4Count, n);
+    v4Ready = true;
+  } catch (e) { console.error('refreshV4Tokens failed:', e.message); }
+}
+
+async function announceLaunch(info) {
+  const socials = await tokenSocials(info.token).catch(() => ({}));
+  const lines = [
+    `🚀 <b>NEW COIN ON MONPAD</b>`,
+    `<b>${esc(info.name || info.symbol)}</b> ($${esc(info.symbol)})`,
+    `<b>Creator:</b> <a href="${EXPLORER}/address/${info.creator}">${short(info.creator)}</a>  ·  <b>Fee:</b> ${(100 + info.taxBps) / 100}%`,
+    `🔒 Liquidity locked · Uniswap V4`,
+  ];
+  const links = [`<a href="${SITE}/token/${info.token}">WEB</a>`];
+  if (socials.x) links.push(`<a href="${socials.x}">X</a>`);
+  if (socials.tg) links.push(`<a href="${socials.tg}">TG</a>`);
+  lines.push(links.join(' · '));
+  await send(lines.join('\n'), buyButtons(info, null, null));
+}
+
+// ── Cards: found milk / lost milk / spilled milk (bot/assets/*.png) ───────────────
+// First send uploads the file; Telegram's file_id is cached in video-cache.json so later posts are instant.
+async function sendCard(chatId, kind, caption, extra = {}) {
+  const key = `card:${kind}`;
+  const base = { chat_id: chatId, caption, parse_mode: 'HTML', ...extra };
+  if (videoCache[key]) {
+    const r = await tg('sendPhoto', { ...base, photo: videoCache[key] });
+    if (r.ok) return r;
+    delete videoCache[key];
+  }
+  const file = new URL(`${kind}.png`, ASSETS);
+  if (!fs.existsSync(file)) return { ok: false };
+  const form = new FormData();
+  for (const [k, v] of Object.entries(base)) form.append(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
+  form.append('photo', new Blob([fs.readFileSync(file)], { type: 'image/png' }), `${kind}.png`);
+  const res = await fetch(`${TG_API}/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, { method: 'POST', body: form });
+  const j = await res.json().catch(() => ({}));
+  if (j.ok) {
+    const sizes = j.result?.photo || [];
+    const id = sizes.length ? sizes[sizes.length - 1].file_id : null;
+    if (id) { videoCache[key] = id; saveJson(VIDEO_CACHE, videoCache); }
+  } else console.error('telegram error: sendPhoto', j.description || res.status);
+  return j;
+}
+
+// ── PnL from the swaps the bot has seen (average-cost basis per wallet and coin) ─────
+function trackBuy(info, trader, tokens, usd) {
+  const k = `${info.token.toLowerCase()}:${trader.toLowerCase()}`;
+  const p = state.positions[k] || [0, 0];
+  state.positions[k] = [p[0] + tokens, p[1] + usd];
+  const keys = Object.keys(state.positions);
+  if (keys.length > 5000) for (const old of keys.slice(0, keys.length - 4000)) delete state.positions[old];
+}
+/** { pnlUsd, pct } for the tracked part of a sell, or null when the bot never saw this wallet buy. */
+function trackSell(info, trader, tokens, usd) {
+  const k = `${info.token.toLowerCase()}:${trader.toLowerCase()}`;
+  const p = state.positions[k];
+  if (!p || !(p[0] > 0)) return null;
+  const sold = Math.min(tokens, p[0]);
+  const basis = (p[1] / p[0]) * sold;
+  const proceeds = usd * (sold / tokens);
+  state.positions[k] = [p[0] - sold, Math.max(0, p[1] - basis)];
+  if (state.positions[k][0] <= 0) delete state.positions[k];
+  return { pnlUsd: proceeds - basis, pct: basis > 0 ? ((proceeds - basis) / basis) * 100 : 0 };
+}
+
+const signedUsd = (n) => `${n >= 0 ? '+' : '−'}${fmtUsd(Math.abs(n))}`;
+
+function v4Caption(info, side, usd, tokens, trader, price, x = {}) {
+  const lines = [];
+  const mcap = price * TOTAL_SUPPLY;
+  if (x.rank) lines.push(`🔥 <b>#${x.rank} on Monpad Trending</b>`);
+  if (side === 'buy') {
+    const tier = buyTier(usd, tokens);
+    lines.push(`🥛 <b>FOUND MILK</b> · ${tier.emoji} ${tier.label} BUY`);
+    lines.push(`<b>${esc(info.name || info.symbol)}</b> ($${esc(info.symbol)})`);
+    lines.push(emojiWall(usd, tier));
+    lines.push(`<b>Bought:</b> ${fmtMon(tokens)} ${esc(info.symbol)}  for  <b>${fmtUsd(usd)}</b>`);
+  } else {
+    const head = !x.pnl ? '🥛💦 <b>SPILLED MILK</b> · SELL' : x.pnl.pnlUsd >= 0 ? '🥛 <b>FOUND MILK</b> · SOLD FOR A WIN' : '🩸 <b>LOST MILK</b> · SOLD AT A LOSS';
+    lines.push(head);
+    lines.push(`<b>${esc(info.name || info.symbol)}</b> ($${esc(info.symbol)})`);
+    lines.push(`<b>Sold:</b> ${fmtMon(tokens)} ${esc(info.symbol)}  for  <b>${fmtUsd(usd)}</b>`);
+    if (x.pnl) lines.push(`<b>PnL:</b> ${signedUsd(x.pnl.pnlUsd)} (${x.pnl.pct >= 0 ? '+' : ''}${x.pnl.pct.toFixed(0)}%) <i>on buys the bot has seen</i>`);
+  }
+  lines.push(`<b>Wallet:</b> <a href="${EXPLORER}/address/${trader}">${short(trader)}</a>${side === 'buy' && x.position ? `  ·  ${esc(x.position)}` : ''}`);
+  if (mcap > 0) lines.push(`<b>MCap:</b> ${fmtUsd(mcap)}  ·  <b>Price:</b> ${fmtPrice(price)}`);
+  const sc = x.socials || {};
+  const links = [`<a href="${EXPLORER}/tx/${x.tx}">Tx</a>`, `<a href="${SITE}/token/${info.token}">WEB</a>`];
+  if (sc.x) links.push(`<a href="${sc.x}">X</a>`);
+  if (sc.tg) links.push(`<a href="${sc.tg}">TG</a>`);
+  if (sc.web) links.push(`<a href="${sc.web}">Site</a>`);
+  lines.push(links.join(' · '));
+  return lines.join('\n');
+}
+
+async function handleV4Swap(info, lg, silent) {
+  const key = `v4:${lg.transactionHash}:${lg.logIndex}`;
+  if (seenTx.has(key)) return; seenTx.add(key);
+  const { amount0, amount1, sqrtPriceX96 } = lg.args;
+  // Swap amounts are from the swapper's side: it receives (+) the token on a buy and pays (−) USDC.
+  const tokenAmt = info.quoteIs0 ? amount1 : amount0;
+  const quoteAmt = info.quoteIs0 ? amount0 : amount1;
+  const side = tokenAmt > 0n ? 'buy' : 'sell';
+  const abs = (v) => (v < 0n ? -v : v);
+  const tokens = Number(formatEther(abs(tokenAmt)));
+  const usd = Number(abs(quoteAmt)) / 1e6;
+  if (!(tokens > 0) || !(usd > 0)) return;
+  let trader = lg.args.sender;
+  try { const tx = await client.getTransaction({ hash: lg.transactionHash }); if (tx?.from) trader = tx.from; } catch { /* keep the router address */ }
+  const price = usdcPerToken(sqrtPriceX96, info.quoteIs0);
+  if (side === 'buy') recentTrades.push({ token: info.token.toLowerCase(), usd, mon: 0, time: Math.floor(Date.now() / 1000) });
+  let pnl = null;
+  if (side === 'buy') trackBuy(info, trader, tokens, usd); else pnl = trackSell(info, trader, tokens, usd);
+  if (silent) return;
+  if (usd < (side === 'buy' ? MIN_BUY_USD : MIN_SELL_USD)) return;
+  const [position, socials, paid] = await Promise.all([
+    side === 'buy' ? holderPosition(info, trader, tokens, lg.blockNumber) : '',
+    tokenSocials(info.token).catch(() => ({})),
+    isDexPaid(info.token).catch(() => false),
+  ]);
+  const caption = v4Caption(info, side, usd, tokens, trader, price, { position, socials, paid, pnl, tx: lg.transactionHash, rank: trendRank(info.token.toLowerCase()) });
+  const extra = buyButtons(info, null, lg.transactionHash);
+  const kind = side === 'buy' ? 'found-milk' : !pnl ? 'spilled-milk' : pnl.pnlUsd >= 0 ? 'found-milk' : 'lost-milk';
+  const r = await sendCard(TELEGRAM_CHAT_ID, kind, caption, extra);
+  if (!r.ok) await send(caption, extra); // never lose an alert if the image fails
+}
+
+async function scanV4(from, to, silent) {
+  if (v4Pools.size === 0) return to;
+  const ids = [...v4Pools.keys()];
+  let safe = from - 1n;
+  for (let start = from; start <= to; start += CHUNK + 1n) {
+    const end = start + CHUNK > to ? to : start + CHUNK;
+    let logs;
+    try { logs = await client.getLogs({ address: POOL_MANAGER, event: V4_SWAP_EVENT, args: { id: ids }, fromBlock: start, toBlock: end }); }
+    catch (e) { console.error(`v4 getLogs ${start}-${end} failed:`, e.shortMessage || e.message); return safe; }
+    for (const lg of logs) {
+      const info = v4Pools.get(String(lg.args.id).toLowerCase());
+      if (!info) continue;
+      try { await handleV4Swap(info, lg, silent); } catch (e) { console.error('v4 swap failed:', e.message); }
+    }
+    safe = end;
+  }
+  return safe;
+}
+
+async function tickV4() {
+  try {
+    const head = await client.getBlockNumber();
+    const first = state.lastBlockV4 == null;
+    let from = first ? (head > V4_CATCHUP ? head - V4_CATCHUP : 0n) : BigInt(state.lastBlockV4) + 1n;
+    if (from > head) return;
+    const safe = await scanV4(from, head, first); // the very first pass is silent: it only builds positions
+    if (safe >= from) {
+      state.lastBlockV4 = safe.toString();
+      state.seenTx = [...seenTx].slice(-2000);
+      saveJson(STATE_FILE, state);
+    }
+  } catch (e) { console.error('tickV4 failed:', e.message); }
+}
+
 // ── /milk <wallet> — Monshi Kart milk balance (read from the site API) ────
 let updateOffset = 0;
+const MEOWS = ['meow. 🥛', 'mew mew mew 🐈‍⬛', 'meeeeow (that means buy milk)', 'purr… 🥛 found milk', 'MEOW! the milk is in the garage', 'meow? 👀 who spilled the milk'];
+const meowAt = new Map(); // chat id -> last /meow time, so the group doesn't get flooded
+async function handleMeow(m) {
+  const last = meowAt.get(m.chat.id) || 0;
+  if (Date.now() - last < 15_000) return;
+  meowAt.set(m.chat.id, Date.now());
+  const caption = MEOWS[Math.floor(Math.random() * MEOWS.length)];
+  const r = await sendCard(m.chat.id, 'meow', esc(caption), { reply_to_message_id: m.message_id });
+  if (!r.ok) await tg('sendMessage', { chat_id: m.chat.id, text: caption, reply_to_message_id: m.message_id });
+}
 async function pollCommands() {
   const j = await tg('getUpdates', { offset: updateOffset, timeout: 0, allowed_updates: ['message'] });
   for (const u of j.result || []) {
     updateOffset = u.update_id + 1;
     const m = u.message;
+    if (/^\/meow(?:@\w+)?\s*$/i.test(m?.text || '')) { await handleMeow(m).catch((e) => console.error('meow failed:', e.message)); continue; }
+    if (/^\/(?:help|start)(?:@\w+)?\s*$/i.test(m?.text || '')) { await tg('sendMessage', { chat_id: m.chat.id, parse_mode: 'HTML', text: '🥛 <b>Monpad bot</b>\n/meow — meow\n/milk 0x… — a wallet’s Monshi Kart milk\nI post buys, sells and new coins from <a href="' + SITE + '">Monpad</a>.', disable_web_page_preview: true }); continue; }
     const match = /^\/milk(?:@\w+)?\s+(0x[0-9a-fA-F]{40})\s*$/.exec(m?.text || '');
     if (!match) continue;
     try {
@@ -670,20 +888,30 @@ async function pollCommands() {
 async function main() {
   const testArg = process.argv.find((a) => a.startsWith('--test-alert'));
   if (testArg) { await runTestAlert(testArg, process.argv.find((a) => a.startsWith('--chat='))); return; }
-  console.log(`monpad-bot → chat ${TELEGRAM_CHAT_ID} | factory ${FACTORY_V3} | min buy $${MIN_BUY_USD}`);
+  console.log(`monpad-bot → chat ${TELEGRAM_CHAT_ID} | V4 launcher ${LAUNCHER_V4}${LEGACY_V3 ? ` | legacy V3 factory ${FACTORY_V3}` : ''} | min buy $${MIN_BUY_USD}, min sell $${MIN_SELL_USD}`);
   console.log(BOOST_CONTRACT ? `boost contract ${BOOST_CONTRACT} (MONSHI-paid, tiered)` : 'boost contract: (not set — paid trending disabled)');
-  await refreshTokens();
-  await refreshGradPools();
-  console.log(`tracking ${curves.size} tokens, ${gradPools.size} graduated pools`);
-  await getMonUsd();
-  console.log(`MON/USD = $${monUsd}`);
-
-  setInterval(refreshTokens, TOKENS_REFRESH_MS);
-  setInterval(() => { refreshGradPools().catch((e) => console.error('gradPools failed:', e.message)); }, TOKENS_REFRESH_MS);
-  setInterval(tick, POLL_MS);
-  setInterval(() => { checkTrending().catch((e) => console.error('trending failed:', e.message)); }, TREND_CHECK_MS);
+  await refreshV4Tokens();
+  console.log(`tracking ${v4Pools.size} V4 coins`);
+  setInterval(refreshV4Tokens, Math.min(TOKENS_REFRESH_MS, 30_000));
+  setInterval(tickV4, POLL_MS);
   setInterval(() => { pollCommands().catch((e) => console.error('commands failed:', e.message)); }, 3000);
-  await tick();
+  if (LEGACY_V3) {
+    await refreshTokens();
+    await refreshGradPools();
+    console.log(`legacy: tracking ${curves.size} V3 tokens, ${gradPools.size} graduated pools`);
+    await getMonUsd();
+    setInterval(refreshTokens, TOKENS_REFRESH_MS);
+    setInterval(() => { refreshGradPools().catch((e) => console.error('gradPools failed:', e.message)); }, TOKENS_REFRESH_MS);
+    setInterval(tick, POLL_MS);
+    setInterval(() => { checkTrending().catch((e) => console.error('trending failed:', e.message)); }, TREND_CHECK_MS);
+    await tick();
+  }
+  await tickV4();
+  // Optional health port (set PORT to run as a web service on Render and similar hosts).
+  if (process.env.PORT) {
+    const http = await import('node:http');
+    http.createServer((_req, res) => { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('monpad-bot ok'); }).listen(Number(process.env.PORT));
+  }
   console.log('bot running.');
 }
 main().catch((e) => { console.error('FATAL:', e); process.exit(1); });
