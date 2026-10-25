@@ -6,6 +6,7 @@
 const LAND = !!window.__MK_LAND;
 const W = LAND ? 1280 : 720, H = LAND ? 720 : 1280, HY = LAND ? 250 : 470;
 const HS = LAND ? 310 : 360, VS = LAND ? 529 : 640; // projection scale: horizontal, vertical
+const TREAD_SKINS = [1, 3, 4]; // karts with an animated tire-tread overlay (assets/cars/tread<skin>_<frame>_<phase>.webp)
 const KY = LAND ? 690 : 1010, KSZ = LAND ? 330 : 420, U = KSZ / 420; // kart baseline, kart width, UI scale vs portrait
 const SEG = 200, ROAD = 2200, CAM_H = 1000, CAM_D = 0.84, DRAW = 110, LANES = 3;
 const TRACK_SEGS = 360, LEN = TRACK_SEGS * SEG;
@@ -145,6 +146,7 @@ class Boot extends Phaser.Scene {
       for (let k = 0; k < 7; k++) this.load.image(`car${c.id}_${k}`, `assets/cars/car${skin}_${k}.webp`);
     }
     ['milk', 'candleR', 'candleG'].forEach((n) => this.load.image(n, `assets/props/${n}.webp`));
+    for (const sk of TREAD_SKINS) for (let k = 0; k < 7; k++) for (let ph = 0; ph < 4; ph++) this.load.image(`tread${sk}_${k}_${ph}`, `assets/cars/tread${sk}_${k}_${ph}.webp`);
   }
   create() { (document.fonts ? document.fonts.load('40px "Russo One"') : Promise.resolve()).catch(() => {}).then(() => this.scene.start('garage')); }
 }
@@ -488,6 +490,8 @@ class Race extends Phaser.Scene {
     this.recoilY = 0;
     this.kartSpr = this.add.image(W / 2, KY, `car${this.car.id}_3`).setOrigin(.5, 1).setDepth(590);
     this.kartSpr.setDisplaySize(KSZ, KSZ * this.kartSpr.height / this.kartSpr.width);
+    this.treadSpr = this.add.image(W / 2, KY, 'coin').setOrigin(.5, 1).setDepth(591).setVisible(false);
+    this.tireSmoke = this.add.particles(0, 0, 'coin', { speed: { min: 25, max: 110 }, angle: { min: 215, max: 325 }, lifespan: { min: 320, max: 520 }, scale: { start: 0.18 * U, end: 0.6 * U }, alpha: { start: 0.55, end: 0 }, emitting: false }).setDepth(589);
     this.spark = this.add.particles(0, 0, 'coin', { speed: { min: 80, max: 380 }, angle: { min: 215, max: 325 }, lifespan: 700, scale: { start: .4, end: 0 }, gravityY: 500, emitting: false }).setDepth(800);
     const f = (size, color = '#fff') => ({ fontFamily: FONT, fontSize: size, color, stroke: '#1b0a52', strokeThickness: 8 });
     this.add.image(48, 62, 'milk').setDisplaySize(36, 100).setDepth(950);
@@ -543,7 +547,7 @@ class Race extends Phaser.Scene {
     return (this.raceActive.includes('nitro') && !this.raceUsed.nitro) || (this.raceActive.includes('turbo') && !this.raceUsed.turbo);
   }
   reset() {
-    Object.assign(this, { pos: 0, speed: 0, px: 0, milkN: 0, t: RACE_SECS, boost: 0, stun: 0, over: false, shield: 0, magnet: 0, skyOff: 0, cool: 0, combo: 0, comboT: 0, lean: 0, recoilY: 0, lastSpillT: null, lastHazardX: null, autopilotCautionT: 0, deferHazardReset: 0, autoHoldEscape: null });
+    Object.assign(this, { kartX: undefined, camPx: 0, wheelPh: 0, pos: 0, speed: 0, px: 0, milkN: 0, t: RACE_SECS, boost: 0, stun: 0, over: false, shield: 0, magnet: 0, skyOff: 0, cool: 0, combo: 0, comboT: 0, lean: 0, recoilY: 0, lastSpillT: null, lastHazardX: null, autopilotCautionT: 0, deferHazardReset: 0, autoHoldEscape: null });
     this.zapBolts = [];
     this.zapSprPool.forEach((s) => s.setVisible(false));
     this.fxGfx.clear();
@@ -582,7 +586,7 @@ class Race extends Phaser.Scene {
       this.boost = 2.0;
       this.flash('NITRO!', '#39ff88');
     } else return;
-    this.nitroFx.emitParticleAt(W / 2, KY - 30 * U, 14);
+    this.nitroFx.emitParticleAt(this.kartX ?? W / 2, KY - 30 * U, 14);
   }
   bumpMilkHud() {
     this.tweens.killTweensOf(this.milkTxt);
@@ -595,7 +599,7 @@ class Race extends Phaser.Scene {
     this.tweens.add({ targets: this, recoilY: 0, duration: 240, ease: 'Quad.out' });
   }
   seg(z) { return segs[idxOf(z)]; }
-  zapOrigin() { return { sx: W / 2 + 44 * U, sy: KY - 142 * U }; }
+  zapOrigin() { return { sx: (this.kartX ?? W / 2) + 44 * U, sy: KY - 142 * U }; }
   zapAim() {
     const { sx, sy } = this.zapOrigin();
     let best = null;
@@ -608,7 +612,7 @@ class Race extends Phaser.Scene {
     let ey = HY + 100 * U;
     const aimAt = (laneX, dist, yOff) => {
       const sc = CAM_D / Math.max(dist, 200);
-      ex = W / 2 + (laneX - this.px) * sc * ROAD * HS;
+      ex = W / 2 + (laneX - (this.camPx ?? this.px)) * sc * ROAD * HS;
       ey = HY + sc * CAM_H * VS * .62 + yOff * U;
     };
     if (best) aimAt(best.r.x, best.d, -60);
@@ -830,7 +834,7 @@ class Race extends Phaser.Scene {
     if (this.boost > 0 && this.speed > MAX_SPEED * 0.4) {
       const ky = KY - (this.recoilY || 0);
       const puff = this.rng ? this.rng() : Math.random();
-      if (puff < 0.48) this.nitroFx.emitParticleAt(W / 2 - 18, ky - 36, 1);
+      if (puff < 0.48) this.nitroFx.emitParticleAt((this.kartX ?? W / 2) - 18 * U, ky - 36 * U, 1);
     }
     if (this.t <= 0) { this.t = 0; this.over = true; this.speed = 0; this.finish(); }
   }
@@ -852,6 +856,8 @@ class Race extends Phaser.Scene {
       this.updateZapBolts(dt);
     }
     if (!dt) dt = FIXED_RACE_DT;
+    this.camPx += (this.px - this.camPx) * Math.min(1, dt * 5.5); // render-only chase camera: the kart drifts toward its lane before the view catches up
+    this.wheelPh += (this.speed / MAX_SPEED) * dt * 16;
     this.skyOff -= this.seg(this.pos + PLAYER_Z).curve * dt * (this.speed / MAX_SPEED) * 90; this.sky.x = W / 2 + clamp(this.skyOff, -120, 120);
     this.render();
     this.milkTxt.setText(String(this.milkN)); this.timeTxt.setText(String(Math.ceil(this.t))).setColor(this.t < 10 ? '#ff4d6d' : '#39ff88');
@@ -866,7 +872,7 @@ class Race extends Phaser.Scene {
         m.taken = true; this.combo++; this.comboT = 1.6;
         const gain = (this.combo >= 5 ? 2 : 1) * (this.milkMult > 1 ? 2 : 1);
         this.milkN += gain;
-        const px = W / 2 + (m.x - this.px) * 160 * U;
+        const px = (this.kartX ?? W / 2) + (m.x - this.px) * 160 * U;
         this.spark.emitParticleAt(px, KY - 210 * U, 3);
         this.milkPop.emitParticleAt(px, KY - 230 * U, 4);
         this.bumpMilkHud();
@@ -884,7 +890,7 @@ class Race extends Phaser.Scene {
         if (Math.abs(d) < hazardHitZ && Math.abs(h.x - this.px) < hazardHitX) {
           h.hit = true;
           this.combo = 0;
-          if (this.shield > 0) { this.shield = 0; this.milkPop.emitParticleAt(W / 2, KY - 110 * U, 8); this.cameras.main.shake(100, .008); this.flash('SHIELD BLOCKED IT', '#7dffb0'); continue; }
+          if (this.shield > 0) { this.shield = 0; this.milkPop.emitParticleAt(this.kartX ?? W / 2, KY - 110 * U, 8); this.cameras.main.shake(100, .008); this.flash('SHIELD BLOCKED IT', '#7dffb0'); continue; }
           if (this.ghostCharges > 0) { this.ghostCharges = 0; this.flash('GHOST PASS!', '#c9bcff'); continue; }
           if (this.autopilot && this.autopilotCautionT > 0.25) continue;
           const lose = Math.min(this.milkN, 4);
@@ -938,7 +944,7 @@ class Race extends Phaser.Scene {
   proj(z, x, camX) { const sc = CAM_D / z; return { sc, x: W / 2 + sc * (x - camX) * HS, y: HY + sc * CAM_H * VS * .62, w: sc * ROAD * HS }; }
   render() {
     const g = this.gfx; g.clear(); g.fillStyle(0x1c0f4a, 1).fillRect(0, HY - 2, W, H - HY + 2);
-    const base = Math.floor(this.pos / SEG), off = (this.pos % SEG) / SEG, camX = this.px * ROAD;
+    const base = Math.floor(this.pos / SEG), off = (this.pos % SEG) / SEG, camX = this.camPx * ROAD;
     let dx = -(segs[base % TRACK_SEGS].curve * off), x = 0; const pts = [];
     for (let n = 0; n < DRAW; n++) { const s = segs[(base + n) % TRACK_SEGS]; const zc = (base + n) * SEG - this.pos + 1; const a = this.proj(Math.max(zc, 1), 0, camX - x), b = this.proj(zc + SEG, 0, camX - x - dx); pts.push({ s, a, b, n }); x += dx; dx += s.curve; }
     for (let n = DRAW - 1; n >= 0; n--) {
@@ -967,8 +973,10 @@ class Race extends Phaser.Scene {
       im.setAngle(it.ang || 0);
     }
     for (let i = pi; i < this.pool.length; i++) this.pool[i].setVisible(false);
-    const bob = Math.sin(this.pos / 700) * 3 + (this.stun > 0 ? Math.sin(this.t * 60) * 6 : 0);
-    const kx = W / 2 + this.lean * 14;
+    const spN = clamp(this.speed / MAX_SPEED, 0, 1.6);
+    const bob = Math.sin(this.pos / 700) * 3 + (this.stun > 0 ? Math.sin(this.t * 60) * 6 : 0) + Math.sin(this.t * 72) * 1.4 * spN * (Math.abs(this.px) > 1.02 ? 2.2 : 1);
+    const lag = clamp((this.px - this.camPx) * ROAD * HS * (CAM_D / PLAYER_Z), -W * 0.28, W * 0.28);
+    const kx = W / 2 + lag + this.lean * 14 * U;
     const ky = KY + bob - (this.recoilY || 0);
     this.fxGfx.clear();
     if (this.speed > MAX_SPEED * 0.5 && !this.over) {
@@ -989,7 +997,19 @@ class Race extends Phaser.Scene {
       this.shieldGfx.fillCircle(kx, ky - 115 * U, 125 * U);
     }
     const k = clamp(Math.round(3 - this.lean * 3), 0, 6); // frames 0..6 run right-turn..left-turn, so lean +1 (steer right) must pick frame 0
-    this.kartSpr.setTexture(`car${this.car.id}_${k}`).setPosition(kx, ky).setTint(this.boost > 0 ? 0xbfffe0 : 0xffffff);
+    this.kartX = kx;
+    const roll = clamp(this.lean * 5 + (this.px - this.camPx) * 14, -7, 7);
+    this.kartSpr.setTexture(`car${this.car.id}_${k}`).setPosition(kx, ky).setTint(this.boost > 0 ? 0xbfffe0 : 0xffffff).setAngle(roll);
+    const skin = this.car.skin || this.car.id;
+    if (TREAD_SKINS.includes(skin) && this.speed > 150) {
+      this.treadSpr.setTexture(`tread${skin}_${k}_${Math.floor(this.wheelPh) & 3}`).setPosition(kx, ky).setScale(this.kartSpr.scaleX, this.kartSpr.scaleY).setAngle(roll).setAlpha(clamp(this.speed / (MAX_SPEED * 0.5), 0.35, 1)).setVisible(true);
+    } else this.treadSpr.setVisible(false);
+    // tire smoke when sliding hard, dust off the road
+    if (!this.over && this.speed > MAX_SPEED * 0.45) {
+      const off = Math.abs(this.px) > 1.02;
+      if (off && Math.random() < 0.7) { this.tireSmoke.setParticleTint(0x9b8a62); this.tireSmoke.emitParticleAt(kx - 0.34 * KSZ, ky - 8 * U, 1); this.tireSmoke.emitParticleAt(kx + 0.34 * KSZ, ky - 8 * U, 1); }
+      else if (!off && Math.abs(this.lean) > 0.55 && Math.random() < 0.6) { this.tireSmoke.setParticleTint(0xe4defa); this.tireSmoke.emitParticleAt(kx - Math.sign(this.lean) * 0.34 * KSZ, ky - 8 * U, 1); }
+    }
   }
 }
 
