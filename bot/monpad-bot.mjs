@@ -26,6 +26,13 @@ const POOL_MANAGER       = (process.env.POOL_MANAGER || '0x188d586ddcf52439676ca
 const USDC               = (process.env.USDC || '0x754704Bc059F8C67012fEd69BC8A327a5aafb603').toLowerCase();
 const V4_CATCHUP         = BigInt(process.env.V4_CATCHUP_BLOCKS || '5000');  // silent rescan on first start (builds PnL, announces nothing)
 const WMON               = '0x3bd359c1119da7da1d913d1c4d2b7c461115433a';
+// Pad-coin alerts (launches, buys, sells on the V4 pad) are off until V4_ALERTS=on. Watched coins always post buys.
+const V4_ALERTS          = (process.env.V4_ALERTS || 'off').toLowerCase() === 'on';
+// MONSHI (the Monchi token) trades on a Uniswap V3 pool (WMON/MONSHI, 1%). WATCH_MONSHI=off disables the alert.
+const WATCH_MONSHI       = (process.env.WATCH_MONSHI || 'on').toLowerCase() !== 'off';
+const MONSHI_TOKEN       = '0xB744F5CDb792d8187640214C4A1c9aCE29af7777';
+const MONSHI_POOL        = (process.env.MONSHI_POOL || '0x81550C36e0c7A6fcde790d10789033848BAabBA7').toLowerCase();
+const WATCH_MIN_BUY_USD  = Number(process.env.WATCH_MIN_BUY_USD ?? process.env.MIN_BUY_USD ?? '10');
 const SITE               = process.env.SITE_URL || 'https://www.monpad.net';
 const EXPLORER           = 'https://monadscan.com';
 
@@ -706,7 +713,7 @@ async function refreshV4Tokens() {
       const info = { token, symbol, name, creator, taxBps: Number(taxBps), poolId, quoteIs0: BigInt(USDC) < BigInt(token) };
       v4Pools.set(poolId.toLowerCase(), info);
       v4Count = i + 1;
-      if (v4Ready) await announceLaunch(info).catch((e) => console.error('launch announce failed:', e.message));
+      if (v4Ready && V4_ALERTS) await announceLaunch(info).catch((e) => console.error('launch announce failed:', e.message));
     }
     v4Count = Math.max(v4Count, n);
     v4Ready = true;
@@ -829,7 +836,7 @@ async function handleV4Swap(info, lg, silent) {
   if (side === 'buy') recentTrades.push({ token: info.token.toLowerCase(), usd, mon: 0, time: Math.floor(Date.now() / 1000) });
   let pnl = null;
   if (side === 'buy') trackBuy(info, trader, tokens, usd); else pnl = trackSell(info, trader, tokens, usd);
-  if (silent) return;
+  if (silent || !V4_ALERTS) return;
   if (usd < (side === 'buy' ? MIN_BUY_USD : MIN_SELL_USD)) return;
   const [position, socials, paid] = await Promise.all([
     side === 'buy' ? holderPosition(info, trader, tokens, lg.blockNumber) : '',
@@ -877,6 +884,68 @@ async function tickV4() {
   } catch (e) { console.error('tickV4 failed:', e.message); }
 }
 
+// ── Watched coins (not from the pad): buys of MONSHI on its Uniswap V3 pool ──────────────────────────
+const watchPools = new Map(); // pool(lower) -> { token, symbol, name, tokenIsToken0 }
+async function initWatch() {
+  if (!WATCH_MONSHI) return;
+  try {
+    const t0 = await client.readContract({ address: MONSHI_POOL, abi: [parseAbiItem('function token0() view returns (address)')], functionName: 'token0' });
+    watchPools.set(MONSHI_POOL, { token: MONSHI_TOKEN, symbol: 'MONSHI', name: 'Monshi', tokenIsToken0: t0.toLowerCase() === MONSHI_TOKEN.toLowerCase() });
+  } catch (e) { console.error('watch init failed:', e.message); }
+}
+
+async function handleWatchSwap(g, lg, monUsdNow) {
+  const key = `watch:${lg.transactionHash}:${lg.logIndex}`;
+  if (seenTx.has(key)) return; seenTx.add(key);
+  const { amount0, amount1 } = lg.args;
+  let wmonIn = 0n, tokensOut = 0n; // the token leaving the pool is a buy; the other side is WMON in
+  if (g.tokenIsToken0) { if (amount0 < 0n) { tokensOut = -amount0; wmonIn = amount1; } }
+  else if (amount1 < 0n) { tokensOut = -amount1; wmonIn = amount0; }
+  if (wmonIn <= 0n || tokensOut <= 0n) return;
+  const mon = Number(formatEther(wmonIn));
+  const usd = mon * monUsdNow;
+  if (usd < WATCH_MIN_BUY_USD) return;
+  let buyer = lg.args.recipient;
+  try { const tx = await client.getTransaction({ hash: lg.transactionHash }); if (tx?.from) buyer = tx.from; } catch { /* keep the recipient */ }
+  const tokens = Number(formatEther(tokensOut));
+  const [enr, position, socials, paid] = await Promise.all([
+    enrichToken(g).catch(() => null),
+    holderPosition(g, buyer, tokens, lg.blockNumber),
+    tokenSocials(g.token).catch(() => ({})),
+    isDexPaid(g.token).catch(() => false),
+  ]);
+  const caption = buyCaption(g, mon, usd, tokens, buyer, enr, { position, socials, paid, tx: lg.transactionHash });
+  const extra = buyButtons(g, enr, lg.transactionHash);
+  const r = await sendCard(TELEGRAM_CHAT_ID, 'buy-card', caption, extra);
+  if (!r.ok) await send(caption, extra);
+  console.log(`announced ${g.symbol} buy ${fmtUsd(usd)} ${lg.transactionHash}${r.ok ? '' : ' (image failed, sent text)'}`);
+}
+
+async function tickWatch() {
+  if (watchPools.size === 0) return;
+  try {
+    const head = await client.getBlockNumber();
+    const first = state.lastBlockWatch == null;
+    const from = first ? head : BigInt(state.lastBlockWatch) + 1n; // first run starts at the head: no replay of old buys
+    if (from > head) return;
+    const addrs = [...watchPools.keys()];
+    const usd = await getMonUsd();
+    let safe = from - 1n;
+    for (let start = from; start <= head; start += CHUNK + 1n) {
+      const end = start + CHUNK > head ? head : start + CHUNK;
+      let logs;
+      try { logs = await client.getLogs({ address: addrs, event: V3_SWAP_EVENT, fromBlock: start, toBlock: end }); }
+      catch (e) { console.error(`watch getLogs ${start}-${end} failed:`, e.shortMessage || e.message); break; }
+      for (const lg of logs) {
+        const g = watchPools.get(lg.address.toLowerCase());
+        if (g) await handleWatchSwap(g, lg, usd).catch((e) => console.error('watch swap failed:', e.message));
+      }
+      safe = end;
+    }
+    if (safe >= from) { state.lastBlockWatch = safe.toString(); state.seenTx = [...seenTx].slice(-2000); saveJson(STATE_FILE, state); }
+  } catch (e) { console.error('tickWatch failed:', e.message); }
+}
+
 // ── /milk <wallet> — Monshi Kart milk balance (read from the site API) ────
 let updateOffset = 0;
 const MEOWS = ['meow. 🥛', 'mew mew mew 🐈‍⬛', 'meeeeow (that means buy milk)', 'purr… 🥛 found milk', 'MEOW! the milk is in the garage', 'meow? 👀 who spilled the milk'];
@@ -910,6 +979,19 @@ async function pollCommands() {
 // ── Boot ─────────────────────────────────────────────────────────────────
 async function main() {
   const testArg = process.argv.find((a) => a.startsWith('--test-alert'));
+  const testWatch = process.argv.find((a) => a.startsWith('--test-watch='));
+  if (testWatch) { // replay a past MONSHI swap window: node monpad-bot.mjs --test-watch=<block>
+    await initWatch();
+    const from = BigInt(testWatch.split('=')[1]);
+    state.lastBlockWatch = (from - 1n).toString();
+    const head = await client.getBlockNumber();
+    const to = from + CHUNK > head ? head : from + CHUNK;
+    const usd = await getMonUsd();
+    const logs = await client.getLogs({ address: [...watchPools.keys()], event: V3_SWAP_EVENT, fromBlock: from, toBlock: to });
+    console.log(`${logs.length} swap(s) in ${from}-${to}`);
+    for (const lg of logs) await handleWatchSwap(watchPools.get(lg.address.toLowerCase()), lg, usd);
+    return;
+  }
   const testV4 = process.argv.find((a) => a.startsWith('--test-v4'));
   if (testV4) { await runTestV4(testV4.split('=')[1] || 'buy', process.argv.find((a) => a.startsWith('--chat='))); return; }
   if (testArg) { await runTestAlert(testArg, process.argv.find((a) => a.startsWith('--chat='))); return; }
@@ -937,6 +1019,10 @@ async function main() {
     setInterval(() => { checkTrending().catch((e) => console.error('trending failed:', e.message)); }, TREND_CHECK_MS);
     await tick();
   }
+  await initWatch();
+  console.log(`watching ${watchPools.size} coin(s) off the pad: ${[...watchPools.values()].map((g) => g.symbol).join(', ') || 'none'} | pad alerts ${V4_ALERTS ? 'on' : 'off'}`);
+  setInterval(tickWatch, POLL_MS);
+  await tickWatch();
   await tickV4();
   // Optional health port (set PORT to run as a web service on Render and similar hosts).
   if (process.env.PORT) {
