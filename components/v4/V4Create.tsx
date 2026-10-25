@@ -80,6 +80,8 @@ export default function V4Create() {
     if (one(q.symbol)) setSymbol(one(q.symbol).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10));
     if (one(q.desc)) setDescription(one(q.desc).slice(0, 240));
     if (/^https:\/\//i.test(one(q.img))) setImageUrl(one(q.img));
+    const tax = Number(one(q.tax)); if (Number.isFinite(tax) && tax >= 0 && tax <= 5) setTaxPct(String(tax));
+    const dev = Number(one(q.devbuy)); if (Number.isFinite(dev) && dev > 0) setDevBuy(String(dev));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router.isReady]);
 
