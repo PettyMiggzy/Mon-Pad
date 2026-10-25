@@ -1,11 +1,11 @@
 {
   "name": "@monpad/mcp",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Monpad MCP server: look up coins and trade or launch with your own burner wallet (dry run by default)",
   "type": "module",
   "bin": {
-    "@monpad/mcp": "./server.mjs",
-    "monpad-mcp": "./server.mjs"
+    "mcp": "server.mjs",
+    "monpad-mcp": "server.mjs"
   },
   "files": [
     "server.mjs",
@@ -21,7 +21,7 @@
     "node": ">=18"
   },
   "dependencies": {
-    "@monpad/sdk": "file:../sdk",
+    "@monpad/sdk": "^0.3.0",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "viem": "^2.21.40",
     "zod": "^3.24.0"
