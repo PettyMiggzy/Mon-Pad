@@ -1,4 +1,4 @@
-/* Munchy Kart - Monpad's Telegram mini-game (Phaser 3, free engine).
+/* Monshi Kart - Monpad's Telegram mini-game (Phaser 3, free engine).
    Garage (buy cars, boosts, upgrades with milk) -> Race (pseudo-3D, collect milk, dodge red candles, zap rivals).
    Progress is stored on this device (localStorage). A server-side wallet and leaderboard come later. */
 (() => {
@@ -56,7 +56,7 @@ const FONT = 'Russo One';
 
 // ---------- catalog ----------
 const CARS = [
-  { id: 1, name: 'Munchy', price: 0, speed: 1.0, accel: 1.0, grip: 1.0, blurb: 'The classic purple kart.' },
+  { id: 1, name: 'Monshi', price: 0, speed: 1.0, accel: 1.0, grip: 1.0, blurb: 'The classic purple kart.' },
   { id: 2, name: 'Zoomer', price: 250, speed: 1.12, accel: 0.95, grip: 0.95, blurb: 'Fast on the straights.' },
   { id: 3, name: 'Cookie Cruiser', price: 400, speed: 0.98, accel: 1.1, grip: 1.18, blurb: 'Sticks to every corner.' },
   { id: 4, name: 'Moonshot', price: 700, speed: 1.08, accel: 1.25, grip: 1.0, blurb: 'Rocket-quick launch.' },

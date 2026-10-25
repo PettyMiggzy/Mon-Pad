@@ -648,7 +648,7 @@ async function tick() {
   } catch (e) { console.error('tick failed:', e.message); }
 }
 
-// ── /milk <wallet> — Munchy Kart milk balance (read from the site API) ────
+// ── /milk <wallet> — Monshi Kart milk balance (read from the site API) ────
 let updateOffset = 0;
 async function pollCommands() {
   const j = await tg('getUpdates', { offset: updateOffset, timeout: 0, allowed_updates: ['message'] });

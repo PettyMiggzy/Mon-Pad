@@ -1,4 +1,4 @@
-// Shared validation for Munchy Kart loadouts (mirrors the shape in public/games/munchy-kart/game.js).
+// Shared validation for Monshi Kart loadouts (mirrors the shape in public/games/munchy-kart/game.js).
 export type Loadout = {
   car: number;
   cars: number[];
@@ -24,4 +24,4 @@ export function sanitizeLoadout(raw: any): Loadout {
   };
 }
 
-export const loadoutMessage = (wallet: string, nonce: number) => `Mon-Pad Munchy Kart: save loadout for ${wallet} nonce ${nonce}`;
+export const loadoutMessage = (wallet: string, nonce: number) => `Mon-Pad Monshi Kart: save loadout for ${wallet} nonce ${nonce}`;

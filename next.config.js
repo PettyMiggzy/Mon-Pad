@@ -32,7 +32,7 @@ const nextConfig = {
   async headers() {
     return [
       {
-        // The Munchy Kart game may be framed by our own /play page (same origin only).
+        // The Monshi Kart game may be framed by our own /play page (same origin only).
         source: '/games/:path*',
         headers: [
           { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
