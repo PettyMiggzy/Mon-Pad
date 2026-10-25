@@ -1822,7 +1822,9 @@ body::before { background: radial-gradient(900px 420px at 85% -120px, rgba(131,1
 .lh::before { content: ''; position: absolute; inset: 0 0 auto 0; height: min(1180px, 130vw); z-index: -1; background: url('/hero-bg.webp') center top / cover no-repeat; }
 .lh::after { content: ''; position: absolute; inset: 0 0 auto 0; height: min(1180px, 130vw); z-index: -1; background: linear-gradient(90deg, rgba(10,6,28,0.72) 0%, rgba(10,6,28,0.25) 45%, rgba(10,6,28,0) 70%), linear-gradient(180deg, rgba(7,5,12,0.35) 0%, rgba(7,5,12,0) 22%, rgba(7,5,12,0) 52%, var(--bg) 96%); }
 .pad-root.is-home .pad-top { position: absolute; left: 0; right: 0; background: linear-gradient(180deg, rgba(10,6,28,0.78), rgba(10,6,28,0)); backdrop-filter: none; border-bottom: 0; }
-.pad-root.is-home .pad-links { margin-left: 28px; margin-right: auto; }
+.pad-root.is-home .pad-search { max-width: 260px; }
+.pad-root.is-home .pad-search input { background: rgba(24,12,60,0.55); border-color: rgba(190,170,255,0.28); min-height: 40px; }
+.pad-root.is-home .pad-links { margin-left: auto; }
 .pad-root.is-home .pad-links a { color: #e9e2ff; font-weight: 600; }
 .pad-built { display: inline-flex; align-items: center; gap: 8px; padding: 0 14px; min-height: 40px; border-radius: 12px; border: 1px solid rgba(190,170,255,0.28); background: rgba(40,24,90,0.45); font-size: 13px; font-weight: 600; color: #efe9ff; }
 .pad-soc { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 10px; color: #efe9ff; }
@@ -1893,9 +1895,11 @@ a.lh-card:hover { transform: translateY(-2px); border-color: rgba(190,170,255,0.
   .lh-steps { grid-template-columns: 1fr; }
   .lh::after { background: linear-gradient(180deg, rgba(7,5,12,0.5) 0%, rgba(10,6,28,0.55) 40%, var(--bg) 92%); }
   .pad-root.is-home .pad-built, .pad-root.is-home .pad-soc { display: none; }
+  .pad-root.is-home .pad-search { max-width: none; }
   .pad-root.is-home .pad-top { position: absolute; }
 }
 .lh-yours { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 4px; border-style: dashed; min-height: 170px; }
 .lh-yours b { font-size: 20px; margin-top: 8px; }
 .lh-yours .lh-card-d { margin: 4px 0 12px; }
 @media (max-width: 1100px) { .lh-yours ~ .lh-yours { display: none; } }
+@media (max-width: 1280px) { .pad-root.is-home .pad-built { display: none; } }
