@@ -83,16 +83,15 @@ export function Layout({ children }: { children: ReactNode }) {
               MON<em>PAD</em>
             </span>
           </Link>
-          {!isHome && <NavSearch />}
+          <NavSearch />
           <nav className="pad-links" aria-label="Primary">
-            {isHome && <a href="#board" className="on">Launches</a>}
-            <Link href="/how-it-works">How it works</Link>
-            <a href="/monshi-kart">Play</a>
             <Link href="/docs" className={router.pathname === '/docs' ? 'on' : ''}>
               Docs
             </Link>
             <Link href="/chat" className={router.pathname === '/chat' ? 'on' : ''}>Chat</Link>
             <Link href="/ai" className={router.pathname === '/ai' ? 'on' : ''}>AI</Link>
+            <a href="/monshi-kart">Play</a>
+            <Link href="/how-it-works">How it works</Link>
             {admin && <Link href="/admin">Admin</Link>}
           </nav>
           {isHome && (
@@ -106,11 +105,9 @@ export function Layout({ children }: { children: ReactNode }) {
           <div className="pad-wallet">
             <ConnectButton chainStatus="icon" showBalance={false} accountStatus="address" />
           </div>
-          {!isHome && (
-            <Link href="/create" className="pad-launch">
-              + Launch
-            </Link>
-          )}
+          <Link href="/create" className="pad-launch">
+            + Launch
+          </Link>
         </div>
       </header>
       <main className="pad-main">{children}</main>
