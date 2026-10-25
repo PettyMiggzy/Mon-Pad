@@ -1,4 +1,4 @@
-// Shared validation for Monshi Kart loadouts (mirrors the shape in public/games/munchy-kart/game.js).
+// Shared validation for Monshi Kart loadouts (mirrors the shape in public/games/monshi-kart/game.js).
 export type Loadout = {
   car: number;
   cars: number[];

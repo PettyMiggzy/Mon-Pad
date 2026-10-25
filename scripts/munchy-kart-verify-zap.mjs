@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const js = readFileSync(join(process.cwd(), 'public/games/munchy-kart/game.js'), 'utf8');
+const js = readFileSync(join(process.cwd(), 'public/games/monshi-kart/game.js'), 'utf8');
 const need = ['zapBolts', 'candleG', 'muzzleFlash', 'zapTrail', 'zapImpactFx', 'resolveZapHit'];
 const forbid = ['this.beam.clear().lineStyle(16, 0x39ff88'];
 const missing = need.filter((s) => !js.includes(s));

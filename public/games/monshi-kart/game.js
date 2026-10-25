@@ -2,7 +2,11 @@
    Garage (buy cars, boosts, upgrades with milk) -> Race (pseudo-3D, collect milk, dodge red candles, zap rivals).
    Progress is stored on this device (localStorage). A server-side wallet and leaderboard come later. */
 (() => {
-const W = 720, H = 1280, HY = 470;
+// LAND = wide desktop layout (set by index.html). Same physics either way; only the drawing and garage layout differ.
+const LAND = !!window.__MK_LAND;
+const W = LAND ? 1280 : 720, H = LAND ? 720 : 1280, HY = LAND ? 250 : 470;
+const HS = LAND ? 310 : 360, VS = LAND ? 529 : 640; // projection scale: horizontal, vertical
+const KY = LAND ? 690 : 1010, KSZ = LAND ? 330 : 420, U = KSZ / 420; // kart baseline, kart width, UI scale vs portrait
 const SEG = 200, ROAD = 2200, CAM_H = 1000, CAM_D = 0.84, DRAW = 110, LANES = 3;
 const TRACK_SEGS = 360, LEN = TRACK_SEGS * SEG;
 const MAX_SPEED = 9500, BOOST_SPEED = 14500, ACCEL = 5200, BRAKE_OFF = 4200, OFFROAD_MAX = 3600;
@@ -127,7 +131,7 @@ function button(sc, x, y, w, h, label, color, onClick, textColor = '#07040f') {
   r.on('pointerdown', () => { r.setScale(.96); t.setScale(.96); }); r.on('pointerup', () => { r.setScale(1); t.setScale(1); onClick(); }); r.on('pointerout', () => { r.setScale(1); t.setScale(1); });
   return { r, t, set(l, c) { t.setText(l); r.setFillStyle(c); } };
 }
-const backdrop = (sc) => { const g = sc.add.graphics(); g.fillGradientStyle(0x2a1370, 0x2a1370, 0x07040f, 0x07040f, 1).fillRect(0, 0, W, H); sc.add.image(W / 2, 0, 'sky').setOrigin(.5, 0).setDisplaySize(W * 1.9, 560).setAlpha(.55); };
+const backdrop = (sc) => { const g = sc.add.graphics(); g.fillGradientStyle(0x2a1370, 0x2a1370, 0x07040f, 0x07040f, 1).fillRect(0, 0, W, H); sc.add.image(W / 2, 0, 'sky').setOrigin(.5, 0).setDisplaySize(W * (LAND ? 1.3 : 1.9), LAND ? 400 : 560).setAlpha(.55); };
 
 // ---------- boot ----------
 class Boot extends Phaser.Scene {
@@ -148,7 +152,112 @@ class Boot extends Phaser.Scene {
 // ---------- garage ----------
 class Garage extends Phaser.Scene {
   constructor() { super('garage'); }
+  autoFromQuery() {
+    const qp = new URLSearchParams(location.search);
+    if (qp.get('auto') === '1' && qp.has('seed')) {
+      const seed = parseInt(qp.get('seed'), 10) >>> 0;
+      persist();
+      this.scene.start('race', { seed, autopilot: true, skipPersist: qp.get('persist') !== '1' });
+    }
+  }
+  createLand() {
+    this.tab = 'cars'; this.view = save.car;
+    backdrop(this);
+    this.add.image(52, 56, 'milk').setDisplaySize(34, 94).setOrigin(.5, .5);
+    this.milkTxt = txt(this, 96, 56, '', 46, '#fff', { ox: 0 });
+    txt(this, W - 40, 56, 'LOADOUT', 38, '#d9ccff', { ox: 1 });
+    this.body = this.add.container(0, 0);
+    this.tabLabels = { cars: 'CARS', powerups: 'POWER-UPS', upgrades: 'UPGRADES' };
+    this.tabs = ['cars', 'powerups', 'upgrades'].map((t, i) => {
+      const x = 640 + (i - 1) * 270;
+      const r = this.add.rectangle(x, 140, 250, 56, 0x2a1370).setStrokeStyle(4, 0xb7a4ff, .6).setInteractive({ useHandCursor: true });
+      const l = txt(this, x, 140, this.tabLabels[t], 24, '#d9ccff');
+      r.on('pointerup', () => { this.tab = t; this.draw(); });
+      return { t, r, l };
+    });
+    button(this, W / 2 - 170, 655, 300, 84, 'RACE', 0x39ff88, () => { persist(); this.scene.start('race', { seed: (Math.random() * 1e9 | 0) >>> 0, autopilot: true }); });
+    button(this, W / 2 + 170, 655, 300, 84, 'DRIVE', 0xffd75e, () => { persist(); this.scene.start('race', {}); });
+    this.toast = txt(this, W / 2, 190, '', 28, '#ffd75e').setAlpha(0).setDepth(50);
+    this.keyL = this.input.keyboard.on('keydown-LEFT', () => { if (this.tab === 'cars') { this.view = this.view <= 1 ? CARS.length : this.view - 1; this.draw(); } });
+    this.input.keyboard.on('keydown-RIGHT', () => { if (this.tab === 'cars') { this.view = this.view >= CARS.length ? 1 : this.view + 1; this.draw(); } });
+    this.draw();
+    this.autoFromQuery();
+  }
+  drawLand() {
+    this.body.removeAll(true);
+    this.milkTxt.setText(String(save.milk));
+    this.tabs.forEach(({ t, r, l }) => { r.setFillStyle(this.tab === t ? 0x6a45f0 : 0x2a1370); l.setColor(this.tab === t ? '#ffffff' : '#d9ccff'); });
+    const add = (o) => { this.body.add(o); return o; };
+    if (this.tab === 'cars') {
+      const c = carById(this.view), owned = save.cars.includes(c.id), equipped = save.car === c.id;
+      add(this.add.ellipse(640, 585, 430, 62, 0x7a55ff, .35));
+      const img = add(this.add.image(640, 585, `car${c.id}_3`).setOrigin(.5, 1)); img.setDisplaySize(350, 350 * img.height / img.width);
+      this.tweens.add({ targets: img, y: 577, yoyo: true, repeat: -1, duration: 1400, ease: 'Sine.inOut' });
+      add(txt(this, 640, 232, c.name.toUpperCase(), 54, '#ffffff'));
+      add(txt(this, 640, 280, c.blurb, 24, '#c9bcff', { stroke: '#000', strokeThickness: 0 }));
+      [['SPEED', c.speed], ['ACCEL', c.accel], ['GRIP', c.grip]].forEach(([n, v], i) => {
+        const y = 360 + i * 70; add(txt(this, 1010, y - 22, n, 22, '#d9ccff', { ox: 0 }));
+        add(this.add.rectangle(1010, y + 4, 210, 16, 0xffffff, .15).setOrigin(0, .5));
+        add(this.add.rectangle(1010, y + 4, 210 * clamp((v - .8) / .5, .05, 1), 16, 0x39ff88).setOrigin(0, .5));
+      });
+      const L = add(txt(this, 410, 440, '<', 90, '#fff')).setInteractive({ useHandCursor: true }); L.on('pointerup', () => { this.view = this.view <= 1 ? CARS.length : this.view - 1; this.draw(); });
+      const R = add(txt(this, 870, 440, '>', 90, '#fff')).setInteractive({ useHandCursor: true }); R.on('pointerup', () => { this.view = this.view >= CARS.length ? 1 : this.view + 1; this.draw(); });
+      add(txt(this, 180, 360, 'KART ' + (CARS.indexOf(c) + 1) + ' / ' + CARS.length, 22, '#9a8cd8'));
+      const b = button(this, 180, 440, 280, 90, '', 0x6a45f0, () => {
+        if (owned) { save.car = c.id; persist(); this.say('Equipped ' + c.name, '#39ff88'); this.draw(); }
+        else if (this.buy(c.price)) { save.cars.push(c.id); save.car = c.id; persist(); this.say('Bought ' + c.name + '!', '#39ff88'); this.draw(); }
+      }, '#ffffff');
+      b.set(equipped ? 'EQUIPPED' : owned ? 'EQUIP' : 'BUY  ' + c.price, equipped ? 0x3a8a60 : owned ? 0x6a45f0 : 0xffb02e);
+      if (!owned) b.t.setColor('#07040f'); [b.r, b.t].forEach(add);
+      if (!owned) add(txt(this, 180, 505, 'MILK', 22, '#ffd75e'));
+    } else if (this.tab === 'powerups') {
+      add(txt(this, 210, 215, 'RACE LOADOUT', 26, '#ffd75e')); add(txt(this, 210, 245, '2 slots · click an item to equip', 17, '#9a8cd8', { stroke: '#000', strokeThickness: 0 }));
+      for (let si = 0; si < LOADOUT_SLOTS; si++) {
+        const id = save.loadout[si], pu = id ? powerById(id) : null, sy = 330 + si * 120;
+        const slot = add(this.add.rectangle(210, sy, 340, 96, 0x1a0d42, .95).setStrokeStyle(4, pu ? 0x39ff88 : 0xb7a4ff, .7));
+        add(txt(this, 210, sy - 24, 'SLOT ' + (si + 1), 20, '#9a8cd8'));
+        add(txt(this, 210, sy + 12, pu ? pu.icon + '  ' + pu.name : 'EMPTY', 28, pu ? '#fff' : '#6a5a9a'));
+        slot.setInteractive({ useHandCursor: true });
+        slot.on('pointerup', () => { if (!id) return; save.loadout[si] = null; persist(); this.say('Unequipped ' + pu.name, '#ffd75e'); this.draw(); });
+      }
+      POWERUPS.forEach((it, i) => {
+        const col = i % 2, row = Math.floor(i / 2), x = 620 + col * 410, y = 255 + row * 130;
+        const have = save.inv[it.id] || 0, equipped = save.loadout.includes(it.id);
+        const card = add(this.add.rectangle(x, y, 395, 118, equipped ? 0x2a1a7a : 0x24106a, .92).setStrokeStyle(4, equipped ? 0x39ff88 : 0xb7a4ff, .5));
+        add(txt(this, x - 182, y - 32, it.icon, 34, '#39ff88', { ox: 0 }));
+        add(txt(this, x - 140, y - 34, it.name, 26, '#fff', { ox: 0 }));
+        add(txt(this, x - 140, y - 4, it.blurb, 15, '#c9bcff', { ox: 0, stroke: '#000', strokeThickness: 0, wordWrap: { width: 205 } }));
+        add(txt(this, x - 140, y + 38, 'OWNED  ' + have + (equipped ? '  · EQUIPPED' : ''), 17, '#39ff88', { ox: 0 }));
+        const b = button(this, x + 140, y, 100, 58, String(it.price), 0xffb02e, () => {
+          if (!this.buy(it.price)) return;
+          save.inv[it.id] = (save.inv[it.id] || 0) + 1; persist(); this.say(it.name + ' added', '#39ff88'); this.draw();
+        }); [b.r, b.t].forEach(add);
+        card.setInteractive({ useHandCursor: true });
+        card.on('pointerup', () => {
+          if (have <= 0 && !equipped) { this.say('Buy ' + it.name + ' first', '#ff6d8a'); return; }
+          if (equipped) { save.loadout = save.loadout.map((x2) => (x2 === it.id ? null : x2)); persist(); this.say('Unequipped ' + it.name, '#ffd75e'); this.draw(); return; }
+          const empty = save.loadout.findIndex((x2) => !x2);
+          if (empty < 0) { this.say('Both slots full', '#ff6d8a'); return; }
+          save.loadout[empty] = it.id; persist(); this.say('Equipped ' + it.name, '#39ff88'); this.draw();
+        });
+      });
+    } else {
+      UPGRADES.forEach((it, i) => {
+        const x = 640 + (i - 1) * 395, y = 400, have = save.up[it.id], maxed = have >= it.max, price = it.prices[Math.min(have, it.max - 1)];
+        add(this.add.rectangle(x, y, 365, 330, 0x24106a, .92).setStrokeStyle(4, 0xb7a4ff, .5));
+        add(txt(this, x, y - 120, it.name, 36, '#fff'));
+        add(txt(this, x, y - 65, it.blurb, 20, '#c9bcff', { stroke: '#000', strokeThickness: 0, wordWrap: { width: 300 }, align: 'center' }));
+        for (let l = 0; l < it.max; l++) add(this.add.rectangle(x - 70 + l * 70, y + 10, 56, 18, l < have ? 0x39ff88 : 0xffffff, l < have ? 1 : .18));
+        add(txt(this, x, y + 45, 'LEVEL  ' + have + ' / ' + it.max, 22, '#39ff88'));
+        const b = button(this, x, y + 112, 230, 80, maxed ? 'MAX' : String(price), maxed ? 0x3a8a60 : 0xffb02e, () => {
+          if (maxed || !this.buy(price)) return;
+          save.up[it.id]++; persist(); this.say(it.name + ' upgraded', '#39ff88'); this.draw();
+        }); [b.r, b.t].forEach(add);
+      });
+    }
+  }
   create() {
+    if (LAND) return this.createLand();
     this.tab = 'cars'; this.view = save.car;
     backdrop(this);
     this.add.image(52, 68, 'milk').setDisplaySize(40, 112).setOrigin(.5, .5);
@@ -182,16 +291,12 @@ class Garage extends Phaser.Scene {
       this.draw();
     });
     this.draw();
-    const qp = new URLSearchParams(location.search);
-    if (qp.get('auto') === '1' && qp.has('seed')) {
-      const seed = parseInt(qp.get('seed'), 10) >>> 0;
-      persist();
-      this.scene.start('race', { seed, autopilot: true, skipPersist: qp.get('persist') !== '1' });
-    }
+    this.autoFromQuery();
   }
   say(m, c = '#ffd75e') { this.toast.setText(m).setColor(c).setAlpha(1); this.tweens.killTweensOf(this.toast); this.tweens.add({ targets: this.toast, alpha: 0, delay: 1100, duration: 400 }); }
   buy(price) { if (save.milk < price) { this.say('Not enough milk', '#ff6d8a'); return false; } save.milk -= price; persist(); return true; }
   draw() {
+    if (LAND) return this.drawLand();
     this.body.removeAll(true);
     if (this.puListCont) this.puListCont.removeAll(true);
     this.milkTxt.setText(String(save.milk));
@@ -326,7 +431,8 @@ class Race extends Phaser.Scene {
       this.rng = null;
       seedTrack(this.car.id);
     }
-    this.sky = this.add.image(W / 2, 0, 'sky').setOrigin(.5, 0).setDisplaySize(W * 1.9, HY + 60).setDepth(0);
+    this.sky = this.add.image(W / 2, 0, 'sky').setOrigin(.5, 0).setDepth(0);
+    if (LAND) { const si = this.textures.get('sky').getSourceImage(); const sw = W * 1.3; this.sky.setDisplaySize(sw, Math.max(HY + 60, sw * si.height / si.width)); } else this.sky.setDisplaySize(W * 1.9, HY + 60);
     this.gfx = this.add.graphics().setDepth(1); this.pool = [];
     this.zapBolts = [];
     this.zapMuzzleGfx = this.add.graphics().setDepth(925);
@@ -380,14 +486,14 @@ class Race extends Phaser.Scene {
     this.fxGfx = this.add.graphics().setDepth(585);
     this.shieldGfx = this.add.graphics().setDepth(595);
     this.recoilY = 0;
-    this.kartSpr = this.add.image(W / 2, 1010, `car${this.car.id}_3`).setOrigin(.5, 1).setDepth(590);
-    this.kartSpr.setDisplaySize(420, 420 * this.kartSpr.height / this.kartSpr.width);
+    this.kartSpr = this.add.image(W / 2, KY, `car${this.car.id}_3`).setOrigin(.5, 1).setDepth(590);
+    this.kartSpr.setDisplaySize(KSZ, KSZ * this.kartSpr.height / this.kartSpr.width);
     this.spark = this.add.particles(0, 0, 'coin', { speed: { min: 80, max: 380 }, angle: { min: 215, max: 325 }, lifespan: 700, scale: { start: .4, end: 0 }, gravityY: 500, emitting: false }).setDepth(800);
     const f = (size, color = '#fff') => ({ fontFamily: FONT, fontSize: size, color, stroke: '#1b0a52', strokeThickness: 8 });
     this.add.image(48, 62, 'milk').setDisplaySize(36, 100).setDepth(950);
     this.milkTxt = this.add.text(100, 28, '0', f(64)).setDepth(950);
     this.timeTxt = this.add.text(W - 36, 30, '60', f(64, '#39ff88')).setOrigin(1, 0).setDepth(950);
-    this.msg = this.add.text(W / 2, 330, '', f(58, '#ffd75e')).setOrigin(.5).setDepth(960).setAlpha(0);
+    this.msg = this.add.text(W / 2, LAND ? 200 : 330, '', f(58, '#ffd75e')).setOrigin(.5).setDepth(960).setAlpha(0);
     this.speedBar = this.add.graphics().setDepth(950);
     this.input.addPointer(3);
     this.keys = this.input.keyboard.addKeys({ l: 'LEFT', r: 'RIGHT', a: 'A', d: 'D', f: 'SPACE', n: 'N' });
@@ -397,11 +503,12 @@ class Race extends Phaser.Scene {
       this.add.text(x, y, label, { fontFamily: FONT, fontSize: label.length > 2 ? 30 : 48, color: '#fff' }).setOrigin(.5).setDepth(951);
       c.on('pointerdown', () => { c.setFillStyle(0x39ff88, .5); onDown(); }); const up = () => { c.setFillStyle(0x6a45f0, .4); onUp && onUp(); }; c.on('pointerup', up); c.on('pointerout', up); c.on('pointerupoutside', up);
     };
-    btn(95, 1195, '<', () => (this.touch.l = true), () => (this.touch.l = false)); btn(255, 1195, '>', () => (this.touch.r = true), () => (this.touch.r = false));
-    btn(615, 1185, 'ZAP', () => this.zap(), null, true);
+    const touchy = !LAND || ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+    if (touchy) { btn(LAND ? 110 : 95, LAND ? H - 100 : 1195, '<', () => (this.touch.l = true), () => (this.touch.l = false)); btn(LAND ? 270 : 255, LAND ? H - 100 : 1195, '>', () => (this.touch.r = true), () => (this.touch.r = false)); }
+    btn(LAND ? W - 130 : 615, LAND ? H - 120 : 1185, 'ZAP', () => this.zap(), null, true);
     this.input.keyboard.on('keydown-SPACE', () => this.zap()); this.input.keyboard.on('keydown-N', () => this.nitro());
     this.reset();
-    if (this.raceHasBoost()) btn(455, 1100, 'NITRO', () => this.nitro());
+    if (this.raceHasBoost()) btn(LAND ? W - 300 : 455, LAND ? H - 100 : 1100, 'NITRO', () => this.nitro());
     if (this.syncSim) {
       let guard = 0;
       while (!this.over && guard < 5000) {
@@ -475,7 +582,7 @@ class Race extends Phaser.Scene {
       this.boost = 2.0;
       this.flash('NITRO!', '#39ff88');
     } else return;
-    this.nitroFx.emitParticleAt(W / 2, 980, 14);
+    this.nitroFx.emitParticleAt(W / 2, KY - 30 * U, 14);
   }
   bumpMilkHud() {
     this.tweens.killTweensOf(this.milkTxt);
@@ -488,7 +595,7 @@ class Race extends Phaser.Scene {
     this.tweens.add({ targets: this, recoilY: 0, duration: 240, ease: 'Quad.out' });
   }
   seg(z) { return segs[idxOf(z)]; }
-  zapOrigin() { return { sx: W / 2 + 44, sy: 868 }; }
+  zapOrigin() { return { sx: W / 2 + 44 * U, sy: KY - 142 * U }; }
   zapAim() {
     const { sx, sy } = this.zapOrigin();
     let best = null;
@@ -498,11 +605,11 @@ class Race extends Phaser.Scene {
       if (d > 400 && d < SEG * 40 && Math.abs(r.x - this.px) < .42 && (!best || d < best.d)) best = { r, d };
     }
     let ex = sx;
-    let ey = HY + 100;
+    let ey = HY + 100 * U;
     const aimAt = (laneX, dist, yOff) => {
       const sc = CAM_D / Math.max(dist, 200);
-      ex = W / 2 + (laneX - this.px) * sc * ROAD * W / 2;
-      ey = HY + sc * CAM_H * H / 2 * .62 + yOff;
+      ex = W / 2 + (laneX - this.px) * sc * ROAD * HS;
+      ey = HY + sc * CAM_H * VS * .62 + yOff * U;
     };
     if (best) aimAt(best.r.x, best.d, -60);
     else {
@@ -721,7 +828,7 @@ class Race extends Phaser.Scene {
       r.x = clamp(r.x + Math.sin(r.phase * 1.7) * dt * .5, -.85, .85);
     });
     if (this.boost > 0 && this.speed > MAX_SPEED * 0.4) {
-      const ky = 1010 - (this.recoilY || 0);
+      const ky = KY - (this.recoilY || 0);
       const puff = this.rng ? this.rng() : Math.random();
       if (puff < 0.48) this.nitroFx.emitParticleAt(W / 2 - 18, ky - 36, 1);
     }
@@ -759,9 +866,9 @@ class Race extends Phaser.Scene {
         m.taken = true; this.combo++; this.comboT = 1.6;
         const gain = (this.combo >= 5 ? 2 : 1) * (this.milkMult > 1 ? 2 : 1);
         this.milkN += gain;
-        const px = W / 2 + (m.x - this.px) * 160;
-        this.spark.emitParticleAt(px, 800, 3);
-        this.milkPop.emitParticleAt(px, 780, 4);
+        const px = W / 2 + (m.x - this.px) * 160 * U;
+        this.spark.emitParticleAt(px, KY - 210 * U, 3);
+        this.milkPop.emitParticleAt(px, KY - 230 * U, 4);
         this.bumpMilkHud();
         if (this.combo === 5) this.flash('COMBO x2!', '#ffd75e');
       }
@@ -777,7 +884,7 @@ class Race extends Phaser.Scene {
         if (Math.abs(d) < hazardHitZ && Math.abs(h.x - this.px) < hazardHitX) {
           h.hit = true;
           this.combo = 0;
-          if (this.shield > 0) { this.shield = 0; this.milkPop.emitParticleAt(W / 2, 900, 8); this.cameras.main.shake(100, .008); this.flash('SHIELD BLOCKED IT', '#7dffb0'); continue; }
+          if (this.shield > 0) { this.shield = 0; this.milkPop.emitParticleAt(W / 2, KY - 110 * U, 8); this.cameras.main.shake(100, .008); this.flash('SHIELD BLOCKED IT', '#7dffb0'); continue; }
           if (this.ghostCharges > 0) { this.ghostCharges = 0; this.flash('GHOST PASS!', '#c9bcff'); continue; }
           if (this.autopilot && this.autopilotCautionT > 0.25) continue;
           const lose = Math.min(this.milkN, 4);
@@ -817,13 +924,18 @@ class Race extends Phaser.Scene {
     this.add.rectangle(W / 2, H / 2, W, H, 0x07040f, .75).setDepth(1000);
     const z = (y, s, size, color) => txt(this, W / 2, y, s, size, color).setDepth(1001);
     const newBest = !this.skipPersist && this.milkN > save.best;
+    if (LAND) {
+      z(150, 'FINISH!', 90, '#39ff88'); z(255, '+' + this.milkN + ' MILK', 72, '#ffffff');
+      if (!this.skipPersist) { z(340, 'WALLET  ' + save.milk, 38, '#ffd75e'); z(395, newBest ? 'NEW BEST!' : 'BEST  ' + save.best, 34, newBest ? '#39ff88' : '#d9ccff'); }
+    } else {
     z(300, 'FINISH!', 100, '#39ff88'); z(440, '+' + this.milkN + ' MILK', 84, '#ffffff');
     if (!this.skipPersist) { z(560, 'WALLET  ' + save.milk, 44, '#ffd75e'); z(630, newBest ? 'NEW BEST!' : 'BEST  ' + save.best, 40, newBest ? '#39ff88' : '#d9ccff'); }
+    }
     const again = () => this.scene.restart(this.autopilot ? { seed: (Math.random() * 1e9 | 0) >>> 0, autopilot: true, skipPersist: this.skipPersist } : { skipPersist: this.skipPersist });
-    const b1 = button(this, W / 2, 780, 520, 120, this.autopilot ? 'RACE AGAIN' : 'DRIVE AGAIN', 0x39ff88, again); const b2 = button(this, W / 2, 930, 520, 110, 'LOADOUT', 0x6a45f0, () => this.scene.start('garage'), '#ffffff');
+    const b1 = button(this, LAND ? W / 2 - 290 : W / 2, LAND ? 540 : 780, 520, LAND ? 100 : 120, this.autopilot ? 'RACE AGAIN' : 'DRIVE AGAIN', 0x39ff88, again); const b2 = button(this, LAND ? W / 2 + 290 : W / 2, LAND ? 540 : 930, 520, LAND ? 100 : 110, 'LOADOUT', 0x6a45f0, () => this.scene.start('garage'), '#ffffff');
     [b1.r, b1.t, b2.r, b2.t].forEach((o) => o.setDepth(1002));
   }
-  proj(z, x, camX) { const sc = CAM_D / z; return { sc, x: W / 2 + sc * (x - camX) * W / 2, y: HY + sc * CAM_H * H / 2 * .62, w: sc * ROAD * W / 2 }; }
+  proj(z, x, camX) { const sc = CAM_D / z; return { sc, x: W / 2 + sc * (x - camX) * HS, y: HY + sc * CAM_H * VS * .62, w: sc * ROAD * HS }; }
   render() {
     const g = this.gfx; g.clear(); g.fillStyle(0x1c0f4a, 1).fillRect(0, HY - 2, W, H - HY + 2);
     const base = Math.floor(this.pos / SEG), off = (this.pos % SEG) / SEG, camX = this.px * ROAD;
@@ -849,7 +961,7 @@ class Race extends Phaser.Scene {
     }));
     for (const it of list) for (let n = DRAW - 1; n >= 1; n--) {
       const p = pts[n]; if (it.seg !== (base + n) % TRACK_SEGS) continue; const sc = p.a.sc; const tex = this.textures.get(it.k).getSourceImage();
-      const w = sc * it.w * W / 2, h = w * tex.height / tex.width; if (w < 3) continue;
+      const w = sc * it.w * HS, h = w * tex.height / tex.width; if (w < 3) continue;
       const im = use(it.k);
       im.setPosition(p.a.x + sc * it.x * ROAD * W / 2, p.a.y + h * .06).setDisplaySize(w, h).setDepth(10 + (DRAW - n)).setAlpha(it.alpha == null ? 1 : it.alpha);
       im.setAngle(it.ang || 0);
@@ -857,13 +969,13 @@ class Race extends Phaser.Scene {
     for (let i = pi; i < this.pool.length; i++) this.pool[i].setVisible(false);
     const bob = Math.sin(this.pos / 700) * 3 + (this.stun > 0 ? Math.sin(this.t * 60) * 6 : 0);
     const kx = W / 2 + this.lean * 14;
-    const ky = 1010 + bob - (this.recoilY || 0);
+    const ky = KY + bob - (this.recoilY || 0);
     this.fxGfx.clear();
     if (this.speed > MAX_SPEED * 0.5 && !this.over) {
       const lines = clamp(Math.floor(this.speed / MAX_SPEED * 10), 4, 12);
       for (let li = 0; li < lines; li++) {
-        const lx = kx + (Math.random() - 0.5) * 280;
-        const ly = 720 + Math.random() * 280;
+        const lx = kx + (Math.random() - 0.5) * 280 * U;
+        const ly = KY - 290 * U + Math.random() * 280 * U;
         this.fxGfx.lineStyle(2, 0xffffff, 0.06 + Math.random() * 0.1);
         this.fxGfx.lineBetween(lx, ly, lx + (Math.random() - 0.5) * 16, ly + 48 + Math.random() * 80);
       }
@@ -872,9 +984,9 @@ class Race extends Phaser.Scene {
     if (this.shield > 0) {
       const pulse = 0.5 + Math.sin(this.t * 9) * 0.12;
       this.shieldGfx.lineStyle(5, 0x7dffb0, pulse);
-      this.shieldGfx.strokeCircle(kx, ky - 115, 125);
+      this.shieldGfx.strokeCircle(kx, ky - 115 * U, 125 * U);
       this.shieldGfx.fillStyle(0x7dffb0, 0.07);
-      this.shieldGfx.fillCircle(kx, ky - 115, 125);
+      this.shieldGfx.fillCircle(kx, ky - 115 * U, 125 * U);
     }
     const k = clamp(Math.round(3 - this.lean * 3), 0, 6); // frames 0..6 run right-turn..left-turn, so lean +1 (steer right) must pick frame 0
     this.kartSpr.setTexture(`car${this.car.id}_${k}`).setPosition(kx, ky).setTint(this.boost > 0 ? 0xbfffe0 : 0xffffff);

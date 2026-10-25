@@ -1,7 +1,7 @@
 /** Mean red-candle hits (spills) over 20 fibonacci-ish seeds (not tuning set). */
 import { chromium } from 'playwright';
 
-const base = process.env.MK_URL || 'http://localhost:3000/games/munchy-kart/index.html';
+const base = process.env.MK_URL || 'http://localhost:3000/games/monshi-kart/index.html';
 const save = {
   milk: 500, cars: [1], car: 1,
   inv: { nitro: 0, shield: 0, magnet: 0, turbo: 0, ghost: 0, double: 0 },

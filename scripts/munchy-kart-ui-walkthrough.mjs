@@ -3,7 +3,7 @@
  */
 import { chromium } from 'playwright';
 
-const base = process.env.MK_URL || 'http://localhost:3000/games/munchy-kart/index.html';
+const base = process.env.MK_URL || 'http://localhost:3000/games/monshi-kart/index.html';
 const log = (m) => console.log('UI_WALK:', m);
 
 const save = {

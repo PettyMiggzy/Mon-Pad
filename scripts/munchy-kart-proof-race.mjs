@@ -6,7 +6,7 @@ import { chromium } from 'playwright';
 import { mkdirSync, copyFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-const base = process.env.MK_URL || 'http://localhost:3000/games/munchy-kart/index.html';
+const base = process.env.MK_URL || 'http://localhost:3000/games/monshi-kart/index.html';
 const outDir = '/opt/cursor/artifacts';
 const shotDir = join(outDir, 'screenshots');
 mkdirSync(shotDir, { recursive: true });
