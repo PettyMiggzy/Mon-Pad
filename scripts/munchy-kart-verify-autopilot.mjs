@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const js = readFileSync(join(process.cwd(), 'public/games/munchy-kart/game.js'), 'utf8');
+const js = readFileSync(join(process.cwd(), 'public/games/monshi-kart/game.js'), 'utf8');
 const need = [
   'mulberry32',
   'AUTOPILOT',

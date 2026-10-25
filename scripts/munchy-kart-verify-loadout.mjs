@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const js = readFileSync(join(process.cwd(), 'public/games/munchy-kart/game.js'), 'utf8');
+const js = readFileSync(join(process.cwd(), 'public/games/monshi-kart/game.js'), 'utf8');
 const need = ['POWERUPS', 'loadout', 'LOADOUT_SLOTS', 'POWER-UPS', 'applyLoadout', 'Berry Bolt', 'Ghost Sip', 'Double Chug'];
 const missing = need.filter((s) => !js.includes(s));
 if (missing.length) {

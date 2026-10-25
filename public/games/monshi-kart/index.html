@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<base href="/games/monshi-kart/">
+<title>Monshi Kart | Monpad</title>
+<style>
+@font-face{font-family:'Russo One';src:url('/fonts/RussoOne-Regular.ttf');font-display:block}
+:root{
+  --bezel:#0c0818;
+  --bezel-edge:#2a1766;
+  --screen-radius:28px;
+  --frame-pad:14px;
+  --notch-w:38%;
+  --notch-h:22px;
+}
+html,body{margin:0;height:100%;background:#07040f;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none}
+#shell{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse 80% 60% at 50% 20%,#2a1370 0%,#07040f 55%,#030208 100%)}
+#phone{
+  position:relative;
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  box-sizing:border-box;
+  max-width:100%;
+  max-height:100%;
+}
+#phone-notch{
+  position:absolute;
+  top:calc(var(--frame-pad) + 6px);
+  left:50%;
+  transform:translateX(-50%);
+  width:var(--notch-w);
+  max-width:160px;
+  height:var(--notch-h);
+  border-radius:0 0 14px 14px;
+  background:#000;
+  box-shadow:inset 0 -2px 8px rgba(255,255,255,.08);
+  z-index:5;
+  pointer-events:none;
+}
+#phone-label{
+  position:absolute;
+  bottom:calc(var(--frame-pad) + 8px);
+  left:50%;
+  transform:translateX(-50%);
+  font:600 11px/1 system-ui,sans-serif;
+  letter-spacing:.18em;
+  color:rgba(201,188,255,.35);
+  z-index:5;
+  pointer-events:none;
+}
+#game{
+  position:relative;
+  flex:1 1 auto;
+  min-height:0;
+  width:100%;
+  height:100%;
+  overflow:hidden;
+  background:#07040f;
+}
+#game canvas{display:block;margin:0 auto}
+#err{position:fixed;left:8px;bottom:8px;color:#f66;font:12px monospace;display:none;z-index:9999;max-width:90vw}
+
+/* Phone: edge-to-edge game (Telegram / mobile browsers) */
+@media (max-width:767px),(max-height:520px){
+  #shell{background:#07040f;padding:0}
+  #phone{width:100%;height:100%;padding:0;border-radius:0;box-shadow:none;background:transparent}
+  #phone-notch,#phone-label{display:none}
+  #game{border-radius:0;height:100%}
+}
+
+/* Desktop / tablet landscape: the portrait game stands on its own stage, no phone bezel */
+@media (min-width:768px) and (min-height:521px){
+  html.port #shell{padding:24px;gap:40px}
+  html.port #phone{
+    width:auto;
+    height:min(920px,calc(100vh - 48px));
+    aspect-ratio:9/16;
+    padding:0;
+    border-radius:26px;
+    background:#07040f;
+    box-shadow:0 0 0 2px rgba(131,110,249,.55),0 0 80px rgba(131,110,249,.35),0 30px 80px rgba(0,0,0,.7);
+    overflow:hidden;
+  }
+  #phone-notch,#phone-label{display:none}
+  html.port #game{border-radius:26px}
+}
+.side{display:none}
+@media (min-width:1100px) and (min-height:560px){
+  html.port:not(.embed) .side{display:flex;flex-direction:column;gap:14px;width:290px;color:#e9e4ff;font:15px/1.5 system-ui,sans-serif;align-self:center}
+  .side h1{margin:0;font:400 54px/0.95 'Russo One',system-ui,sans-serif;letter-spacing:.02em;color:#fff;text-shadow:0 4px 0 #4b2fc0}
+  .side .lead{margin:0;color:#b6a8ff;font-size:16px}
+  .side .card{background:rgba(23,16,46,.82);border:1px solid rgba(131,110,249,.35);border-radius:16px;padding:16px}
+  .side .card b{display:block;margin-bottom:8px;color:#fff;font-size:15px;letter-spacing:.04em;text-transform:uppercase}
+  .side ul{margin:0;padding-left:18px;color:#d8d0ff}
+  .side .mut{margin:8px 0 0;color:#a79fcf;font-size:13.5px}
+  .side .keys{display:grid;grid-template-columns:1fr auto;gap:10px 12px;align-items:center}
+  .side .keys span{white-space:nowrap}
+  .side .keys em{font-style:normal;color:#b6a8ff;text-align:right}
+  .side kbd{display:inline-block;min-width:28px;padding:5px 8px;margin:0 2px;border-radius:8px;background:#2a1f55;border:1px solid #5b49c9;border-bottom-width:3px;color:#fff;font:700 12px system-ui,sans-serif;text-align:center}
+  .side .btn{display:inline-block;margin-top:10px;background:#836EF9;color:#fff;border-radius:10px;padding:10px 14px;font-weight:800;text-decoration:none}
+}
+
+/* Wide desktop: the whole window is the game. Own top bar, landscape game, leaderboard drawer. */
+#bar{display:none}
+html.land #shell{flex-direction:column;align-items:stretch;justify-content:flex-start;padding:0;gap:0}
+html.land #bar{display:flex;align-items:center;gap:14px;height:52px;flex:none;padding:0 18px;background:rgba(14,9,28,.92);border-bottom:1px solid rgba(131,110,249,.35);font:600 14px system-ui,sans-serif;color:#d8d0ff}
+html.land.embed #bar{display:none}
+#bar a.back{color:#fff;text-decoration:none;font-weight:800;padding:8px 12px;border-radius:10px;background:rgba(131,110,249,.25)}
+#bar a.back:hover{background:rgba(131,110,249,.5)}
+#bar .title{font:400 22px 'Russo One',system-ui,sans-serif;letter-spacing:.04em;color:#fff;text-shadow:0 2px 0 #4b2fc0}
+#bar .sp{flex:1}
+#bar .keys{display:flex;gap:16px;align-items:center;color:#b6a8ff;font-size:13px}
+#bar kbd{display:inline-block;min-width:22px;padding:3px 7px;margin:0 2px;border-radius:6px;background:#2a1f55;border:1px solid #5b49c9;border-bottom-width:3px;color:#fff;font:700 11px system-ui,sans-serif;text-align:center}
+#bar button{font:700 13px system-ui,sans-serif;color:#fff;background:#836EF9;border:0;border-radius:10px;padding:9px 14px;cursor:pointer}
+#bar button.ghost{background:rgba(255,255,255,.1)}
+html.land #phone{flex:1 1 auto;min-height:0;width:100%;height:auto;max-width:none;max-height:none;aspect-ratio:auto;padding:0;border-radius:0;background:#07040f;box-shadow:none}
+html.land #phone-notch,html.land #phone-label{display:none}
+html.land #game{border-radius:0;box-shadow:none}
+#lb{display:none;position:fixed;top:52px;right:0;bottom:0;width:360px;max-width:100%;background:#0e091c;border-left:1px solid rgba(131,110,249,.45);z-index:20;color:#e9e4ff;font:14px system-ui,sans-serif;overflow:auto}
+#lb.open{display:block}
+#lb h2{margin:0;padding:16px;font-size:16px;letter-spacing:.06em;text-transform:uppercase}
+#lb table{width:100%;border-collapse:collapse}
+#lb th{text-align:left;color:#a79fcf;font-size:11px;letter-spacing:.06em;padding:8px 16px}
+#lb td{padding:10px 16px;border-top:1px solid rgba(131,110,249,.2);font-variant-numeric:tabular-nums}
+#lb .empty{padding:16px;color:#a79fcf}
+</style></head>
+<body>
+<script>
+(function(){
+  var q=location.search,land;
+  if(/[?&]layout=portrait/.test(q))land=false;else if(/[?&]layout=landscape/.test(q))land=true;
+  else land=innerWidth>=900&&innerHeight>=520&&innerWidth/innerHeight>=1.15;
+  window.__MK_LAND=land;
+  var c=document.documentElement.classList;c.add(land?'land':'port');
+  if(window.self!==window.top||/[?&]embed=1/.test(q))c.add('embed');
+  // If the window changes shape across the threshold, reload into the right layout (never mid-race; progress is saved).
+  if(!/[?&]layout=/.test(q))setInterval(function(){
+    var now=innerWidth>=900&&innerHeight>=520&&innerWidth/innerHeight>=1.15;
+    var g=window.MunchyKart&&window.MunchyKart.game;
+    if(now!==land&&g&&g.scene&&!g.scene.isActive('race'))location.reload();
+  },1500);
+})();
+</script>
+<div id="shell">
+  <header id="bar">
+    <a class="back" href="/">&larr; Monpad</a>
+    <span class="title">MONSHI KART</span>
+    <span class="sp"></span>
+    <span class="keys"><span><kbd>&larr;</kbd><kbd>&rarr;</kbd> / <kbd>A</kbd><kbd>D</kbd> steer</span><span><kbd>SPACE</kbd> zap</span><span><kbd>N</kbd> nitro</span></span>
+    <button class="ghost" id="fs" type="button">Fullscreen</button>
+    <button id="lbBtn" type="button">Leaderboard</button>
+  </header>
+  <aside id="lb" aria-label="Leaderboard"><h2>Leaderboard</h2><div id="lbBody" class="empty">Loading&hellip;</div></aside>
+  <aside class="side" id="side-l">
+    <h1>MONSHI<br>KART</h1>
+    <p class="lead">Race, collect milk, upgrade your kart.</p>
+    <div class="card"><b>How it works</b>
+      <ul><li>Finish races to earn milk.</li><li>Spend milk in the garage on karts, power-ups and upgrades.</li><li>Dodge the hazards, grab the green candles.</li></ul></div>
+  </aside>
+  <div id="phone" aria-label="Monshi Kart">
+    <div id="phone-notch" aria-hidden="true"></div>
+    <div id="game"></div>
+    <div id="phone-label" aria-hidden="true">MONSHI KART</div>
+  </div>
+  <aside class="side" id="side-r">
+    <div class="card"><b>Controls</b>
+      <div class="keys"><span><kbd>&larr;</kbd><kbd>&rarr;</kbd> or <kbd>A</kbd><kbd>D</kbd></span><em>Steer</em>
+      <span><kbd>SPACE</kbd></span><em>Zap</em><span><kbd>N</kbd></span><em>Nitro</em></div>
+      <p class="mut">On a phone, tap and drag.</p></div>
+    <div class="card"><b>Play on Monpad</b><p class="mut">Launch and trade coins on the same site. Your milk follows your wallet.</p><a href="/" class="btn">Open the pad</a></div>
+  </aside>
+</div>
+<div id="err"></div>
+<script>
+(function(){
+  var lb=document.getElementById('lb'),btn=document.getElementById('lbBtn'),body=document.getElementById('lbBody'),loaded=false;
+  if(btn)btn.addEventListener('click',function(){
+    lb.classList.toggle('open');
+    if(!lb.classList.contains('open')||loaded)return;
+    loaded=true;
+    fetch('/api/game/leaderboard').then(function(r){return r.ok?r.json():{rows:[]}}).then(function(j){
+      var rows=j.rows||[];body.className='';body.textContent='';
+      if(!rows.length){body.className='empty';body.textContent='No scores yet. Be the first on the board.';return}
+      var t=document.createElement('table');t.innerHTML='<thead><tr><th>#</th><th>Player</th><th>Best</th><th>Milk</th></tr></thead>';
+      var tb=document.createElement('tbody');
+      rows.forEach(function(r,i){var tr=document.createElement('tr');[i+1,r.player,r.best,r.milk].forEach(function(v){var td=document.createElement('td');td.textContent=String(v);tr.appendChild(td)});tb.appendChild(tr)});
+      t.appendChild(tb);body.appendChild(t);
+    }).catch(function(){loaded=false;body.className='empty';body.textContent='Leaderboard unavailable right now.'});
+  });
+  var fs=document.getElementById('fs');
+  if(fs)fs.addEventListener('click',function(){var el=document.documentElement;if(document.fullscreenElement)document.exitFullscreen();else if(el.requestFullscreen)el.requestFullscreen()});
+})();
+</script>
+<script src="phaser.min.js"></script>
+<script src="game.js"></script>
+</body></html>

@@ -22,6 +22,16 @@ const nextConfig = {
   async rewrites() {
     return [
       { source: '/sitemap.xml', destination: '/api/sitemap.xml' },
+      // The game lives at www.monpad.net/monshi-kart (static files stay under /games/monshi-kart/).
+      { source: '/monshi-kart', destination: '/games/monshi-kart/index.html' },
+    ];
+  },
+  async redirects() {
+    return [
+      { source: '/play', destination: '/monshi-kart', permanent: false },
+      { source: '/games/munchy-kart', destination: '/monshi-kart', permanent: true },
+      { source: '/games/munchy-kart/index.html', destination: '/monshi-kart', permanent: true },
+      { source: '/games/monshi-kart', destination: '/monshi-kart', permanent: false },
     ];
   },
   // Baseline security headers for a fund-moving dApp. `frame-ancestors 'none'` +
@@ -32,18 +42,7 @@ const nextConfig = {
   async headers() {
     return [
       {
-        // The Monshi Kart game may be framed by our own /play page (same origin only).
-        source: '/games/:path*',
-        headers: [
-          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
-          { key: 'Content-Security-Policy', value: "frame-ancestors 'self'" },
-          { key: 'X-Content-Type-Options', value: 'nosniff' },
-          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
-        ],
-      },
-      {
-        source: '/((?!games/).*)',
+        source: '/:path*',
         headers: [
           { key: 'X-Frame-Options', value: 'DENY' },
           { key: 'Content-Security-Policy', value: "frame-ancestors 'none'" },
