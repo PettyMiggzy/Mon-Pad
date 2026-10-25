@@ -3,20 +3,19 @@
 Buy alerts + trending for **t.me/monpadtrending**. Standalone Node service — runs
 on your droplet, watches Monad on-chain, posts to the group.
 
-## What it does
-- **Buy alerts** — posts any buy on a Mon-Pad token worth **≥ `MIN_BUY_USD`** ($100
-  default). Green-square row scales with size; shows USD + MON, tokens received,
-  buyer, txn, and a chart/trade link. Dedupes by tx so nothing double-posts.
-- **Trending** — posts when a token *starts trending*: rolling **window volume**
-  (`TREND_WINDOW_SEC`) crosses **`TREND_THRESHOLD_USD`**. A per-token cooldown
-  (`TREND_COOLDOWN_SEC`) stops spam.
-- **Paid boosts** — tokens listed in `boosts.json` (with an `until` timestamp) are
-  force-trended and tagged **BOOSTED**. This is the hook for the paid service — see
-  "Paid boosts" below for wiring payments.
+## What it does (Uniswap V4 pad)
+- **Buy and sell alerts** from the V4 PoolManager `Swap` events of every coin the launcher made. Each alert is a card
+  image: **FOUND MILK** for buys, and for sells **FOUND MILK** (sold at a win), **LOST MILK** (sold at a loss) or
+  **SPILLED MILK** (the bot never saw that wallet buy, so no PnL). Sells show PnL on the buys the bot has seen
+  (average cost per wallet and coin, fees included). Alerts need `MIN_BUY_USD` / `MIN_SELL_USD` (default $10).
+- **New coin** posts when the launcher lists a coin.
+- **Commands:** `/meow` (meow card, 15s cooldown per chat), `/milk 0x…` (Monshi Kart milk), `/help`.
+- On first start the bot silently rescans the last `V4_CATCHUP_BLOCKS` (5000) blocks to build PnL positions and
+  announces nothing from that pass. Positions live in `state.json`.
+- Legacy V3 curve alerts, trending and paid boosts below only run if `FACTORY_V3` is set (the old curves are dead).
 
-> Pre-graduation curve buys are covered today. Buys on **graduated** tokens happen
-> on the Uniswap V3 pool (not the curve) — that's a follow-up module (watch the
-> pool's `Swap` events). Flagged in the code.
+Env: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `RPC_URL` (default `https://rpc.monad.xyz`), `SITE_URL`,
+`LAUNCHER_V4` (default the mainnet launcher), `POOL_MANAGER`, `USDC`, `PORT` (optional health endpoint).
 
 ## Setup (droplet)
 ```bash
