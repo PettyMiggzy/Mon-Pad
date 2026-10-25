@@ -7,7 +7,7 @@ on your droplet, watches Monad on-chain, posts to the group.
 - **Buy and sell alerts** from the V4 PoolManager `Swap` events of every coin the launcher made. Each alert is a card
   image: **FOUND MILK** for buys, and for sells **FOUND MILK** (sold at a win), **LOST MILK** (sold at a loss) or
   **SPILLED MILK** (the bot never saw that wallet buy, so no PnL). Sells show PnL on the buys the bot has seen
-  (average cost per wallet and coin, fees included). Alerts need `MIN_BUY_USD` / `MIN_SELL_USD` (default $10).
+  (average cost per wallet and coin, fees included). Buy alerts post from `MIN_BUY_USD` (default $5). Sells are tracked for PnL but never announced unless `V4_SELL_ALERTS=on`; `V4_ALERTS=off` mutes pad alerts. MONSHI buys are watched separately (`WATCH_MONSHI`).
 - **New coin** posts when the launcher lists a coin.
 - **Commands:** `/meow` (meow card, 15s cooldown per chat), `/milk 0x…` (Monshi Kart milk), `/help`.
 - On first start the bot silently rescans the last `V4_CATCHUP_BLOCKS` (5000) blocks to build PnL positions and

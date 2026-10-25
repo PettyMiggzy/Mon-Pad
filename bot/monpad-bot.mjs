@@ -26,17 +26,18 @@ const POOL_MANAGER       = (process.env.POOL_MANAGER || '0x188d586ddcf52439676ca
 const USDC               = (process.env.USDC || '0x754704Bc059F8C67012fEd69BC8A327a5aafb603').toLowerCase();
 const V4_CATCHUP         = BigInt(process.env.V4_CATCHUP_BLOCKS || '5000');  // silent rescan on first start (builds PnL, announces nothing)
 const WMON               = '0x3bd359c1119da7da1d913d1c4d2b7c461115433a';
-// Pad-coin alerts (launches, buys, sells on the V4 pad) are off until V4_ALERTS=on. Watched coins always post buys.
-const V4_ALERTS          = (process.env.V4_ALERTS || 'off').toLowerCase() === 'on';
+// Pad-coin alerts (launches and buys on the V4 pad) are on; V4_ALERTS=off mutes them. Sells are never announced unless V4_SELL_ALERTS=on.
+const V4_ALERTS          = (process.env.V4_ALERTS || 'on').toLowerCase() !== 'off';
+const V4_SELL_ALERTS     = (process.env.V4_SELL_ALERTS || 'off').toLowerCase() === 'on';
 // MONSHI (the Monchi token) trades on a Uniswap V3 pool (WMON/MONSHI, 1%). WATCH_MONSHI=off disables the alert.
 const WATCH_MONSHI       = (process.env.WATCH_MONSHI || 'on').toLowerCase() !== 'off';
 const MONSHI_TOKEN       = '0xB744F5CDb792d8187640214C4A1c9aCE29af7777';
 const MONSHI_POOL        = (process.env.MONSHI_POOL || '0x81550C36e0c7A6fcde790d10789033848BAabBA7').toLowerCase();
-const WATCH_MIN_BUY_USD  = Number(process.env.WATCH_MIN_BUY_USD ?? process.env.MIN_BUY_USD ?? '10');
+const WATCH_MIN_BUY_USD  = Number(process.env.WATCH_MIN_BUY_USD ?? process.env.MIN_BUY_USD ?? '5');
 const SITE               = process.env.SITE_URL || 'https://www.monpad.net';
 const EXPLORER           = 'https://monadscan.com';
 
-const MIN_BUY_USD        = Number(process.env.MIN_BUY_USD || '10');        // announce buys >= this (USD)
+const MIN_BUY_USD        = Number(process.env.MIN_BUY_USD || '5');        // announce buys >= this (USD)
 const MIN_SELL_USD       = Number(process.env.MIN_SELL_USD || '10');       // announce sells >= this (USD)
 const POLL_MS            = Number(process.env.POLL_MS || '6000');          // chain poll cadence
 const CHUNK              = BigInt(process.env.GETLOGS_CHUNK || '99');       // getLogs is 100-block capped
@@ -837,6 +838,7 @@ async function handleV4Swap(info, lg, silent) {
   let pnl = null;
   if (side === 'buy') trackBuy(info, trader, tokens, usd); else pnl = trackSell(info, trader, tokens, usd);
   if (silent || !V4_ALERTS) return;
+  if (side === 'sell' && !V4_SELL_ALERTS) return; // sells are tracked for PnL but not announced
   if (usd < (side === 'buy' ? MIN_BUY_USD : MIN_SELL_USD)) return;
   const [position, socials, paid] = await Promise.all([
     side === 'buy' ? holderPosition(info, trader, tokens, lg.blockNumber) : '',
@@ -1020,7 +1022,7 @@ async function main() {
     await tick();
   }
   await initWatch();
-  console.log(`watching ${watchPools.size} coin(s) off the pad: ${[...watchPools.values()].map((g) => g.symbol).join(', ') || 'none'} | pad alerts ${V4_ALERTS ? 'on' : 'off'}`);
+  console.log(`watching ${watchPools.size} coin(s) off the pad: ${[...watchPools.values()].map((g) => g.symbol).join(', ') || 'none'} | pad buy alerts ${V4_ALERTS ? 'on' : 'off'}, sell alerts ${V4_SELL_ALERTS ? 'on' : 'off'} | min buy $${MIN_BUY_USD}`);
   setInterval(tickWatch, POLL_MS);
   await tickWatch();
   await tickV4();
