@@ -11,6 +11,7 @@ import { shortAddr } from '@/lib/format';
 import { useToast } from '@/components/ui/Toast';
 import V4TradePanel from './V4TradePanel';
 import DepthPanel from './DepthPanel';
+import PriceChart from './PriceChart';
 
 const usd = (n: number) => (n >= 1e6 ? `$${(n / 1e6).toFixed(2)}M` : n >= 1e3 ? `$${(n / 1e3).toFixed(2)}K` : `$${n.toLocaleString(undefined, { maximumFractionDigits: n < 1 ? 6 : 2 })}`);
 
@@ -64,6 +65,7 @@ export default function V4TokenView({ address: tokenAddr }: { address: Address }
         <div className="tk-price"><b>{usd(t.priceUsdc)}</b><span style={{ color: '#9B94B0', fontSize: 13 }}>Market cap {usd(t.mcapUsdc)}</span></div>
       </div>
       <div className="xch-tok">
+        <div style={{ gridColumn: '1 / -1' }}><PriceChart poolId={t.poolId} symbol={t.symbol} /></div>
         <div style={{ padding: 16, border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, fontSize: 14, lineHeight: 1.6, color: '#bbb' }}>
           <b style={{ color: '#fff' }}>How fees work.</b> Every trade pays {t.totalFeeBps / 100}%, set by the pool&apos;s hook so no router can skip it. Of the base 1%: 70% to the creator, 10% platform, 10% MONSHI, 10% buys and burns this token. The creator tax ({t.taxBps / 100}%) buys and burns this token.
           <div style={{ marginTop: 12 }}><a href={`https://dexscreener.com/monad/${t.address}`} target="_blank" rel="noreferrer" style={{ color: '#a78bfa' }}>Chart on DexScreener ↗</a></div>
