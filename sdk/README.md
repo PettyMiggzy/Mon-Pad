@@ -1,74 +1,49 @@
 # @monpad/sdk
 
-TypeScript SDK for **Monpad Uniswap V4** on Monad. **viem** is the only dependency (peer). No bonding curves — trades go through `MonpadV4Router`.
-
-> **Not published to npm in this repo.** Install from the monorepo: `npm install file:../sdk`.
-
-## 5-minute quickstart
+TypeScript SDK for [Monpad](https://www.monpad.net) on Monad mainnet. List coins, quote, buy, sell and launch on the Uniswap V4 pad. Pay and receive **MON or USDC**; the router converts for you. Built on viem.
 
 ```bash
-cd sdk && npm install && npm run build
-export RPC_URL=https://rpc.monad.xyz
-export MONPAD_LAUNCHER=0x…      # when deployed
-export MONPAD_HOOK=0x…
-export MONPAD_V4_ROUTER=0x…
-export MONPAD_POOL_MANAGER=0x…  # infra from spec / env
-export MONPAD_STATE_VIEW=0x…
-export MONPAD_PRIVATE_KEY=0x…   # only for simulate: false
+npm i @monpad/sdk viem
 ```
 
-```typescript
-import { createMonpad, parseEther } from '@monpad/sdk';
-import { createWalletClient, http } from 'viem';
+```ts
+import { createPublicClient, createWalletClient, http, parseEther } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
+import { createMonpad } from '@monpad/sdk';
 
-const account = privateKeyToAccount(process.env.MONPAD_PRIVATE_KEY as `0x${string}`);
-const walletClient = createWalletClient({
-  account,
-  chain: { id: 143, name: 'Monad', nativeCurrency: { name: 'MON', symbol: 'MON', decimals: 18 }, rpcUrls: { default: { http: [process.env.RPC_URL!] } } },
-  transport: http(process.env.RPC_URL!),
-});
+const chain = { id: 143, name: 'Monad', nativeCurrency: { name: 'MON', symbol: 'MON', decimals: 18 }, rpcUrls: { default: { http: ['https://rpc.monad.xyz'] } } };
+const publicClient = createPublicClient({ chain, transport: http() });
+const walletClient = createWalletClient({ account: privateKeyToAccount(process.env.PRIVATE_KEY), chain, transport: http() });
+const monpad = createMonpad({ publicClient, walletClient }); // Monad mainnet addresses are built in
 
-const monpad = createMonpad({ walletClient, specUrl: 'https://www.monpad.net/api/v1/spec' });
+const { launches } = await monpad.listLaunches({ limit: 5 });
+const token = launches[0].token;
 
-// Read-only
-const spec = await monpad.getSpec();
-const launches = await monpad.listLaunches({ limit: 10 });
-const token = await monpad.getToken('0x…');
-
-// Quote (simulates router)
-const q = await monpad.quoteBuy(token.token, parseEther('1'));
-
-// Trade — simulate by default; set simulate: false to send
-await monpad.buy(token.token, parseEther('0.5'), { slippageBps: 100, simulate: true });
-
-// Launch
-await monpad.launch({ name: 'My', symbol: 'MY', creatorTaxBps: 100, simulate: true });
+await monpad.buy({ token, monIn: parseEther('0.5') });                 // min-out is set from a live quote (1% slippage)
+await monpad.sell({ token, tokensIn: 1000n * 10n ** 18n });             // receive MON (default) or { receive: 'usdc' }
+await monpad.launch({ name: 'Milk Baron', symbol: 'MILK', creatorTaxBps: 200, devBuyMon: parseEther('2') });
 ```
 
-## Safety defaults
+No wallet? Reads and quotes still work: `createMonpad({ publicClient })`.
 
-- **`simulate: true`** on `launch`, `buy`, `sell` (dry-run via `simulateContract`).
-- **`maxMonPerTx`** guard (default 5 MON, env `MAX_MON_PER_TX`).
-- **`minTokensOut` / `minMonOut`** never zero on sends; quotes include slippage-adjusted `minOut`.
-- Typed errors: `SlippageExceeded`, `DeadlineExpired`, `PoolNotFound`, `Paused`, `ContractsNotDeployed`, `MaxMonExceeded`.
+## API
 
-## Addresses & fees
+| Call | What it does |
+|---|---|
+| `listLaunches({ limit })` | Newest coins with price (USD), market cap, creator tax and pool id |
+| `getToken(token)` | One coin. Throws `NotAMonpadToken` for anything else |
+| `quoteBuy({ token, monIn \| usdcIn })` | Tokens you would get. Works without a wallet |
+| `buy({ token, monIn \| usdcIn, slippageBps?, minTokensOut?, simulate? })` | Buys. Handles the USDC approval. Reverts below the minimum |
+| `quoteSell({ token, tokensIn, receive? })` / `sell({ ... })` | Same for selling. Handles the token approval |
+| `launch({ name, symbol, creatorTaxBps?, devBuyMon \| devBuyUsdc?, simulate? })` | Free launch with an optional first buy. Tax 0 to 500 bps |
+| `claimable(account, asset)` / `claim(asset)` | Creator earnings (USDC or a coin you launched) |
+| `harvest(token)` | Splits the fees a pool has earned. Anyone can call it |
+| `getMonshiBurned()` / `getSpec()` / `monPriceUsd()` | Burn counter, fee policy and addresses, MON price |
 
-No hardcoded platform wallet or Monpad contract addresses in `src/`. Resolution order:
+Every write takes `simulate: true` to run against the chain without sending. Errors are typed: `SlippageExceeded`, `DeadlineExpired`, `Paused`, `NotAMonpadToken`, `WalletRequired`.
 
-1. `createMonpad({ addresses })`
-2. Env (`MONPAD_LAUNCHER`, `MONPAD_HOOK`, `MONPAD_V4_ROUTER`, …)
-3. `GET /api/v1/spec` (platform, monshi, dead, fees) + optional future `uv4` block
+Override any contract with `createMonpad({ addresses: { launcher, hook, router, ... } })`.
 
-## Scripts
+## Test
 
-| Command | Purpose |
-|---------|---------|
-| `npm run build` | ESM + CJS + `.d.ts` → `dist/` |
-| `npm run check:addresses` | CI: fail on `0x…` literals outside `chain-config.ts` |
-| `npm test` | Vitest fork tests (needs `FORK_RPC`, `MONPAD_TEST_PRIVATE_KEY`) |
-
-## MCP
-
-The `@monpad/mcp` package can depend on this SDK to avoid duplicating chain logic.
+`FORK_URL=http://127.0.0.1:8545 npm test` runs 18 checks against a local fork of Monad mainnet (see `test/fork.mjs`).

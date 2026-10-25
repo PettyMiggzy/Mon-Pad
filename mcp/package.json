@@ -1,7 +1,7 @@
 {
   "name": "@monpad/mcp",
-  "version": "0.2.1",
-  "description": "MCP server for Monpad Uniswap V4 — list, trade, and launch with dry-run by default",
+  "version": "0.3.0",
+  "description": "Monpad MCP server: look up coins and trade or launch with your own burner wallet (dry run by default)",
   "type": "module",
   "bin": {
     "@monpad/mcp": "./server.mjs",
@@ -15,9 +15,7 @@
   ],
   "scripts": {
     "start": "node server.mjs",
-    "test": "node test/integration.mjs",
-    "prestart": "npm run build --prefix ../sdk",
-    "pretest": "npm run build --prefix ../sdk"
+    "test": "node test/integration.mjs"
   },
   "engines": {
     "node": ">=18"

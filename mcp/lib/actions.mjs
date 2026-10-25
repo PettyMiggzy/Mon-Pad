@@ -1,164 +1,114 @@
-import { formatEther, parseEther } from 'viem';
+import { formatEther, formatUnits, parseEther, parseUnits } from 'viem';
 import { getMonpad } from './monpad-client.mjs';
 import { assertMonFlowAllowed, recordMonFlow, safetyLimitsForSpec } from './safety.mjs';
 
-function json(data) {
-  return JSON.stringify(data, (_, v) => (typeof v === 'bigint' ? v.toString() : v), 2);
-}
+const ERC20_BAL = [{ type: 'function', name: 'balanceOf', stateMutability: 'view', inputs: [{ type: 'address' }], outputs: [{ type: 'uint256' }] }];
+const json = (data) => JSON.stringify(data, (_, v) => (typeof v === 'bigint' ? v.toString() : v), 2);
+export const ok = (data) => ({ content: [{ type: 'text', text: json(data) }] });
 
-export function ok(data) {
-  return { content: [{ type: 'text', text: json(data) }] };
-}
+const SITE = 'https://www.monpad.net';
+const view = (t) => ({
+  token: t.token, name: t.name, symbol: t.symbol, creator: t.creator,
+  priceUsd: t.priceUsd, marketCapUsd: Math.round(t.marketCapUsd),
+  creatorTaxPct: t.creatorTaxBps / 100, totalFeePct: t.totalFeeBps / 100, page: `${SITE}/token/${t.token}`,
+});
 
 export async function getSpec() {
-  const mp = await getMonpad({ dryRun: true });
-  const spec = await mp.getSpec();
-  return ok({
-    ...spec,
-    contractsReady: Boolean(spec.contracts?.launcher && spec.contracts?.hook),
-    safety: safetyLimitsForSpec(),
-  });
+  const { monpad } = getMonpad();
+  const spec = await monpad.getSpec();
+  return ok({ ...spec, safety: safetyLimitsForSpec() });
 }
 
 export async function getMonshiBurn() {
-  const mp = await getMonpad({ dryRun: true });
-  try {
-    const b = await mp.getMonshiBurned();
-    return ok({
-      burned: b.burned.toString(),
-      burnedFormatted: formatEther(b.burned),
-      circulatingFormatted: formatEther(b.circulating),
-      totalSupply: b.totalSupply.toString(),
-    });
-  } catch (e) {
-    throw new Error(e?.message || 'contracts not deployed yet — configure monshi/dead via spec');
-  }
+  const { monpad } = getMonpad();
+  const b = await monpad.getMonshiBurned();
+  return ok({ burned: formatEther(b.burned), circulating: formatEther(b.circulating), totalSupply: formatEther(b.totalSupply) });
 }
 
 export async function listLaunches({ limit = 10 } = {}) {
-  const mp = await getMonpad({ dryRun: true });
-  const { count, launches, nextCursor } = await mp.listLaunches({ limit });
-  return ok({ count, launches, nextCursor });
+  const { monpad } = getMonpad();
+  const { count, launches } = await monpad.listLaunches({ limit });
+  return ok({ count, launches: launches.map(view) });
 }
 
 export async function getToken({ token }) {
-  const mp = await getMonpad({ dryRun: true });
-  const t = await mp.getToken(token);
-  return ok({
-    token: t.token,
-    creatorTaxBps: t.creatorTaxBps,
-    totalSwapFeeBps: t.totalSwapFeeBps,
-    poolId: t.poolId,
-    poolKey: t.poolKey,
-    price: {
-      sqrtPriceX96: t.sqrtPriceX96.toString(),
-      tick: t.tick,
-      approxMonPerToken: t.approxMonPerToken != null ? String(t.approxMonPerToken) : null,
-    },
-    liquidity: t.liquidity.toString(),
-    volumeMonApprox: t.volumeMonApprox.toString(),
-    volumeMonFormatted: formatEther(t.volumeMonApprox),
-  });
+  const { monpad } = getMonpad();
+  return ok(view(await monpad.getToken(token)));
 }
 
-export async function trending({ limit = 10, windowBlocks } = {}) {
-  const mp = await getMonpad({ dryRun: true });
-  const { count, trending: list } = await mp.trending({ limit, windowBlocks });
-  return ok({
-    count,
-    trending: list.map((x) => ({
-      ...x,
-      volumeMon: x.volumeMon.toString(),
-      volumeMonFormatted: formatEther(x.volumeMon),
-    })),
-  });
+export async function trending({ limit = 10 } = {}) {
+  const { monpad } = getMonpad();
+  const { launches } = await monpad.listLaunches({ limit: 120 });
+  return ok({ ranking: 'marketCap', trending: launches.sort((a, b) => b.marketCapUsd - a.marketCapUsd).slice(0, limit).map(view) });
+}
+
+export async function wallet({ token } = {}) {
+  const { monpad, publicClient, walletClient } = getMonpad({ withWallet: true });
+  const address = walletClient.account.address;
+  const out = { address, mon: formatEther(await publicClient.getBalance({ address })) };
+  if (token) out.tokenBalance = formatEther(await publicClient.readContract({ address: token, abi: ERC20_BAL, functionName: 'balanceOf', args: [address] }));
+  out.claimableUsdc = formatUnits(await monpad.claimable(address, monpad.addresses.usdc), 6);
+  return ok(out);
 }
 
 export async function launchToken(args) {
   const dryRun = args.dryRun !== false;
+  const taxBps = Math.round((args.creatorTaxPct ?? 0) * 100);
   const dev = args.devBuyMon ? parseEther(args.devBuyMon) : 0n;
-  const mpPreview = await getMonpad({ dryRun: true });
-  const preview = await mpPreview.launch({
-    name: args.name,
-    symbol: args.symbol,
-    metadataUri: args.metadataUri,
-    creatorTaxBps: args.creatorTaxBps ?? 0,
-    devBuyMon: dev,
-    salt: args.salt,
-    simulate: true,
-  });
+  const plan = { name: args.name, symbol: args.symbol, creatorTaxPct: taxBps / 100, devBuyMon: args.devBuyMon || '0', creationFee: 'free' };
   if (dryRun) {
-    return ok({
-      dryRun: true,
-      simulated: true,
-      creationFeeMon: formatEther(preview.creationFee ?? 0n),
-      devBuyMon: args.devBuyMon || '0',
-      gas: preview.gas?.toString(),
-      salt: args.salt,
-    });
+    const { monpad } = getMonpad();
+    const spec = await monpad.getSpec();
+    return ok({ dryRun: true, wouldLaunch: plan, launchesPaused: spec.launchPaused, note: 'Set dryRun=false to send. Needs MONPAD_PRIVATE_KEY.' });
   }
-  assertMonFlowAllowed((preview.creationFee ?? 0n) + dev);
-  const mp = await getMonpad({ dryRun: false });
-  const result = await mp.launch({
-    name: args.name,
-    symbol: args.symbol,
-    creatorTaxBps: args.creatorTaxBps ?? 0,
-    devBuyMon: dev,
-    salt: args.salt,
-    simulate: false,
-  });
-  recordMonFlow((preview.creationFee ?? 0n) + dev);
-  return ok({
-    dryRun: false,
-    hash: result.hash,
-    gas: result.gas?.toString(),
-    devBuyMon: args.devBuyMon || '0',
-  });
+  assertMonFlowAllowed(dev);
+  const { monpad } = getMonpad({ withWallet: true });
+  const r = await monpad.launch({ name: args.name, symbol: args.symbol, creatorTaxBps: taxBps, devBuyMon: dev });
+  recordMonFlow(dev);
+  return ok({ dryRun: false, hash: r.hash, token: r.token, page: r.token ? `${SITE}/token/${r.token}` : undefined, ...plan });
 }
 
 export async function buy(args) {
   const dryRun = args.dryRun !== false;
   const monIn = parseEther(args.monIn);
-  const minTokensOut = BigInt(args.minTokensOut);
-  const mp = await getMonpad({ dryRun: true });
-  const result = await mp.buy(args.token, monIn, { slippageBps: 100, simulate: true, minTokensOut });
+  const slippageBps = Math.round((args.slippagePct ?? 1) * 100);
   if (dryRun) {
-    return ok({
-      dryRun: true,
-      simulated: true,
-      tokensOut: result.tokensOut?.toString?.() ?? String(result.tokensOut),
-      token: args.token,
-      monIn: args.monIn,
-      minTokensOut: args.minTokensOut,
-    });
+    const { monpad } = getMonpad();
+    const { tokensOut } = await monpad.quoteBuy({ token: args.token, monIn });
+    return ok({ dryRun: true, token: args.token, monIn: args.monIn, expectedTokens: formatEther(tokensOut), minTokens: formatEther((tokensOut * BigInt(10_000 - slippageBps)) / 10_000n), note: 'Set dryRun=false to send.' });
   }
   assertMonFlowAllowed(monIn);
-  const mpSend = await getMonpad({ dryRun: false });
-  const sent = await mpSend.buy(args.token, monIn, { slippageBps: 100, simulate: false, minTokensOut });
+  const { monpad } = getMonpad({ withWallet: true });
+  const r = await monpad.buy({ token: args.token, monIn, slippageBps });
   recordMonFlow(monIn);
-  return ok({ dryRun: false, hash: sent.hash, token: args.token, monIn: args.monIn, minTokensOut: args.minTokensOut });
+  return ok({ dryRun: false, hash: r.hash, token: args.token, monIn: args.monIn, expectedTokens: formatEther(r.amountOut), minTokens: formatEther(r.minOut) });
 }
 
 export async function sell(args) {
   const dryRun = args.dryRun !== false;
-  const tokensIn = BigInt(args.tokensIn);
-  const minMonOut = BigInt(args.minMonOut);
-  const mp = await getMonpad({ dryRun: true });
-  await mp.sell(args.token, tokensIn, { slippageBps: 100, simulate: true, minMonOut });
-  const quote = await mp.quoteSell(args.token, tokensIn);
-  if (dryRun) {
-    return ok({
-      dryRun: true,
-      simulated: true,
-      nativeOut: quote.monOut.toString(),
-      token: args.token,
-      tokensIn: args.tokensIn,
-      minMonOut: args.minMonOut,
-    });
-  }
-  assertMonFlowAllowed(quote.monOut);
-  const mpSend = await getMonpad({ dryRun: false });
-  const sent = await mpSend.sell(args.token, tokensIn, { simulate: false, minMonOut });
-  recordMonFlow(quote.monOut);
-  return ok({ dryRun: false, hash: sent.hash, token: args.token, tokensIn: args.tokensIn, minMonOut: args.minMonOut });
+  const slippageBps = Math.round((args.slippagePct ?? 1) * 100);
+  const { monpad, publicClient, walletClient } = getMonpad({ withWallet: !dryRun || !!args.percent });
+  let tokensIn;
+  if (args.percent) {
+    const have = await publicClient.readContract({ address: args.token, abi: ERC20_BAL, functionName: 'balanceOf', args: [walletClient.account.address] });
+    tokensIn = (have * BigInt(Math.round(args.percent * 100))) / 10_000n;
+  } else if (args.tokens) tokensIn = parseUnits(args.tokens, 18);
+  else throw new Error('pass tokens (e.g. "1000") or percent (1-100)');
+  if (tokensIn <= 0n) throw new Error('nothing to sell');
+  const { amountOut } = await monpad.quoteSell({ token: args.token, tokensIn });
+  if (dryRun) return ok({ dryRun: true, token: args.token, tokensIn: formatEther(tokensIn), expectedMon: formatEther(amountOut), note: 'Set dryRun=false to send.' });
+  assertMonFlowAllowed(amountOut);
+  const r = await monpad.sell({ token: args.token, tokensIn, slippageBps });
+  recordMonFlow(amountOut);
+  return ok({ dryRun: false, hash: r.hash, token: args.token, tokensIn: formatEther(tokensIn), expectedMon: formatEther(r.amountOut), minMon: formatEther(r.minOut) });
+}
+
+export async function claimFees(args) {
+  const dryRun = args.dryRun !== false;
+  const { monpad, walletClient } = getMonpad({ withWallet: true });
+  const asset = args.token ?? monpad.addresses.usdc;
+  const amount = await monpad.claimable(walletClient.account.address, asset);
+  if (dryRun || amount === 0n) return ok({ dryRun, asset, claimable: asset === monpad.addresses.usdc ? formatUnits(amount, 6) : formatEther(amount), note: amount === 0n ? 'Nothing to claim.' : 'Set dryRun=false to claim.' });
+  const r = await monpad.claim(asset);
+  return ok({ dryRun: false, hash: r.hash, asset });
 }

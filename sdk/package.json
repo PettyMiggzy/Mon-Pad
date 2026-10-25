@@ -1,7 +1,7 @@
 {
   "name": "@monpad/sdk",
-  "version": "0.2.0",
-  "description": "Monpad Uniswap V4 SDK for Monad — read, quote, trade, launch",
+  "version": "0.3.0",
+  "description": "Monpad SDK for Monad: list, quote, buy, sell and launch on the Uniswap V4 pad (pay in MON or USDC)",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -20,7 +20,7 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts --clean",
     "check:addresses": "node scripts/check-no-addresses.mjs",
-    "test": "npm run build && vitest run",
+    "test": "npm run build && node test/fork.mjs",
     "prepublishOnly": "npm run check:addresses && npm run build"
   },
   "engines": {

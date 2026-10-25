@@ -33,6 +33,13 @@ export class Paused extends MonpadError {
   }
 }
 
+export class NotAMonpadToken extends MonpadError {
+  constructor(token: string) {
+    super(`${token} was not launched on Monpad`);
+    this.name = 'NotAMonpadToken';
+  }
+}
+
 export class ContractsNotDeployed extends MonpadError {
   constructor(message = 'contracts not deployed yet') {
     super(message);

@@ -1,135 +1,46 @@
-/**
- * Fork integration test: local Hardhat fork, read tools, dryRun sends no txs.
- *
- *   FORK_RPC=https://rpc.monad.xyz npm test
- */
-import { execSync, spawn } from 'node:child_process';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { setTimeout as sleep } from 'node:timers/promises';
-import { getPublicClient } from '../lib/clients.mjs';
-import { resetConfigCache } from '../lib/config.mjs';
-import { getSpec, listLaunches, getToken, buy, launchToken } from '../lib/actions.mjs';
+// Starts the MCP server over stdio against a local mainnet fork and drives every tool.
+//   (cd ../hardhat-test && FORK_RPC=https://rpc.monad.xyz npx hardhat node) & ; evm_mine once; then:
+//   FORK_URL=http://127.0.0.1:8545 npm test
+import assert from 'node:assert/strict';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
-const hardhatDir = join(root, 'hardhat-test');
-const forkConfig = join(root, 'mcp/test/hardhat-fork.config.cjs');
-const localRpc = 'http://127.0.0.1:8545';
-
-async function waitForRpc(url, attempts = 40) {
-  for (let i = 0; i < attempts; i++) {
-    try {
-      execSync(`curl -s -X POST -H 'Content-Type: application/json' --data '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}' ${url}`, {
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'ignore'],
-      });
-      return;
-    } catch {
-      await sleep(500);
-    }
-  }
-  throw new Error('Hardhat node did not become ready');
-}
-
-function deployOnFork() {
-  const out = execSync(
-    `./node_modules/.bin/hardhat run ../mcp/test/fork-deploy.cjs --network localhost --config ../mcp/test/hardhat-fork.config.cjs`,
-    {
-      cwd: hardhatDir,
-      encoding: 'utf8',
-      env: { ...process.env, FORK_RPC: process.env.FORK_RPC },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    },
-  );
-  const jsonLine = out
-    .trim()
-    .split('\n')
-    .map((l) => l.trim())
-    .filter((l) => l.startsWith('{'))
-    .pop();
-  if (!jsonLine) throw new Error('fork-deploy produced no JSON');
-  return JSON.parse(jsonLine);
-}
-
-async function main() {
-  if (!process.env.FORK_RPC) {
-    console.log('skip: set FORK_RPC to run fork integration tests');
-    process.exit(0);
-  }
-
-  const node = spawn(
-    './node_modules/.bin/hardhat',
-    ['node', '--config', '../mcp/test/hardhat-fork.config.cjs', '--port', '8545'],
-    {
-      cwd: hardhatDir,
-      env: { ...process.env, FORK_RPC: process.env.FORK_RPC },
-      stdio: ['ignore', 'ignore', 'pipe'],
-    },
-  );
-
-  const stopNode = () => {
-    try {
-      node.kill('SIGTERM');
-    } catch {
-      /* */
-    }
-  };
-  process.on('exit', stopNode);
-  process.on('SIGINT', () => {
-    stopNode();
-    process.exit(130);
-  });
-
-  try {
-    await waitForRpc(localRpc);
-    const deployed = deployOnFork();
-
-    process.env.RPC_URL = localRpc;
-    process.env.MONPAD_CHAIN_ID = '143';
-    process.env.MONPAD_LAUNCHER = deployed.launcher;
-    process.env.MONPAD_HOOK = deployed.hook;
-    process.env.MONPAD_V4_ROUTER = deployed.v4Router;
-    process.env.MONPAD_POOL_MANAGER = deployed.poolManager;
-    process.env.MONPAD_STATE_VIEW = deployed.stateView;
-    process.env.MONSHI = deployed.monshi;
-
-    process.env.MONPAD_SIMULATE_ADDRESS = deployed.deployer;
-    resetConfigCache();
-
-    const spec = JSON.parse((await getSpec()).content[0].text);
-    if (!spec.contractsReady) throw new Error('spec should report contractsReady');
-
-    const list = JSON.parse((await listLaunches({ limit: 5 })).content[0].text);
-    if (list.count < 1) throw new Error('expected at least one launch');
-
-    const tokenInfo = JSON.parse((await getToken({ token: deployed.sampleToken })).content[0].text);
-    if (tokenInfo.creatorTaxBps !== 0) throw new Error('unexpected tax');
-    if (!tokenInfo.poolId) throw new Error('missing poolId');
-
-    const client = getPublicClient();
-    const simulateFrom = deployed.deployer;
-    const nonceBefore = await client.getTransactionCount({ address: simulateFrom });
-
-    const dryBuy = JSON.parse(
-      (await buy({ token: deployed.sampleToken, monIn: '1', minTokensOut: '1', dryRun: true })).content[0].text,
-    );
-    if (!dryBuy.dryRun || !dryBuy.simulated) throw new Error('buy dryRun should simulate');
-
-    const dryLaunch = JSON.parse(
-      (await launchToken({ name: 'Dry', symbol: 'DRY', dryRun: true })).content[0].text,
-    );
-    if (!dryLaunch.dryRun) throw new Error('launch dryRun expected');
-
-    const nonceAfter = await client.getTransactionCount({ address: simulateFrom });
-    if (nonceAfter !== nonceBefore) throw new Error('dryRun must not broadcast transactions');
-
-    console.log('ok: read tools + dryRun (no txs sent)');
-  } finally {
-    stopNode();
-  }
-}
-
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
+const url = process.env.FORK_URL;
+if (!url) { console.log('skipped: set FORK_URL to a running mainnet fork'); process.exit(0); }
+const home = mkdtempSync(join(tmpdir(), 'monpad-mcp-'));
+const transport = new StdioClientTransport({
+  command: 'node', args: ['server.mjs'],
+  env: { ...process.env, HOME: home, RPC_URL: url, MONPAD_PRIVATE_KEY: '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d', MAX_MON_PER_TX: '5', MAX_MON_PER_DAY: '8' },
 });
+const client = new Client({ name: 'test', version: '1' });
+await client.connect(transport);
+let n = 0; const ok = (m) => console.log(`PASS ${++n}. ${m}`);
+const call = async (name, args = {}) => { const r = await client.callTool({ name, arguments: args }); const text = r.content[0].text; let data; try { data = JSON.parse(text); } catch { data = text; } return { error: !!r.isError, data }; };
+
+const tools = (await client.listTools()).tools.map((t) => t.name);
+assert.deepEqual(tools.sort(), ['monpad_buy', 'monpad_claim_fees', 'monpad_get_monshi_burn', 'monpad_get_spec', 'monpad_get_token', 'monpad_launch_token', 'monpad_list_launches', 'monpad_sell', 'monpad_trending', 'monpad_wallet']); ok(`${tools.length} tools`);
+
+const spec = await call('monpad_get_spec'); assert.equal(spec.data.chainId, 143); assert.equal(spec.data.safety.maxMonPerTx, '5'); ok('spec shows safety limits');
+const list = await call('monpad_list_launches', { limit: 2 }); assert.ok(list.data.launches.length >= 1); const token = list.data.launches[0].token; ok(`list_launches: ${list.data.count} coin(s)`);
+const tk = await call('monpad_get_token', { token }); assert.equal(tk.data.token.toLowerCase(), token.toLowerCase()); ok('get_token');
+assert.ok((await call('monpad_trending', { limit: 3 })).data.trending.length >= 1); ok('trending');
+assert.ok(Number((await call('monpad_get_monshi_burn')).data.burned) > 0); ok('monshi burn');
+assert.equal((await call('monpad_get_token', { token: '0x0000000000000000000000000000000000000001' })).error, true); ok('unknown coin is a clean error');
+
+const dry = await call('monpad_buy', { token, monIn: '2' }); assert.equal(dry.data.dryRun, true); assert.ok(Number(dry.data.expectedTokens) > 0); ok(`buy defaults to a dry run: ${dry.data.expectedTokens} tokens`);
+const big = await call('monpad_buy', { token, monIn: '6', dryRun: false }); assert.equal(big.error, true); assert.match(big.data, /MAX_MON_PER_TX/); ok('per-transaction cap refuses 6 MON');
+const real = await call('monpad_buy', { token, monIn: '4', dryRun: false }); assert.equal(real.error, false); assert.ok(real.data.hash); ok(`real buy: ${real.data.expectedTokens} tokens`);
+const over = await call('monpad_buy', { token, monIn: '5', dryRun: false }); assert.equal(over.error, true); assert.match(over.data, /MAX_MON_PER_DAY/); ok('daily cap refuses the next buy');
+const w = await call('monpad_wallet', { token }); assert.ok(Number(w.data.tokenBalance) > 0); ok(`wallet: ${Number(w.data.mon).toFixed(0)} MON, ${Number(w.data.tokenBalance).toFixed(0)} tokens`);
+const sd = await call('monpad_sell', { token, percent: 50 }); assert.equal(sd.data.dryRun, true); ok(`sell dry run: ${sd.data.expectedMon} MON`);
+const sbig = await call('monpad_sell', { token, percent: 50, dryRun: false }); assert.equal(sbig.error, true); assert.match(sbig.data, /MAX_MON_PER_TX/); ok('sell proceeds count toward the cap (50% refused)');
+const sr = await call('monpad_sell', { token, percent: 5, dryRun: false }); assert.equal(sr.error, false); assert.ok(sr.data.hash); ok('real sell of 5%');
+const ld = await call('monpad_launch_token', { name: 'MCP Dry', symbol: 'MDRY', creatorTaxPct: 1 }); assert.equal(ld.data.dryRun, true); ok('launch dry run');
+const lr = await call('monpad_launch_token', { name: 'MCP Real', symbol: 'MREAL', creatorTaxPct: 1.5, devBuyMon: '1', dryRun: false }); assert.equal(lr.error, false); assert.ok(lr.data.token); ok(`real launch -> ${lr.data.token}`);
+const lt = await call('monpad_get_token', { token: lr.data.token }); assert.equal(lt.data.creatorTaxPct, 1.5); ok('launched coin has the 1.5% tax');
+const cl = await call('monpad_claim_fees'); assert.equal(cl.data.dryRun, true); ok('claim_fees dry run');
+console.log(`\nall ${n} checks passed`);
+await client.close();
