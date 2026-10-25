@@ -1,581 +1,270 @@
 import {
-  createPublicClient,
-  formatEther,
-  http,
-  parseAbiItem,
-  parseEther,
-  zeroAddress,
-  type Address,
-  type Chain,
-  type Hex,
-  type PublicClient,
-  type WalletClient,
+  decodeEventLog, encodeAbiParameters, formatEther, keccak256, maxUint256, toHex, zeroAddress,
+  type Address, type Hex,
 } from 'viem';
+import { erc20Abi, launcherAbi, routerAbi, stateViewAbi } from './abis.js';
+import { MAINNET, MON_USDC_POOL, MONPAD_POOL, TOKEN_SUPPLY } from './chain-config.js';
+import { resolveAddresses, type MonpadCreateOptions, type ResolvedAddresses } from './config.js';
+import { MonpadError, NotAMonpadToken, Paused, SlippageExceeded, WalletRequired, DeadlineExpired } from './errors.js';
 
-function randomSalt(): Hex {
-  const b = new Uint8Array(32);
-  globalThis.crypto.getRandomValues(b);
-  return `0x${[...b].map((x) => x.toString(16).padStart(2, '0')).join('')}` as Hex;
-}
-import { launcherAbi, hookAbi, stateViewAbi, routerAbi, erc20Abi } from './abis.js';
-import {
-  type MonpadCreateOptions,
-  type RemoteSpec,
-  type ResolvedAddresses,
-  requireLauncher,
-  requireRouter,
-  resolveAddresses,
-} from './config.js';
-import {
-  ContractsNotDeployed,
-  MaxMonExceeded,
-  MonpadError,
-  Paused,
-  PoolNotFound,
-  SlippageExceeded,
-  WalletRequired,
-} from './errors.js';
-import {
-  erc20AllowanceStateOverride,
-  monPerTokenFromSqrt,
-  poolKeyForToken,
-  poolIdFromKey,
-} from './pool.js';
+export type PoolKey = { currency0: Address; currency1: Address; fee: number; tickSpacing: number; hooks: Address };
 
-const swapEvent = parseAbiItem(
-  'event Swap(bytes32 indexed id, address indexed sender, int128 amount0, int128 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick, uint24 fee)',
-);
+export type Token = {
+  token: Address;
+  name: string;
+  symbol: string;
+  creator: Address;
+  creatorTaxBps: number;
+  /** 1% base fee plus the creator tax, in basis points. */
+  totalFeeBps: number;
+  poolId: Hex;
+  poolKey: PoolKey;
+  priceUsd: number;
+  marketCapUsd: number;
+  liquidity: bigint;
+};
+
+export type TradeResult = { hash?: Hex; amountOut: bigint; minOut: bigint; simulated: boolean };
+export type LaunchResult = { hash?: Hex; token?: Address; simulated: boolean; minUsdc: bigint };
 
 const BASE_FEE_BPS = 100;
-const VOLUME_BLOCKS = Number(process.env.MONPAD_VOLUME_BLOCKS || '5000');
+const SIM_FROM: Address = MAINNET.dead as Address;
+const bps = (n: bigint, slip: number) => (n * BigInt(10_000 - slip)) / 10_000n;
+
+const mapSlot = (owner: Address, slot: bigint): Hex => keccak256(encodeAbiParameters([{ type: 'address' }, { type: 'uint256' }], [owner, slot]));
+const allowSlot = (owner: Address, spender: Address, slot: bigint): Hex =>
+  keccak256(encodeAbiParameters([{ type: 'address' }, { type: 'bytes32' }], [spender, mapSlot(owner, slot)]));
+const word = (n: bigint): Hex => toHex(n, { size: 32 });
+
+export function createMonpad(opts: MonpadCreateOptions) {
+  // viem's strict generics don't help with a dynamic ABI/override layer, so the clients are loosely typed inside
+  const pc: any = opts.publicClient;
+  const wallet: any = opts.walletClient;
+  const a: ResolvedAddresses = resolveAddresses(opts.addresses);
+  const me = (): Address | undefined => (wallet?.account as any)?.address;
+  const needWallet = () => { if (!wallet || !wallet.account) throw new WalletRequired(); return wallet; };
+  const deadline = (sec = 600) => BigInt(Math.floor(Date.now() / 1000) + sec);
+
+  const quoteIs0 = (token: Address) => BigInt(a.usdc) < BigInt(token);
+  const poolKeyFor = (token: Address): PoolKey => {
+    const q0 = quoteIs0(token);
+    return { currency0: q0 ? a.usdc : token, currency1: q0 ? token : a.usdc, fee: MONPAD_POOL.fee, tickSpacing: MONPAD_POOL.tickSpacing, hooks: a.hook };
+  };
+  const poolIdOf = (k: PoolKey): Hex => keccak256(encodeAbiParameters(
+    [{ type: 'address' }, { type: 'address' }, { type: 'uint24' }, { type: 'int24' }, { type: 'address' }],
+    [k.currency0, k.currency1, k.fee, k.tickSpacing, k.hooks]));
+
+  /** Whole USDC per whole token, from the pool's sqrt price (USDC has 6 decimals, tokens 18). */
+  const usdcPerToken = (sqrt: bigint, q0: boolean) => {
+    const raw = Number(sqrt * sqrt) / Number(2n ** 192n);
+    if (!(raw > 0) || !Number.isFinite(raw)) return 0;
+    return q0 ? 1e12 / raw : raw * 1e12;
+  };
+
+  /** USDC base units per wei of MON, from the MON/USDC pool the router converts through. */
+  async function monUsdcRaw(): Promise<number> {
+    const id = poolIdOf({ currency0: zeroAddress, currency1: a.usdc, fee: MON_USDC_POOL.fee, tickSpacing: MON_USDC_POOL.tickSpacing, hooks: zeroAddress });
+    const s0 = (await pc.readContract({ address: a.stateView, abi: stateViewAbi, functionName: 'getSlot0', args: [id] })) as any;
+    const sqrt = s0[0] as bigint;
+    return Number(sqrt * sqrt) / Number(2n ** 192n);
+  }
+  const monPriceUsd = async () => (await monUsdcRaw()) * 1e12;
+
+  async function getToken(token: Address): Promise<Token> {
+    const [creator, taxBps, , poolId] = (await pc.readContract({ address: a.launcher, abi: launcherAbi, functionName: 'launches', args: [token] })) as [Address, number, bigint, Hex];
+    if (creator === zeroAddress) throw new NotAMonpadToken(token);
+    const [name, symbol, slot0, liquidity] = await Promise.all([
+      pc.readContract({ address: token, abi: erc20Abi, functionName: 'name' }).catch(() => '?'),
+      pc.readContract({ address: token, abi: erc20Abi, functionName: 'symbol' }).catch(() => '?'),
+      pc.readContract({ address: a.stateView, abi: stateViewAbi, functionName: 'getSlot0', args: [poolId] }),
+      pc.readContract({ address: a.stateView, abi: stateViewAbi, functionName: 'getLiquidity', args: [poolId] }),
+    ]);
+    const price = usdcPerToken((slot0 as any)[0] as bigint, quoteIs0(token));
+    return {
+      token, name: name as string, symbol: symbol as string, creator, creatorTaxBps: Number(taxBps), totalFeeBps: BASE_FEE_BPS + Number(taxBps),
+      poolId, poolKey: poolKeyFor(token), priceUsd: price, marketCapUsd: price * TOKEN_SUPPLY, liquidity: liquidity as bigint,
+    };
+  }
+
+  /** Newest first. */
+  async function listLaunches({ limit = 10 }: { limit?: number } = {}) {
+    const count = Number(await pc.readContract({ address: a.launcher, abi: launcherAbi, functionName: 'tokenCount' }));
+    const idx = Array.from({ length: Math.min(count, limit) }, (_, i) => count - 1 - i);
+    const tokens = (await Promise.all(idx.map((i) => pc.readContract({ address: a.launcher, abi: launcherAbi, functionName: 'allTokens', args: [BigInt(i)] })))) as Address[];
+    const launches = (await Promise.all(tokens.map((t) => getToken(t).catch(() => null)))).filter((x): x is Token => !!x);
+    return { count, launches };
+  }
+
+  // ── quotes: simulate the router with storage overrides so no balance or approval is needed ──
+  const usdcOverride = (owner: Address, spender: Address, amt: bigint) => ({
+    address: a.usdc, stateDiff: [{ slot: mapSlot(owner, 9n), value: word(amt) }, { slot: allowSlot(owner, spender, 10n), value: word(amt) }],
+  });
+  const tokenOverride = (token: Address, owner: Address, spender: Address, balance?: bigint) => ({
+    address: token, stateDiff: [{ slot: allowSlot(owner, spender, 1n), value: word(maxUint256) }, ...(balance !== undefined ? [{ slot: mapSlot(owner, 0n), value: word(balance) }] : [])],
+  });
+
+  async function quoteBuy({ token, monIn, usdcIn }: { token: Address; monIn?: bigint; usdcIn?: bigint }): Promise<{ tokensOut: bigint }> {
+    const account = me() ?? SIM_FROM;
+    const key = poolKeyFor(token);
+    if (monIn && monIn > 0n) {
+      const { result } = await pc.simulateContract({ address: a.router, abi: routerAbi, functionName: 'buyWithMon', args: [key, 0n, 0n, deadline(), 0n, 0n], account, value: monIn, stateOverride: [{ address: account, balance: monIn + 10n ** 18n }] });
+      return { tokensOut: result as bigint };
+    }
+    if (usdcIn && usdcIn > 0n) {
+      const { result } = await pc.simulateContract({ address: a.router, abi: routerAbi, functionName: 'buyWithUsdc', args: [key, usdcIn, 0n, deadline(), 0n], account, stateOverride: [usdcOverride(account, a.router, usdcIn)] });
+      return { tokensOut: result as bigint };
+    }
+    throw new MonpadError('pass monIn or usdcIn');
+  }
+
+  async function quoteSell({ token, tokensIn, receive = 'mon' }: { token: Address; tokensIn: bigint; receive?: 'mon' | 'usdc' }): Promise<{ amountOut: bigint }> {
+    const account = me() ?? SIM_FROM;
+    const key = poolKeyFor(token);
+    const stateOverride = [tokenOverride(token, account, a.router, me() ? undefined : tokensIn)];
+    if (receive === 'mon') {
+      const { result } = await pc.simulateContract({ address: a.router, abi: routerAbi, functionName: 'sellToMon', args: [key, tokensIn, 0n, 0n, deadline(), 0n, 0n], account, stateOverride });
+      return { amountOut: result as bigint };
+    }
+    const { result } = await pc.simulateContract({ address: a.router, abi: routerAbi, functionName: 'sellToUsdc', args: [key, tokensIn, 0n, deadline(), 0n], account, stateOverride });
+    return { amountOut: result as bigint };
+  }
+
+  function friendly(e: any): never {
+    const m = String(e?.shortMessage || e?.message || e);
+    if (/slippage|too little|Slippage/i.test(m)) throw new SlippageExceeded();
+    if (/Expired/i.test(m)) throw new DeadlineExpired();
+    if (/launches paused/i.test(m)) throw new Paused();
+    throw e instanceof MonpadError ? e : new MonpadError(m.slice(0, 300));
+  }
+
+  async function ensureAllowance(asset: Address, spender: Address, need: bigint) {
+    const w = needWallet();
+    const have = (await pc.readContract({ address: asset, abi: erc20Abi, functionName: 'allowance', args: [me()!, spender] })) as bigint;
+    if (have >= need) return;
+    const h = await w.writeContract({ address: asset, abi: erc20Abi, functionName: 'approve', args: [spender, need], account: w.account!, chain: w.chain } as any);
+    await pc.waitForTransactionReceipt({ hash: h });
+  }
+
+  async function send(req: Record<string, any>, simulate: boolean): Promise<Hex | undefined> {
+    const w = needWallet();
+    if (simulate) { await pc.simulateContract({ ...req, account: w.account }); return undefined; }
+    const { request } = await pc.simulateContract({ ...req, account: w.account });
+    const hash = await w.writeContract(request);
+    const receipt = await pc.waitForTransactionReceipt({ hash });
+    if (receipt.status !== 'success') throw new MonpadError(`transaction reverted (${hash})`);
+    return hash;
+  }
+
+  /** Buy with MON (monIn) or USDC (usdcIn). The minimum out is set from a live quote and `slippageBps` unless you pass minTokensOut. */
+  async function buy(p: { token: Address; monIn?: bigint; usdcIn?: bigint; slippageBps?: number; minTokensOut?: bigint; deadlineSec?: number; simulate?: boolean }): Promise<TradeResult> {
+    needWallet();
+    const { tokensOut } = await quoteBuy(p);
+    const minOut = p.minTokensOut ?? bps(tokensOut, p.slippageBps ?? 100);
+    const key = poolKeyFor(p.token);
+    try {
+      if (p.monIn && p.monIn > 0n) {
+        const hash = await send({ address: a.router, abi: routerAbi, functionName: 'buyWithMon', args: [key, minOut, 0n, deadline(p.deadlineSec), 0n, 0n], value: p.monIn }, !!p.simulate);
+        return { hash, amountOut: tokensOut, minOut, simulated: !!p.simulate };
+      }
+      if (!p.simulate) await ensureAllowance(a.usdc, a.router, p.usdcIn!);
+      const hash = await send({ address: a.router, abi: routerAbi, functionName: 'buyWithUsdc', args: [key, p.usdcIn!, minOut, deadline(p.deadlineSec), 0n] }, !!p.simulate);
+      return { hash, amountOut: tokensOut, minOut, simulated: !!p.simulate };
+    } catch (e) { return friendly(e); }
+  }
+
+  /** Sell for MON (default) or USDC. Handles the token approval. */
+  async function sell(p: { token: Address; tokensIn: bigint; receive?: 'mon' | 'usdc'; slippageBps?: number; minOut?: bigint; deadlineSec?: number; simulate?: boolean }): Promise<TradeResult> {
+    needWallet();
+    const receive = p.receive ?? 'mon';
+    const { amountOut } = await quoteSell({ token: p.token, tokensIn: p.tokensIn, receive });
+    const minOut = p.minOut ?? bps(amountOut, p.slippageBps ?? 100);
+    const key = poolKeyFor(p.token);
+    try {
+      if (!p.simulate) await ensureAllowance(p.token, a.router, p.tokensIn);
+      const req = receive === 'mon'
+        ? { address: a.router, abi: routerAbi, functionName: 'sellToMon', args: [key, p.tokensIn, minOut, 0n, deadline(p.deadlineSec), 0n, 0n] }
+        : { address: a.router, abi: routerAbi, functionName: 'sellToUsdc', args: [key, p.tokensIn, minOut, deadline(p.deadlineSec), 0n] };
+      if (p.simulate) {
+        // an approval may not exist yet: simulate with the approval overridden so the dry run still works
+        const account = me() ?? SIM_FROM;
+        await pc.simulateContract({ ...req, account, stateOverride: [tokenOverride(p.token, account, a.router)] });
+        return { amountOut, minOut, simulated: true };
+      }
+      const hash = await send(req, false);
+      return { hash, amountOut, minOut, simulated: false };
+    } catch (e) { return friendly(e); }
+  }
+
+  /** Launch a coin. Pay a dev buy in MON (devBuyMon) or USDC (devBuyUsdc). Creator tax is 0 to 500 bps. There is no creation fee. */
+  async function launch(p: { name: string; symbol: string; creatorTaxBps?: number; devBuyMon?: bigint; devBuyUsdc?: bigint; salt?: Hex; slippageBps?: number; simulate?: boolean }): Promise<LaunchResult> {
+    needWallet();
+    const tax = p.creatorTaxBps ?? 0;
+    if (!Number.isInteger(tax) || tax < 0 || tax > 500) throw new MonpadError('creatorTaxBps must be 0 to 500');
+    const paused = (await pc.readContract({ address: a.launcher, abi: launcherAbi, functionName: 'launchPaused' })) as boolean;
+    if (paused) throw new Paused();
+    const salt: Hex = p.salt ?? (`0x${Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) => b.toString(16).padStart(2, '0')).join('')}` as Hex);
+    let hash: Hex | undefined;
+    let minUsdc = 0n;
+    try {
+      if (p.devBuyUsdc && p.devBuyUsdc > 0n) {
+        const fee = (await pc.readContract({ address: a.launcher, abi: launcherAbi, functionName: 'creationFee' })) as bigint;
+        if (!p.simulate) await ensureAllowance(a.usdc, a.launcher, fee + p.devBuyUsdc);
+        hash = await send({ address: a.launcher, abi: launcherAbi, functionName: 'launch', args: [p.name, p.symbol, salt, tax, p.devBuyUsdc] }, !!p.simulate);
+      } else {
+        const value = p.devBuyMon ?? 0n;
+        // the launcher swaps MON to USDC first; refuse if that conversion lands more than slippage below the pool price
+        if (value > 0n) minUsdc = bps(BigInt(Math.floor((await monUsdcRaw()) * Number(value))), p.slippageBps ?? 300);
+        hash = await send({ address: a.launcher, abi: launcherAbi, functionName: 'launchWithMon', args: [p.name, p.symbol, salt, tax, minUsdc], value }, !!p.simulate);
+      }
+      let token: Address | undefined;
+      if (hash) {
+        const receipt = await pc.getTransactionReceipt({ hash });
+        for (const log of receipt.logs) {
+          if (log.address.toLowerCase() !== a.launcher.toLowerCase()) continue;
+          try { const ev = decodeEventLog({ abi: launcherAbi, data: log.data, topics: (log as any).topics }) as any; if (ev.eventName === 'Launched') { token = ev.args.token; break; } } catch { /* other event */ }
+        }
+      }
+      return { hash, token, simulated: !!p.simulate, minUsdc };
+    } catch (e) { return friendly(e); }
+  }
+
+  const claimable = async (account: Address, asset: Address) => (await pc.readContract({ address: a.launcher, abi: launcherAbi, functionName: 'claimable', args: [account, asset] })) as bigint;
+  /** Claim creator earnings in one asset (USDC or a coin you launched). */
+  async function claim(asset: Address, simulate = false) {
+    try { return { hash: await send({ address: a.launcher, abi: launcherAbi, functionName: 'claim', args: [asset] }, simulate), simulated: simulate }; } catch (e) { return friendly(e); }
+  }
+  /** Split the fees a pool has earned. Anyone can call this. */
+  async function harvest(token: Address, simulate = false) {
+    try { return { hash: await send({ address: a.launcher, abi: launcherAbi, functionName: 'harvest', args: [token] }, simulate), simulated: simulate }; } catch (e) { return friendly(e); }
+  }
+
+  async function getMonshiBurned() {
+    const [burned, totalSupply] = await Promise.all([
+      pc.readContract({ address: a.monshi, abi: erc20Abi, functionName: 'balanceOf', args: [MAINNET.dead] }) as Promise<bigint>,
+      pc.readContract({ address: a.monshi, abi: erc20Abi, functionName: 'totalSupply' }) as Promise<bigint>,
+    ]);
+    return { burned, totalSupply, circulating: totalSupply - burned };
+  }
+
+  async function getSpec() {
+    const [creationFee, paused] = await Promise.all([
+      pc.readContract({ address: a.launcher, abi: launcherAbi, functionName: 'creationFee' }) as Promise<bigint>,
+      pc.readContract({ address: a.launcher, abi: launcherAbi, functionName: 'launchPaused' }) as Promise<boolean>,
+    ]);
+    return {
+      chainId: MAINNET.chainId,
+      contracts: a,
+      pools: 'Uniswap V4, quoted in USDC. Pay and receive MON through the router.',
+      supply: TOKEN_SUPPLY,
+      baseFeeBps: BASE_FEE_BPS,
+      maxCreatorTaxBps: 500,
+      creationFeeUsdc: formatEther(creationFee * 10n ** 12n),
+      launchPaused: paused,
+      feeSplitOfBase: { creator: '70%', platform: '10%', burnMonshi: '10%', burnToken: '10%' },
+    };
+  }
+
+  return { addresses: a, poolKeyFor, poolIdOf, getToken, listLaunches, quoteBuy, quoteSell, buy, sell, launch, claimable, claim, harvest, getMonshiBurned, getSpec, monPriceUsd };
+}
 
 export type MonpadClient = ReturnType<typeof createMonpad>;
-
-export function createMonpad(options: MonpadCreateOptions = {}) {
-  const rpcUrl = options.rpcUrl || process.env.RPC_URL || process.env.MONAD_RPC || 'https://rpc.monad.xyz';
-  const chain: Chain =
-    (options.chain as Chain | undefined) ??
-    ({
-      id: Number(process.env.MONPAD_CHAIN_ID || 143),
-      name: 'Monad',
-      nativeCurrency: { name: 'MON', symbol: 'MON', decimals: 18 },
-      rpcUrls: { default: { http: [rpcUrl] } },
-    } as Chain);
-
-  let publicClient: PublicClient = createPublicClient({ chain, transport: http(rpcUrl) });
-  let walletClient = options.walletClient;
-  let addrs: ResolvedAddresses | null = null;
-  let remoteSpec: RemoteSpec | null = null;
-  const maxMonPerTx = options.maxMonPerTx ?? parseEther(process.env.MAX_MON_PER_TX || '5');
-
-  async function ensureAddrs() {
-    if (!addrs) addrs = await resolveAddresses(options);
-    return addrs;
-  }
-
-  function assertMaxMon(amount: bigint) {
-    if (amount > maxMonPerTx) {
-      throw new MaxMonExceeded(
-        `${formatEther(amount)} MON exceeds maxMonPerTx (${formatEther(maxMonPerTx)} MON)`,
-      );
-    }
-  }
-
-  function deadlineSeconds(offsetSec = 300) {
-    return BigInt(Math.floor(Date.now() / 1000) + offsetSec);
-  }
-
-  function minOut(amount: bigint, slippageBps: number) {
-    return (amount * BigInt(10_000 - slippageBps)) / 10_000n;
-  }
-
-  function requireWallet(): WalletClient {
-    if (!walletClient?.account) throw new WalletRequired();
-    return walletClient;
-  }
-
-  function accountAddress(account: NonNullable<WalletClient['account']> | Address): Address {
-    return typeof account === 'string' ? account : account.address;
-  }
-
-  async function poolKey(token: Address) {
-    const a = await ensureAddrs();
-    const { hook } = requireLauncher(a);
-    return poolKeyForToken(token, hook);
-  }
-
-  async function assertKnownToken(token: Address) {
-    const a = await ensureAddrs();
-    const { launcher } = requireLauncher(a);
-    const [creator] = await publicClient.readContract({
-      address: launcher,
-      abi: launcherAbi,
-      functionName: 'launches',
-      args: [token],
-    });
-    if (creator === zeroAddress) throw new PoolNotFound(token);
-  }
-
-  return {
-    get publicClient() {
-      return publicClient;
-    },
-    setPublicClient(client: PublicClient) {
-      publicClient = client;
-    },
-    get walletClient() {
-      return walletClient;
-    },
-    setWalletClient(w: WalletClient | undefined) {
-      walletClient = w;
-    },
-
-    async getSpec() {
-      const a = await ensureAddrs();
-      const fetchFn = options.fetch ?? globalThis.fetch;
-      const specUrl =
-        options.specUrl ??
-        process.env.MONPAD_SPEC_URL ??
-        (process.env.MONPAD_SITE ? `${process.env.MONPAD_SITE.replace(/\/$/, '')}/api/v1/spec` : '');
-      if (specUrl && fetchFn) {
-        try {
-          const res = await fetchFn(specUrl);
-          if (res.ok) remoteSpec = (await res.json()) as RemoteSpec;
-        } catch {
-          /* */
-        }
-      }
-      let platform = a.platform;
-      let hook = a.hook;
-      if (a.launcher) {
-        try {
-          platform =
-            platform ||
-            ((await publicClient.readContract({
-              address: a.launcher,
-              abi: launcherAbi,
-              functionName: 'platform',
-            })) as Address);
-          hook =
-            hook ||
-            ((await publicClient.readContract({
-              address: a.launcher,
-              abi: launcherAbi,
-              functionName: 'hook',
-            })) as Address);
-        } catch {
-          /* */
-        }
-      }
-      return {
-        chainId: chain.id,
-        remote: remoteSpec,
-        contracts: { ...a, platform, hook },
-        feePolicy: {
-          baseSwapFeeBps: BASE_FEE_BPS,
-          maxCreatorTaxBps: 500,
-          fromApi: remoteSpec?.fees ?? null,
-        },
-        maxMonPerTx: maxMonPerTx.toString(),
-      };
-    },
-
-    async getMonshiBurned() {
-      const a = await ensureAddrs();
-      if (!a.monshi || !a.dead) throw new ContractsNotDeployed('monshi/dead not in spec');
-      const [burned, totalSupply] = await Promise.all([
-        publicClient.readContract({ address: a.monshi, abi: erc20Abi, functionName: 'balanceOf', args: [a.dead] }),
-        publicClient.readContract({ address: a.monshi, abi: erc20Abi, functionName: 'totalSupply' }),
-      ]);
-      return { burned, totalSupply, circulating: totalSupply > burned ? totalSupply - burned : 0n };
-    },
-
-    async listLaunches({ limit = 10, cursor }: { limit?: number; cursor?: number } = {}) {
-      const a = await ensureAddrs();
-      const { launcher } = requireLauncher(a);
-      const n = Number(await publicClient.readContract({ address: launcher, abi: launcherAbi, functionName: 'tokenCount' }));
-      const end = cursor != null ? cursor - 1 : n - 1;
-      const start = Math.max(0, end - limit + 1);
-      const launches = [];
-      for (let i = end; i >= start && i >= 0; i--) {
-        const token = await publicClient.readContract({
-          address: launcher,
-          abi: launcherAbi,
-          functionName: 'allTokens',
-          args: [BigInt(i)],
-        });
-        const [creator, taxBps, , poolId] = await publicClient.readContract({
-          address: launcher,
-          abi: launcherAbi,
-          functionName: 'launches',
-          args: [token],
-        });
-        let name = '?';
-        let symbol = '?';
-        try {
-          name = await publicClient.readContract({ address: token, abi: erc20Abi, functionName: 'name' });
-          symbol = await publicClient.readContract({ address: token, abi: erc20Abi, functionName: 'symbol' });
-        } catch {
-          /* */
-        }
-        launches.push({ index: i, token, creator, creatorTaxBps: taxBps, poolId, name, symbol });
-      }
-      const nextCursor = start > 0 ? start : null;
-      return { count: n, launches, nextCursor };
-    },
-
-    async getToken(token: Address) {
-      await assertKnownToken(token);
-      const a = await ensureAddrs();
-      const { launcher, hook } = requireLauncher(a);
-      const [, taxBps, , poolId] = await publicClient.readContract({
-        address: launcher,
-        abi: launcherAbi,
-        functionName: 'launches',
-        args: [token],
-      });
-      const key = poolKeyForToken(token, hook);
-      if (!a.stateView) throw new ContractsNotDeployed('stateView not configured');
-      const [slot0, liquidity] = await Promise.all([
-        publicClient.readContract({ address: a.stateView, abi: stateViewAbi, functionName: 'getSlot0', args: [poolId] }),
-        publicClient.readContract({ address: a.stateView, abi: stateViewAbi, functionName: 'getLiquidity', args: [poolId] }),
-      ]);
-      const block = await publicClient.getBlockNumber();
-      const fromBlock = block > BigInt(VOLUME_BLOCKS) ? block - BigInt(VOLUME_BLOCKS) : 0n;
-      let volumeMon = 0n;
-      if (a.poolManager) {
-        try {
-          const logs = await publicClient.getLogs({
-            address: a.poolManager,
-            event: swapEvent,
-            args: { id: poolId },
-            fromBlock,
-            toBlock: block,
-          });
-          for (const log of logs) {
-            const a0 = log.args.amount0 ?? 0n;
-            volumeMon += a0 < 0n ? -a0 : a0;
-          }
-        } catch {
-          /* */
-        }
-      }
-      return {
-        token,
-        creatorTaxBps: taxBps,
-        totalSwapFeeBps: BASE_FEE_BPS + Number(taxBps),
-        poolId,
-        poolKey: key,
-        sqrtPriceX96: slot0[0],
-        tick: slot0[1],
-        approxMonPerToken: monPerTokenFromSqrt(slot0[0]),
-        liquidity,
-        volumeMonApprox: volumeMon,
-      };
-    },
-
-    async trending({ limit = 10, windowBlocks = VOLUME_BLOCKS } = {}) {
-      const { launches, count } = await this.listLaunches({ limit: Math.min(limit, 50) });
-      const a = await ensureAddrs();
-      const block = await publicClient.getBlockNumber();
-      const fromBlock = block > BigInt(windowBlocks) ? block - BigInt(windowBlocks) : 0n;
-      const scored = [];
-      for (const L of launches) {
-        let volumeMon = 0n;
-        if (a.poolManager) {
-          try {
-            const logs = await publicClient.getLogs({
-              address: a.poolManager,
-              event: swapEvent,
-              args: { id: L.poolId },
-              fromBlock,
-              toBlock: block,
-            });
-            for (const log of logs) {
-              const a0 = log.args.amount0 ?? 0n;
-              volumeMon += a0 < 0n ? -a0 : a0;
-            }
-          } catch {
-            /* */
-          }
-        }
-        scored.push({ ...L, volumeMon });
-      }
-      scored.sort((x, y) => (y.volumeMon > x.volumeMon ? 1 : -1));
-      return { count, trending: scored.slice(0, limit) };
-    },
-
-    async creatorEarnings(account: Address) {
-      const a = await ensureAddrs();
-      const { launcher } = requireLauncher(a);
-      const n = Number(await publicClient.readContract({ address: launcher, abi: launcherAbi, functionName: 'tokenCount' }));
-      const perToken: { token: Address; claimableToken: bigint }[] = [];
-      for (let i = 0; i < n; i++) {
-        const token = await publicClient.readContract({
-          address: launcher,
-          abi: launcherAbi,
-          functionName: 'allTokens',
-          args: [BigInt(i)],
-        });
-        const cTok = await publicClient.readContract({
-          address: launcher,
-          abi: launcherAbi,
-          functionName: 'claimable',
-          args: [account, token],
-        });
-        if (cTok > 0n) perToken.push({ token, claimableToken: cTok });
-      }
-      const claimableMon = await publicClient.readContract({
-        address: launcher,
-        abi: launcherAbi,
-        functionName: 'claimable',
-        args: [account, zeroAddress],
-      });
-      return { claimableMon, perToken };
-    },
-
-    async quoteBuy(token: Address, monIn: bigint, slippageBps = 100) {
-      const router = requireRouter(await ensureAddrs());
-      const key = await poolKey(token);
-      await assertKnownToken(token);
-      const simAddr = ((process.env.MONPAD_SIMULATE_ADDRESS as Address) || zeroAddress) as Address;
-      const account = walletClient?.account ?? simAddr;
-      const { result: tokensOut } = await publicClient.simulateContract({
-        address: router,
-        abi: routerAbi,
-        functionName: 'buyExactIn',
-        args: [key, 0n, deadlineSeconds(300), 0n],
-        value: monIn,
-        account,
-      });
-      const before = await this.getToken(token);
-      const priceImpact =
-        before.approxMonPerToken != null && tokensOut > 0n
-          ? Number(monIn) / Number(tokensOut) / before.approxMonPerToken - 1
-          : null;
-      const minOutWei = minOut(tokensOut, slippageBps);
-      return { tokensOut, minOut: minOutWei, priceImpact, slippageBps };
-    },
-
-    async quoteSell(token: Address, tokensIn: bigint, slippageBps = 100) {
-      const router = requireRouter(await ensureAddrs());
-      const key = await poolKey(token);
-      await assertKnownToken(token);
-      const simAddr = ((process.env.MONPAD_SIMULATE_ADDRESS as Address) || zeroAddress) as Address;
-      const account = walletClient?.account ?? simAddr;
-      const { result: monOut } = await publicClient.simulateContract({
-        address: router,
-        abi: routerAbi,
-        functionName: 'sellExactIn',
-        args: [key, tokensIn, 0n, deadlineSeconds(300), 0n],
-        account,
-        stateOverride: [erc20AllowanceStateOverride(token, accountAddress(account), router)],
-      });
-      return { monOut, minOut: minOut(monOut, slippageBps), priceImpact: null, slippageBps };
-    },
-
-    async buy(
-      token: Address,
-      monIn: bigint,
-      opts: {
-        slippageBps?: number;
-        deadline?: number;
-        simulate?: boolean;
-        maxMonPerTx?: bigint;
-        minTokensOut?: bigint;
-      } = {},
-    ) {
-      const slippageBps = opts.slippageBps ?? 100;
-      const simulate = opts.simulate !== false;
-      const dl = opts.deadline ?? 300;
-      assertMaxMon(opts.maxMonPerTx ?? monIn);
-      const router = requireRouter(await ensureAddrs());
-      const key = await poolKey(token);
-      await assertKnownToken(token);
-
-      const quote = await this.quoteBuy(token, monIn, slippageBps);
-      const minTokensOut = opts.minTokensOut ?? minOut(quote.tokensOut, slippageBps);
-      if (minTokensOut === 0n) throw new SlippageExceeded('minTokensOut would be zero');
-
-      const simAddr = ((process.env.MONPAD_SIMULATE_ADDRESS as Address) || zeroAddress) as Address;
-      const w = simulate ? undefined : requireWallet();
-      const account = w?.account ?? simAddr;
-      const txArgs = {
-        address: router,
-        abi: routerAbi,
-        functionName: 'buyExactIn' as const,
-        args: [key, minTokensOut, deadlineSeconds(dl), 0n] as const,
-        value: monIn,
-        account,
-      };
-
-      const sim = await publicClient.simulateContract(txArgs);
-      if (simulate) {
-        return { simulated: true as const, ...quote, minTokensOut, tokensOut: sim.result, request: sim.request };
-      }
-
-      const hash = await w!.writeContract({ ...txArgs, account: w!.account!, chain });
-      const receipt = await publicClient.waitForTransactionReceipt({ hash });
-      if (receipt.status !== 'success') throw new SlippageExceeded('buy transaction reverted');
-      return { simulated: false as const, hash, tokensOut: sim.result, minTokensOut };
-    },
-
-    async sell(
-      token: Address,
-      tokensIn: bigint,
-      opts: { slippageBps?: number; deadline?: number; simulate?: boolean; minMonOut?: bigint } = {},
-    ) {
-      const slippageBps = opts.slippageBps ?? 100;
-      const simulate = opts.simulate !== false;
-      const dl = opts.deadline ?? 300;
-      const router = requireRouter(await ensureAddrs());
-      const key = await poolKey(token);
-      await assertKnownToken(token);
-      const simAddr = ((process.env.MONPAD_SIMULATE_ADDRESS as Address) || zeroAddress) as Address;
-      const w = simulate ? undefined : requireWallet();
-      const account = w?.account ?? simAddr;
-
-      if (!simulate) {
-        const allowance = await publicClient.readContract({
-          address: token,
-          abi: erc20Abi,
-          functionName: 'allowance',
-          args: [w!.account!.address, router],
-        });
-        if (allowance < tokensIn) {
-          const ah = await w!.writeContract({
-            address: token,
-            abi: erc20Abi,
-            functionName: 'approve',
-            args: [router, tokensIn],
-            account: w!.account!,
-            chain,
-          });
-          await publicClient.waitForTransactionReceipt({ hash: ah });
-        }
-      }
-
-      const quote = await this.quoteSell(token, tokensIn, slippageBps);
-      const minMonOut = opts.minMonOut ?? minOut(quote.monOut, slippageBps);
-      if (minMonOut === 0n) throw new SlippageExceeded('minMonOut would be zero');
-
-      const txArgs = {
-        address: router,
-        abi: routerAbi,
-        functionName: 'sellExactIn' as const,
-        args: [key, tokensIn, minMonOut, deadlineSeconds(dl), 0n] as const,
-        account,
-        ...(simulate
-          ? { stateOverride: [erc20AllowanceStateOverride(token, accountAddress(account), router)] }
-          : {}),
-      };
-      const sim = await publicClient.simulateContract(txArgs);
-      if (simulate) {
-        return { simulated: true as const, ...quote, minMonOut, request: sim.request };
-      }
-
-      const hash = await w!.writeContract({ ...txArgs, account: w!.account!, chain });
-      const receipt = await publicClient.waitForTransactionReceipt({ hash });
-      if (receipt.status !== 'success') throw new SlippageExceeded('sell transaction reverted');
-      return { simulated: false as const, hash, monOut: sim.result, minMonOut };
-    },
-
-    async launch(
-      params: {
-        name: string;
-        symbol: string;
-        metadataUri?: string;
-        creatorTaxBps?: number;
-        devBuyMon?: bigint;
-        salt?: Hex;
-        simulate?: boolean;
-      },
-    ) {
-      const simulate = params.simulate !== false;
-      const a = await ensureAddrs();
-      const { launcher } = requireLauncher(a);
-      const paused = await publicClient.readContract({
-        address: launcher,
-        abi: launcherAbi,
-        functionName: 'launchPaused',
-      });
-      if (paused) throw new Paused();
-
-      const tax = params.creatorTaxBps ?? 0;
-      if (tax < 0 || tax > 500) throw new MonpadError('creatorTaxBps must be 0–500 (0–5%)');
-      const creationFee = await publicClient.readContract({
-        address: launcher,
-        abi: launcherAbi,
-        functionName: 'creationFee',
-      });
-      const dev = params.devBuyMon ?? 0n;
-      const value = creationFee + dev;
-      if (!simulate) assertMaxMon(value);
-
-      const salt = params.salt ?? randomSalt();
-      const simAddr = ((process.env.MONPAD_SIMULATE_ADDRESS as Address) || zeroAddress) as Address;
-      const w = simulate ? undefined : requireWallet();
-      const account = w?.account ?? simAddr;
-      const txArgs = {
-        address: launcher,
-        abi: launcherAbi,
-        functionName: 'launch' as const,
-        args: [params.name, params.symbol, salt, tax] as const,
-        value,
-        account,
-      };
-
-      const sim = await publicClient.simulateContract(txArgs);
-      const gas = await publicClient.estimateContractGas({ ...txArgs, account });
-
-      if (simulate) {
-        return {
-          simulated: true as const,
-          gas,
-          creationFee,
-          metadataUri: params.metadataUri ?? null,
-          note: params.metadataUri ? 'metadataUri is off-chain until token-meta is wired' : undefined,
-        };
-      }
-
-      const hash = await w!.writeContract({ ...txArgs, account: w!.account!, chain });
-      const receipt = await publicClient.waitForTransactionReceipt({ hash });
-      if (receipt.status !== 'success') throw new MonpadError('launch reverted');
-      return { simulated: false as const, hash, gas: receipt.gasUsed };
-    },
-
-    async claim(asset: Address) {
-      const a = await ensureAddrs();
-      const { launcher } = requireLauncher(a);
-      const w = requireWallet();
-      const hash = await w.writeContract({
-        address: launcher,
-        abi: launcherAbi,
-        functionName: 'claim',
-        args: [asset],
-        account: w.account!,
-        chain,
-      });
-      const receipt = await publicClient.waitForTransactionReceipt({ hash });
-      if (receipt.status !== 'success') throw new MonpadError('claim reverted');
-      return { hash };
-    },
-
-    async harvest(token: Address) {
-      const a = await ensureAddrs();
-      const { launcher } = requireLauncher(a);
-      const w = requireWallet();
-      const hash = await w.writeContract({
-        address: launcher,
-        abi: launcherAbi,
-        functionName: 'harvest',
-        args: [token],
-        account: w.account!,
-        chain,
-      });
-      const receipt = await publicClient.waitForTransactionReceipt({ hash });
-      if (receipt.status !== 'success') throw new MonpadError('harvest reverted');
-      return { hash };
-    },
-  };
-}

@@ -200,7 +200,14 @@ await wallet.writeContract({
             <div className="p-3"><Ic>GET /api/v1/candles</Ic><div className="text-white/60 text-sm mt-1">Price candles for a pool (1m to 1d).</div></div>
             <div className="p-3"><Ic>POST /api/mcp</Ic><div className="text-white/60 text-sm mt-1">The AI connector (MCP over HTTP).</div></div>
           </div>
-          <P>A TypeScript SDK and a self-hosted MCP server for bots with their own wallet are being rebuilt for these contracts. Until they are back, use the router calls above.</P>
+          <P>Prefer a library? <Ic>@monpad/sdk</Ic> wraps all of this: <Ic>listLaunches</Ic>, <Ic>quoteBuy</Ic>, <Ic>buy</Ic>, <Ic>sell</Ic>, <Ic>launch</Ic>, <Ic>claim</Ic>. It sets the minimum-out for you, handles approvals, and takes MON or USDC.</P>
+          <CodeBlock>{`npm i @monpad/sdk viem
+
+const monpad = createMonpad({ publicClient, walletClient });   // Monad mainnet addresses built in
+await monpad.buy({ token, monIn: parseEther('0.5') });
+await monpad.launch({ name: 'Milk Baron', symbol: 'MILK', creatorTaxBps: 200, devBuyMon: parseEther('2') });`}</CodeBlock>
+          <P>Want an agent that trades on its own wallet? Run the self-hosted MCP server with a burner key. Writes are dry runs until you say otherwise, and spend caps apply.</P>
+          <CodeBlock>{`{ "mcpServers": { "monpad": { "command": "npx", "args": ["-y", "@monpad/mcp"], "env": { "MONPAD_PRIVATE_KEY": "<a small burner wallet>" } } } }`}</CodeBlock>
 
           <H2 id="contracts">Contracts</H2>
           <div className="rounded-xl border border-white/10 divide-y divide-white/10 mb-4">

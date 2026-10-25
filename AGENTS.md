@@ -48,9 +48,11 @@ curl -s https://www.monpad.net/api/v1/burn  | jq .
 | SDK | `sdk/` (`@monpad/sdk`) |
 | MCP | `mcp/server.mjs` (`@monpad/mcp`, Uniswap V4 launcher) |
 
-### MCP (V4)
+### MCP and SDK (V4)
 
-Package: `mcp/` → **`@monpad/mcp`** (`npx -y @monpad/mcp`). Targets **MonpadHookLauncher** (no curves). Set `MONPAD_LAUNCHER`, `MONPAD_HOOK`, and `MONPAD_V4_ROUTER` when deployed; empty config returns *contracts not deployed yet*. Default **`dryRun: true`** (no key); **`MONPAD_PRIVATE_KEY`** burner for broadcast. Caps: `MAX_MON_PER_TX` / `MAX_MON_PER_DAY` (includes sell proceeds). See `mcp/README.md` and `CONTRACT-UV4.md`.
+- **Hosted MCP** (`pages/api/mcp.ts`, `lib/mcp/tools.ts`): `https://www.monpad.net/api/mcp`. No keys; read tools plus buy/sell/launch **links** that open the site prefilled (`?side=&pay=&amount=`, `/create?name=&symbol=&tax=&devbuy=`). One-click setup on `/ai`.
+- **Self-hosted MCP** (`mcp/`, `@monpad/mcp`): burner wallet via `MONPAD_PRIVATE_KEY`, dry run by default, caps `MAX_MON_PER_TX` / `MAX_MON_PER_DAY` (sell proceeds count). Built on the SDK.
+- **SDK** (`sdk/`, `@monpad/sdk`): Monad mainnet addresses built in (`src/chain-config.ts`). Fork tests: `FORK_URL=http://127.0.0.1:8545 npm test` in `sdk/` and `mcp/` (start `hardhat node` with `FORK_RPC` in `hardhat-test`, then `evm_mine` once).
 
 ### 3. Storage (token PFPs — same as original pad)
 
