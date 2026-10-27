@@ -1890,7 +1890,7 @@ a.lh-card:hover { transform: translateY(-2px); border-color: rgba(190,170,255,0.
 @media (max-width: 1100px) { .lh-script { display: none; } .lh-cards { grid-template-columns: 1fr; } .lh-steps { grid-template-columns: 1fr 1fr; gap: 10px; } .lh-step { margin-right: 0; } .lh-arrow { display: none; } }
 @media (max-width: 767px) {
 
-  .lh-hero { padding-top: 140px; min-height: 0; }
+  .lh-hero { padding-top: 215px; min-height: 0; }
   .lh-stats { grid-template-columns: 1fr 1fr; }
   .lh-steps { grid-template-columns: 1fr; }
   .lh::after { background: linear-gradient(180deg, rgba(7,5,12,0.5) 0%, rgba(10,6,28,0.55) 40%, var(--bg) 92%); }
@@ -1904,3 +1904,4 @@ a.lh-card:hover { transform: translateY(-2px); border-color: rgba(190,170,255,0.
 @media (max-width: 1100px) { .lh-yours ~ .lh-yours { display: none; } }
 @media (max-width: 1280px) { .pad-root.is-home .pad-built { display: none; } }
 @media (max-width: 767px) { .pad-splash video { transform: scale(1.7); } } /* the clip is 4:3; zoom it on phones so the wordmark is readable */
+@media (min-width: 481px) and (max-width: 767px) { .lh-hero { padding-top: 120px; } }
