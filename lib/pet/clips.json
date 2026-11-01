@@ -1,12 +1,182 @@
 {
  "kit-happy": {
-  "bodyFrac": 0.8632,
-  "aspect": 0.7599,
-  "margin": 0.08
+  "bodyFrac": 1,
+  "aspect": 1.2167,
+  "margin": 0,
+  "bust": true
  },
  "adult-ok": {
-  "bodyFrac": 0.8984,
-  "aspect": 0.6104,
-  "margin": 0.08
+  "bodyFrac": 1,
+  "aspect": 1.0796,
+  "margin": 0,
+  "bust": true
+ },
+ "teen-happy": {
+  "bodyFrac": 1,
+  "aspect": 0.9481,
+  "margin": 0,
+  "bust": true
+ },
+ "kit-ok": {
+  "bodyFrac": 1,
+  "aspect": 1.2167,
+  "margin": 0,
+  "bust": true
+ },
+ "kit-hungry": {
+  "bodyFrac": 1,
+  "aspect": 1.413,
+  "margin": 0,
+  "bust": true
+ },
+ "kit-sad": {
+  "bodyFrac": 1,
+  "aspect": 1.2981,
+  "margin": 0,
+  "bust": true
+ },
+ "kit-sleepy": {
+  "bodyFrac": 1,
+  "aspect": 1.5519,
+  "margin": 0,
+  "bust": true
+ },
+ "kit-sulking": {
+  "bodyFrac": 1,
+  "aspect": 1.2426,
+  "margin": 0,
+  "bust": true
+ },
+ "kit-eat": {
+  "bodyFrac": 1,
+  "aspect": 1.2167,
+  "margin": 0,
+  "bust": true
+ },
+ "kit-sleep": {
+  "bodyFrac": 1,
+  "aspect": 1.4611,
+  "margin": 0,
+  "bust": true
+ },
+ "teen-ok": {
+  "bodyFrac": 1,
+  "aspect": 0.9574,
+  "margin": 0,
+  "bust": true
+ },
+ "teen-hungry": {
+  "bodyFrac": 1,
+  "aspect": 0.9574,
+  "margin": 0,
+  "bust": true
+ },
+ "teen-sad": {
+  "bodyFrac": 1,
+  "aspect": 1.25,
+  "margin": 0,
+  "bust": true
+ },
+ "teen-sleepy": {
+  "bodyFrac": 1,
+  "aspect": 0.9852,
+  "margin": 0,
+  "bust": true
+ },
+ "teen-sulking": {
+  "bodyFrac": 1,
+  "aspect": 1.413,
+  "margin": 0,
+  "bust": true
+ },
+ "teen-eat": {
+  "bodyFrac": 1,
+  "aspect": 1.1759,
+  "margin": 0,
+  "bust": true
+ },
+ "teen-sleep": {
+  "bodyFrac": 1,
+  "aspect": 1.6574,
+  "margin": 0,
+  "bust": true
+ },
+ "adult-happy": {
+  "bodyFrac": 1,
+  "aspect": 1.1759,
+  "margin": 0,
+  "bust": true
+ },
+ "adult-hungry": {
+  "bodyFrac": 1,
+  "aspect": 1.1611,
+  "margin": 0,
+  "bust": true
+ },
+ "adult-sad": {
+  "bodyFrac": 1,
+  "aspect": 1.0537,
+  "margin": 0,
+  "bust": true
+ },
+ "adult-sleepy": {
+  "bodyFrac": 1,
+  "aspect": 1.1204,
+  "margin": 0,
+  "bust": true
+ },
+ "adult-sulking": {
+  "bodyFrac": 1,
+  "aspect": 1.0389,
+  "margin": 0,
+  "bust": true
+ },
+ "adult-eat": {
+  "bodyFrac": 1,
+  "aspect": 1.0796,
+  "margin": 0,
+  "bust": true
+ },
+ "adult-sleep": {
+  "bodyFrac": 1,
+  "aspect": 1.3796,
+  "margin": 0,
+  "bust": true
+ },
+ "adult-wash": {
+  "bodyFrac": 1,
+  "aspect": 1.4296,
+  "margin": 0,
+  "bust": true
+ },
+ "legend-ok": {
+  "bodyFrac": 1,
+  "aspect": 0.9574,
+  "margin": 0,
+  "bust": true
+ },
+ "legend-hungry": {
+  "bodyFrac": 1,
+  "aspect": 1.3074,
+  "margin": 0,
+  "bust": true
+ },
+ "legend-sleepy": {
+  "bodyFrac": 1,
+  "aspect": 1.487,
+  "margin": 0,
+  "bust": true
+ },
+ "legend-sulking": {
+  "bodyFrac": 1,
+  "aspect": 0.8019,
+  "margin": 0,
+  "bust": true
+ },
+ "legend-eat": {
+  "bodyFrac": 1,
+  "aspect": 1.2167,
+  "margin": 0,
+  "bust": true
  }
 }
