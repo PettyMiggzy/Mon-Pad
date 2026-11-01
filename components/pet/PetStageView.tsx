@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { PET, type Cosmetic, type Mood, type StageId } from '@/lib/pet/config';
 import anchors from '@/lib/pet/anchors.json';
+import clipData from '@/lib/pet/clips.json';
 
 type Head = { cx: number; w: number; top: number; h: number; ratio: number };
 const HEADS = anchors as Record<string, Head>;
@@ -12,6 +13,11 @@ function place(item: Cosmetic, head: Head): React.CSSProperties {
   const top = slot === 'hat' ? head.top + 0.32 * head.h - hPct : slot === 'face' ? head.top + 0.53 * head.h - hPct / 2 : slot === 'neck' ? head.top + 1.0 * head.h - hPct * 0.15 : head.top + 0.9 * head.h;
   return { left: `${head.cx}%`, top: `${top}%`, width: `${w}%`, transform: 'translateX(-50%)' };
 }
+
+type Clip = { bodyFrac: number; aspect: number; margin: number };
+const CLIPS = clipData as Record<string, Clip>;
+// Animated clips are transparent VP9 webm. Safari and iOS cannot play those with transparency, so they keep the still pictures.
+const clipsPlayable = () => typeof navigator !== 'undefined' && !/^((?!chrome|android|crios|fxios|edg).)*safari/i.test(navigator.userAgent) && document.createElement('video').canPlayType('video/webm; codecs="vp9"') !== '';
 
 export type Pose = 'eat' | 'wash' | 'sleep' | null;
 export type Fx = { key: number; emoji: string; n?: number } | null;
@@ -30,6 +36,8 @@ export default function PetStageView({ stage, mood, pose, equipped, fx, onPoke }
   const [walkMs, setWalkMs] = useState(0);
   const [bits, setBits] = useState<{ id: number; emoji: string; dx: number }[]>([]);
   const [failed, setFailed] = useState<string[]>([]);
+  const [canClip, setCanClip] = useState(false);
+  useEffect(() => { setCanClip(clipsPlayable()); }, []);
   const pokes = useRef<number[]>([]);
   const idc = useRef(0);
 
@@ -76,6 +84,8 @@ export default function PetStageView({ stage, mood, pose, equipped, fx, onPoke }
     setTimeout(() => setMotion('idle'), dizzy ? 1200 : 600);
   };
 
+  const clipKey = pose ? `${stage}-${pose}` : `${stage}-${mood}`;
+  const clip = canClip && equipped.length === 0 && !failed.includes(clipKey) ? CLIPS[clipKey] : undefined; // outfits are overlays, which cannot follow a video
   const wanted = pose ? `/pet/${stage}-${pose}.webp` : `/pet/${stage}-${mood}.webp`;
   const useWanted = !failed.includes(wanted);
   const src = useWanted ? wanted : `/pet/${stage}-${mood}.webp`;
@@ -92,10 +102,16 @@ export default function PetStageView({ stage, mood, pose, equipped, fx, onPoke }
         <button type="button" onPointerDown={poke} aria-label="Poke Monshi" className="relative block cursor-pointer border-0 bg-transparent p-0 outline-none">
           <div className={moveClass} style={{ transformOrigin: '50% 100%', ['--face' as any]: face }}>
             <div className={breath} style={{ transformOrigin: '50% 100%' }}>
+              {clip ? (
+                <div className="relative" style={{ height: heightPx, width: Math.round(heightPx * clip.aspect / clip.bodyFrac), transform: `scaleX(${face})` }}>
+                  <video key={clipKey} src={`/pet/clips/${clipKey}.webm`} autoPlay loop muted playsInline preload="auto" aria-label={`Monshi is ${pose ?? mood}`} onError={() => setFailed((f) => [...f, clipKey])} className="pointer-events-none absolute left-0 block max-w-none" style={{ height: heightPx / clip.bodyFrac, width: heightPx * clip.aspect / clip.bodyFrac, bottom: -(heightPx / clip.bodyFrac) * (1 - clip.bodyFrac) / 2 }} />
+                </div>
+              ) : (
               <div className="relative inline-block" style={{ height: heightPx, transform: `scaleX(${face})` }}>
                 <img src={src} alt={`Monshi is ${pose ?? mood}`} draggable={false} onError={() => setFailed((f) => [...f, wanted])} className="relative z-10 block h-full w-auto max-w-none" />
                 {head && equipped.map((c) => <img key={c} src={`/pet/items/${c}.webp`} alt="" draggable={false} className={`pointer-events-none absolute ${PET.cosmetics[c].slot === 'back' ? 'z-0' : 'z-20'}`} style={place(c, head)} />)}
               </div>
+              )}
             </div>
           </div>
           {mood === 'hungry' && !pose && <span className="pet-thought absolute -top-5 left-1/2 text-xl">💭🥛</span>}

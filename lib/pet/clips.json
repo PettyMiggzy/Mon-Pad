@@ -1,0 +1,12 @@
+{
+ "kit-happy": {
+  "bodyFrac": 0.8632,
+  "aspect": 0.7599,
+  "margin": 0.08
+ },
+ "adult-ok": {
+  "bodyFrac": 0.8984,
+  "aspect": 0.6104,
+  "margin": 0.08
+ }
+}
