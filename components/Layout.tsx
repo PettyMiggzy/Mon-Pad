@@ -118,6 +118,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <nav>
           <Link href="/docs">Docs</Link>
           <Link href="/api/v1/spec">Spec</Link>
+          <Link href="/pet">Pet</Link>
           <Link href="/rewards">Rewards</Link>
           <Link href="/bounties">Bounties</Link>
           <Link href="/studio">Studio</Link>

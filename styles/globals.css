@@ -1905,3 +1905,7 @@ a.lh-card:hover { transform: translateY(-2px); border-color: rgba(190,170,255,0.
 @media (max-width: 1280px) { .pad-root.is-home .pad-built { display: none; } }
 @media (max-width: 767px) { .pad-splash video { transform: scale(1.7); } } /* the clip is 4:3; zoom it on phones so the wordmark is readable */
 @media (min-width: 481px) and (max-width: 767px) { .lh-hero { padding-top: 120px; } }
+
+.pet-bob { animation: pet-bob 3.2s ease-in-out infinite; filter: drop-shadow(0 14px 18px rgba(0,0,0,.45)); }
+@keyframes pet-bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@media (prefers-reduced-motion: reduce) { .pet-bob { animation: none; } }
