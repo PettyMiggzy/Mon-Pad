@@ -1,19 +1,19 @@
-// Tamagotchi Monshi: a personal pet to raise and train. All state lives on this device; no wallet, no account.
+// My Monshi: a personal pet to raise, train and talk to. The pet lives on this device; a wallet is only needed to buy supplies with MONSHI.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAccount, usePublicClient, useSignMessage, useWriteContract } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { parseAbi, type Address } from 'viem';
-import { COIN_COSMETICS, PET, type Cosmetic, type Food, type NeedKey, type SkillKey, type StageId } from '@/lib/pet/config';
+import { PET, type Cosmetic, type Food, type NeedKey, type SkillKey, type StageId } from '@/lib/pet/config';
 import { PREMIUM, type PremiumItem } from '@/lib/pet/shop';
 import { play, setSound, soundOn } from '@/lib/pet/sound';
 import { disablePush, enablePush, pushConfigured, pushEnabled, pushSupported, reschedulePush } from '@/lib/pet/reminder';
 import { studioSig, postJson } from '@/lib/launchClient';
 import anchors from '@/lib/pet/anchors.json';
-import { applyPurchases, buyCosmetic, buyFood, canTrain, claimDaily, dailyClaimed, feed, finishPlay, finishTrain, moodOf, skillNeed, sleep, SKILL_KEYS, stageOf, tick, toggleCosmetic, wake, wash, type Pet } from '@/lib/pet/game';
+import { applyPurchases, canTalk, canTrain, claimDaily, dailyClaimed, feed, finishPlay, finishTrain, moodOf, skillNeed, sleep, SKILL_KEYS, stageOf, talk, talksToday, tick, toggleCosmetic, wake, wash, type Pet } from '@/lib/pet/game';
 import { loadPet, resetPet, savePet } from '@/lib/pet/storage';
 import Drill from './Drill';
 
-type Tab = 'home' | 'train' | 'room' | 'help';
+type Tab = 'home' | 'talk' | 'train' | 'room' | 'help';
 const NEEDS: { key: NeedKey; label: string; icon: string; color: string }[] = [
   { key: 'hunger', label: 'Hunger', icon: '🍗', color: '#f2b45f' }, { key: 'happiness', label: 'Happy', icon: '💜', color: '#d59af5' },
   { key: 'energy', label: 'Energy', icon: '⚡', color: '#f5d46b' }, { key: 'cleanliness', label: 'Clean', icon: '🫧', color: '#82d7e8' },
@@ -79,11 +79,11 @@ export default function PetGame() {
   return (
     <main className="pet mx-auto max-w-[520px] px-3 pb-24 pt-4">
       <header className="mb-3 flex items-center justify-between">
-        <div><div className="text-[11px] font-black uppercase tracking-[.25em] text-purple-200/70">A tiny daily adventure</div><h1 className="text-2xl font-black">Tamagotchi <span className="text-purple-300">Monshi</span></h1></div>
-        <div className="rounded-xl bg-white/10 px-3 py-2 text-sm font-black">🪙 {pet.coins}</div>
+        <div><div className="text-[11px] font-black uppercase tracking-[.25em] text-purple-200/70">A tiny daily adventure</div><h1 className="text-2xl font-black">My <span className="text-purple-300">Monshi</span></h1></div>
+        <div className="flex gap-1 text-sm font-black" aria-label="Supplies">{(Object.keys(PET.foods) as Food[]).map((f) => <span key={f} className={`rounded-xl px-2 py-2 ${pet.inventory[f] === 0 ? "bg-red-500/25" : "bg-white/10"}`}>{PET.foods[f].icon} {pet.inventory[f]}</span>)}</div>
       </header>
-      <nav className="mb-3 grid grid-cols-4 gap-1 rounded-2xl border border-white/10 bg-black/20 p-1" aria-label="Pet sections">
-        {([['home', '🏠', 'Home'], ['train', '🏋️', 'Train'], ['room', '🛋️', 'Room'], ['help', '📖', 'Help']] as [Tab, string, string][]).map(([id, icon, label]) => (
+      <nav className="mb-3 grid grid-cols-5 gap-1 rounded-2xl border border-white/10 bg-black/20 p-1" aria-label="Pet sections">
+        {([['home', '🏠', 'Home'], ['talk', '💬', 'Talk'], ['train', '🏋️', 'Train'], ['room', '🛋️', 'Room'], ['help', '📖', 'Help']] as [Tab, string, string][]).map(([id, icon, label]) => (
           <button key={id} type="button" onClick={() => { setTab(id); setToast(''); }} className={`rounded-xl py-2 text-[11px] font-bold ${tab === id ? 'bg-purple-500/40 text-white' : 'text-purple-100/60'}`}><span className="block text-lg">{icon}</span>{label}</button>
         ))}
       </nav>
@@ -125,7 +125,7 @@ export default function PetGame() {
               <button key={f} type="button" disabled={asleep || pet.inventory[f] === 0} onClick={() => act((p) => feed(p, f), f === 'milk' ? 'Milk time. His favourite!' : 'Crunch. Excellent choice.', 'feed')} className="rounded-2xl bg-purple-500/30 p-3 text-left disabled:opacity-40"><div className="text-2xl">{PET.foods[f].icon}</div><div className="font-black">Feed {PET.foods[f].label.toLowerCase()}</div><div className="text-[10px] text-purple-100/70">{pet.inventory[f]} left</div></button>
             ))}
             <button type="button" disabled={asleep} onClick={() => setDrill({ play: true })} className="rounded-2xl bg-white/10 p-3 text-left disabled:opacity-40"><div className="text-2xl">🎾</div><div className="font-black">Play together</div><div className="text-[10px] text-purple-100/70">{PET.play.seconds}-second tap game</div></button>
-            <button type="button" disabled={asleep} onClick={() => act((p) => wash(p), 'Fresh and fluffy. +1 coin.', 'good')} className="rounded-2xl bg-white/10 p-3 text-left disabled:opacity-40"><div className="text-2xl">🫧</div><div className="font-black">Wash</div><div className="text-[10px] text-purple-100/70">+{PET.wash.cleanliness} clean</div></button>
+            <button type="button" disabled={asleep} onClick={() => act((p) => wash(p), 'Fresh and fluffy.', 'good')} className="rounded-2xl bg-white/10 p-3 text-left disabled:opacity-40"><div className="text-2xl">🫧</div><div className="font-black">Wash</div><div className="text-[10px] text-purple-100/70">+{PET.wash.cleanliness} clean</div></button>
           </section>
 
           <section className="mt-3 rounded-2xl border border-white/10 bg-white/5 p-4">
@@ -134,11 +134,13 @@ export default function PetGame() {
           </section>
 
           <section className="mt-3 rounded-2xl border border-white/10 bg-white/5 p-4">
-            <div className="flex items-center justify-between"><div><h2 className="font-black">Daily treat</h2><p className="text-xs text-purple-100/60">One free milk + {PET.daily.coins} coins each day.</p></div><span className="text-3xl">🎁</span></div>
+            <div className="flex items-center justify-between"><div><h2 className="font-black">Daily treat</h2><p className="text-xs text-purple-100/60">One free milk each day. Keep your streak going.</p></div><span className="text-3xl">🎁</span></div>
             <button type="button" disabled={dailyClaimed(pet, now)} onClick={() => act((p) => claimDaily(p), 'Daily treat claimed!', 'coin')} className="mt-3 w-full rounded-xl bg-purple-500 py-3 font-black disabled:opacity-40">{dailyClaimed(pet, now) ? 'Come back tomorrow' : 'Claim daily treat'}</button>
           </section>
         </>
       )}
+
+      {tab === 'talk' && <TalkTab pet={pet} mood={mood} stage={stage} onSpend={() => act((p) => talk(p), undefined, 'tap')} onToast={setToast} />}
 
       {tab === 'train' && (
         <section className="space-y-3">
@@ -158,13 +160,11 @@ export default function PetGame() {
 
       {tab === 'room' && (
         <section className="space-y-3">
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4"><h2 className="text-xl font-black">Shop</h2><p className="text-sm text-purple-100/70">Spend the coins you earn from care and training.</p>
-            <div className="mt-3 grid grid-cols-3 gap-2">{(Object.keys(PET.foods) as Food[]).map((f) => <button key={f} type="button" onClick={() => act((p) => buyFood(p, f), pet.coins < PET.foods[f].price ? 'Not enough coins.' : `Bought ${PET.foods[f].label.toLowerCase()}.`, pet.coins < PET.foods[f].price ? 'sad' : 'coin')} className="rounded-xl bg-white/10 p-3 text-center"><div className="text-2xl">{PET.foods[f].icon}</div><div className="text-xs font-bold">{PET.foods[f].label}</div><div className="text-[10px]">🪙 {PET.foods[f].price} · have {pet.inventory[f]}</div></button>)}</div></div>
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4"><h2 className="font-black">Style</h2>
-            <div className="mt-3 grid grid-cols-3 gap-2">{(Object.keys(PET.cosmetics) as Cosmetic[]).filter((c) => COIN_COSMETICS.includes(c) || pet.owned.includes(c)).map((c) => {
-              const owned = pet.owned.includes(c), on = pet.equipped.includes(c);
-              return <button key={c} type="button" onClick={() => (owned ? act((p) => toggleCosmetic(p, c), undefined, 'tap') : act((p) => buyCosmetic(p, c), pet.coins < PET.cosmetics[c].price ? 'Not enough coins.' : `Bought ${PET.cosmetics[c].label.toLowerCase()}.`, pet.coins < PET.cosmetics[c].price ? 'sad' : 'coin'))} className={`rounded-xl p-3 text-center ${on ? 'bg-purple-500/50' : 'bg-white/10'}`}><img src={`/pet/items/${c}.webp`} alt="" className="mx-auto h-12 w-auto object-contain" /><div className="mt-1 text-xs font-bold">{PET.cosmetics[c].label}</div><div className="text-[10px]">{owned ? (on ? 'Wearing' : 'Tap to wear') : `🪙 ${PET.cosmetics[c].price}`}</div></button>;
-            })}</div></div>
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4"><h2 className="text-xl font-black">Wardrobe</h2><p className="text-xs text-purple-100/60">Things you own. Tap to wear or take off.</p>
+            {pet.owned.length === 0 ? <p className="mt-3 text-sm text-purple-100/60">Nothing yet. Buy something in the shop below.</p> : (
+              <div className="mt-3 grid grid-cols-3 gap-2">{pet.owned.map((c) => { const on = pet.equipped.includes(c); return (
+                <button key={c} type="button" onClick={() => act((p) => toggleCosmetic(p, c), undefined, 'tap')} className={`rounded-xl p-3 text-center ${on ? 'bg-purple-500/50' : 'bg-white/10'}`}><img src={`/pet/items/${c}.webp`} alt="" className="mx-auto h-12 w-auto object-contain" /><div className="mt-1 text-xs font-bold">{PET.cosmetics[c].label}</div><div className="text-[10px]">{on ? 'Wearing' : 'Tap to wear'}</div></button>); })}</div>
+            )}</div>
           <PremiumShop pet={pet} onBought={(purchases) => act((p) => applyPurchases(p, purchases), 'Thanks! Your MONSHI purchase is in.', 'levelup')} />
         </section>
       )}
@@ -207,18 +207,19 @@ function PremiumShop({ pet, onBought }: { pet: Pet; onBought: (purchases: { item
   }
 
   const have = (item: PremiumItem) => (PREMIUM[item].kind === 'cosmetic' ? pet.owned.includes(item as Cosmetic) : false);
+  const stock = (item: PremiumItem) => { const d = PREMIUM[item]; return d.kind === 'food' ? ` · have ${pet.inventory[d.food]}` : ''; };
   return (
     <div className="rounded-2xl border border-yellow-300/20 bg-yellow-300/5 p-4">
-      <h2 className="font-black">Premium · pay with MONSHI</h2>
-      <p className="text-xs text-purple-100/60">Optional. Items are paid from your wallet on this site and unlock for this pet. The pet itself still needs no wallet.</p>
+      <h2 className="font-black">Shop · pay with MONSHI</h2>
+      <p className="text-xs text-purple-100/60">Food and outfits are paid from your wallet on this site. He eats about two snacks a day, and the daily treat covers one.</p>
       {!info ? <p className="mt-3 text-xs text-purple-100/50">Loading…</p> : !info.open ? <p className="mt-3 text-xs text-yellow-200/80">The MONSHI shop is not open yet.</p> : (
         <>
-          <div className="mt-3 grid grid-cols-3 gap-2">
+          <div className="mt-3 grid grid-cols-2 gap-2">
             {(Object.keys(PREMIUM) as PremiumItem[]).map((item) => (
               <div key={item} className="rounded-xl bg-white/10 p-3 text-center">
                 {PREMIUM[item].kind === 'cosmetic' ? <img src={`/pet/items/${item}.webp`} alt="" className="mx-auto h-12 w-auto object-contain" /> : <div className="text-3xl">{PREMIUM[item].icon}</div>}
                 <div className="mt-1 text-xs font-bold">{PREMIUM[item].label}</div>
-                <div className="text-[10px] text-purple-100/70">{fmtM(PREMIUM[item].priceMonshi)} MONSHI</div>
+                <div className="text-[10px] text-purple-100/70">{fmtM(PREMIUM[item].priceMonshi)} MONSHI{stock(item)}</div>
                 {have(item) ? <div className="mt-1 text-[10px] font-bold text-green-300">Owned</div> : (
                   <button type="button" disabled={!address || !!busy} onClick={() => void buy(item)} className="mt-2 w-full rounded-lg bg-yellow-400/80 py-1 text-[11px] font-black text-black disabled:opacity-40">{busy === item ? '…' : 'Buy'}</button>
                 )}
@@ -244,7 +245,8 @@ function HelpTab({ pet, onReset, onApply }: { pet: Pet; onReset: () => void; onA
       <h2 className="text-xl font-black text-white">How to play</h2>
       <p>Look after your little wolf-cat. Hunger, happiness, energy and cleanliness slowly drop in real time, even while you are away. Feed, play, wash and nap to keep them up.</p>
       <p>Train Speed, Strength, Brains and Charm to level him up. Care and training earn points that grow him through four stages: Kit, Teen, Adult and Legend.</p>
-      <p>Claim your daily treat to build a streak. If you vanish for a day he will sulk, but he never dies.</p>
+      <p>Claim your daily treat to build a streak, and talk to him in the Talk tab. If you vanish for a day he will sulk, but he never dies.</p>
+      <p>Snacks run out, so he needs supplies. The daily treat gives one milk; the shop sells more for MONSHI.</p>
       <div className="flex items-center justify-between rounded-xl bg-white/5 p-3"><div><b className="text-white">Sound effects</b><div className="text-xs text-purple-100/60">Little beeps and bloops.</div></div>
         <button type="button" onClick={() => { const on = !sound; setSound(on); setSoundState(on); if (on) play('good'); }} className={`rounded-full px-4 py-1 text-xs font-bold ${sound ? 'bg-purple-500' : 'bg-white/10'}`}>{sound ? 'On' : 'Off'}</button></div>
       <div className="rounded-xl bg-white/5 p-3"><div className="flex items-center justify-between"><div><b className="text-white">Reminders</b><div className="text-xs text-purple-100/60">A nudge when he is hungry or misses you. At most twice a day.</div></div>
@@ -252,8 +254,53 @@ function HelpTab({ pet, onReset, onApply }: { pet: Pet; onReset: () => void; onA
         {!pushConfigured() && <div className="mt-2 text-[11px] text-yellow-200/80">Reminders are not switched on for this site yet.</div>}
         {pushConfigured() && !pushSupported() && <div className="mt-2 text-[11px] text-yellow-200/80">This browser can&apos;t do reminders. On iPhone, add the site to your Home Screen first.</div>}
         {note && <div className="mt-2 text-[11px]" role="status">{note}</div>}</div>
-      <p className="text-xs text-purple-100/50">Everything is saved on this device. The pet needs no wallet and no account.</p>
+      <p className="text-xs text-purple-100/50">Your pet is saved on this device. Only buying supplies needs a wallet.</p>
       <button type="button" onClick={() => { if (confirm('Reset Monshi and start over?')) onReset(); }} className="rounded-xl bg-red-500/20 px-4 py-2 font-bold text-red-200">Reset pet</button>
+    </section>
+  );
+}
+
+type Msg = { role: 'user' | 'assistant'; content: string };
+const TALK_KEY = 'monshi-pet-talk';
+
+function TalkTab({ pet, mood, stage, onSpend, onToast }: { pet: Pet; mood: string; stage: string; onSpend: () => void; onToast: (m: string) => void }) {
+  const [msgs, setMsgs] = useState<Msg[]>([]);
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const end = useRef<HTMLDivElement>(null);
+  useEffect(() => { try { setMsgs(JSON.parse(localStorage.getItem(TALK_KEY) || '[]')); } catch { setMsgs([]); } }, []);
+  useEffect(() => { try { localStorage.setItem(TALK_KEY, JSON.stringify(msgs.slice(-20))); } catch { /* ignore */ } end.current?.scrollIntoView({ block: 'nearest' }); }, [msgs]);
+
+  const left = Math.max(0, PET.talk.freePerDay - talksToday(pet));
+  const blocked = canTalk(pet);
+  async function send() {
+    const message = text.trim();
+    if (!message || busy) return;
+    if (blocked) { onToast(blocked); return; }
+    setText(''); setBusy(true);
+    const next = [...msgs, { role: 'user' as const, content: message }];
+    setMsgs(next);
+    try {
+      const r = await fetch('/api/pet/talk', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ message, history: msgs.slice(-6), pet: { stage, mood, needs: pet.needs, food: pet.inventory, streak: pet.streak, level: Math.round(SKILL_KEYS.reduce((a, k) => a + pet.skills[k].level, 0) / 4) } }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'No answer.');
+      setMsgs([...next, { role: 'assistant', content: d.reply }]); onSpend(); play('tap');
+    } catch (e: any) { setMsgs(msgs); setText(message); onToast(e?.message || 'Monshi did not answer.'); } finally { setBusy(false); }
+  }
+  return (
+    <section className="rounded-2xl border border-white/10 bg-white/5 p-4">
+      <div className="flex items-center justify-between"><h2 className="text-xl font-black">Talk to Monshi</h2><span className="text-[11px] text-purple-100/60">{left > 0 ? `${left} free chats left today` : `1 ${PET.talk.extraCost} per chat now`}</span></div>
+      <div className="mt-3 max-h-[46vh] min-h-[160px] space-y-2 overflow-y-auto" aria-live="polite">
+        {msgs.length === 0 && <p className="text-sm text-purple-100/60">Say hi. Ask about his day, his training, or just chat. Chatting cheers him up.</p>}
+        {msgs.map((m, i) => <div key={i} className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${m.role === 'user' ? 'ml-auto bg-purple-500/40' : 'bg-white/10'}`}>{m.content}</div>)}
+        {busy && <div className="max-w-[60%] rounded-2xl bg-white/10 px-3 py-2 text-sm text-purple-100/60">Monshi is thinking…</div>}
+        <div ref={end} />
+      </div>
+      <form className="mt-3 flex gap-2" onSubmit={(e) => { e.preventDefault(); void send(); }}>
+        <input value={text} onChange={(e) => setText(e.target.value.slice(0, 200))} placeholder="Say something…" aria-label="Message to Monshi" className="min-w-0 flex-1 rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-sm" />
+        <button type="submit" disabled={busy || !text.trim()} className="rounded-xl bg-purple-500 px-4 py-2 text-sm font-bold disabled:opacity-40">Send</button>
+      </form>
+      {blocked && <p className="mt-2 text-[11px] text-yellow-200/80">{blocked}</p>}
     </section>
   );
 }

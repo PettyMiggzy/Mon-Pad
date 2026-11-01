@@ -5,7 +5,6 @@ export type Pet = {
   version: 1;
   needs: Record<NeedKey, number>;
   skills: Record<SkillKey, { level: number; xp: number }>;
-  coins: number;
   inventory: Record<Food, number>;
   owned: Cosmetic[];
   equipped: Cosmetic[];
@@ -18,6 +17,7 @@ export type Pet = {
   sleepingUntil: number | null;
   sleepStartedAt: number | null;
   applied: string[]; // tx hashes of MONSHI purchases already given to this pet
+  talks: { day: string; n: number };
 };
 
 const clamp = (n: number) => Math.max(0, Math.min(100, n));
@@ -30,9 +30,9 @@ export function freshPet(now = Date.now()): Pet {
     version: 1,
     needs: { ...PET.startNeeds },
     skills: { speed: { level: 1, xp: 0 }, strength: { level: 1, xp: 0 }, brains: { level: 1, xp: 0 }, charm: { level: 1, xp: 0 } },
-    coins: PET.startCoins, inventory: { ...PET.startInventory }, owned: [], equipped: [],
+    inventory: { ...PET.startInventory }, owned: [], equipped: [],
     points: 0, streak: 0, lastDaily: null, lastSeen: now, lastCare: now,
-    trainReadyAt: { speed: 0, strength: 0, brains: 0, charm: 0 }, sleepingUntil: null, sleepStartedAt: null, applied: [],
+    trainReadyAt: { speed: 0, strength: 0, brains: 0, charm: 0 }, sleepingUntil: null, sleepStartedAt: null, applied: [], talks: { day: '', n: 0 },
   };
 }
 
@@ -78,7 +78,7 @@ export function feed(p: Pet, food: Food): Pet {
 export function wash(p: Pet): Pet {
   const w = PET.wash;
   return cared({ ...p, needs: { ...p.needs, cleanliness: clamp(p.needs.cleanliness + w.cleanliness), happiness: clamp(p.needs.happiness + w.happiness), energy: clamp(p.needs.energy + w.energy) },
-    coins: p.coins + w.coins, points: p.points + w.points });
+    points: p.points + w.points });
 }
 
 export function sleep(p: Pet, minutes: number, now = Date.now()): Pet {
@@ -94,7 +94,7 @@ export function wake(p: Pet, now = Date.now()): Pet {
 export function finishPlay(p: Pet, score: number): Pet {
   const c = PET.play;
   return cared({ ...p, needs: { ...p.needs, happiness: clamp(p.needs.happiness + c.happiness), energy: clamp(p.needs.energy + c.energy) },
-    coins: p.coins + Math.round(c.coinsBase + score * c.coinsPerPoint), points: p.points + Math.max(1, Math.round(score / c.pointsDivisor)) });
+    points: p.points + Math.max(1, Math.round(score / c.pointsDivisor)) });
 }
 
 export function canTrain(p: Pet, skill: SkillKey, now = Date.now()): string | null {
@@ -111,24 +111,16 @@ export function finishTrain(p: Pet, skill: SkillKey, score: number, now = Date.n
   while (level < PET.level.max && xp >= xpNeeded(level)) { xp -= xpNeeded(level); level++; }
   return cared({ ...p, skills: { ...p.skills, [skill]: { level, xp } }, needs: { ...p.needs, energy: clamp(p.needs.energy - t.energyCost) },
     trainReadyAt: { ...p.trainReadyAt, [skill]: now + t.cooldownMinutes * 60_000 },
-    coins: p.coins + Math.round(t.coinsBase + score * t.coinsPerPoint), points: p.points + Math.max(1, Math.round(score / PET.play.pointsDivisor)) }, now);
+    points: p.points + Math.max(1, Math.round(score / PET.play.pointsDivisor)) }, now);
 }
 
 export const dailyClaimed = (p: Pet, now = Date.now()) => p.lastDaily === day(now);
 export function claimDaily(p: Pet, now = Date.now()): Pet {
   if (dailyClaimed(p, now)) return p;
   const streak = p.lastDaily === day(now - 86_400_000) ? p.streak + 1 : 1;
-  return cared({ ...p, streak, lastDaily: day(now), coins: p.coins + PET.daily.coins, inventory: { ...p.inventory, [PET.daily.food]: p.inventory[PET.daily.food] + 1 } }, now);
+  return cared({ ...p, streak, lastDaily: day(now), inventory: { ...p.inventory, [PET.daily.food]: p.inventory[PET.daily.food] + 1 } }, now);
 }
 
-export function buyFood(p: Pet, food: Food): Pet {
-  const price = PET.foods[food].price;
-  return p.coins < price ? p : { ...p, coins: p.coins - price, inventory: { ...p.inventory, [food]: p.inventory[food] + 1 } };
-}
-export function buyCosmetic(p: Pet, item: Cosmetic): Pet {
-  const price = PET.cosmetics[item].price;
-  return p.owned.includes(item) || p.coins < price ? p : { ...p, coins: p.coins - price, owned: [...p.owned, item] };
-}
 export function toggleCosmetic(p: Pet, item: Cosmetic): Pet {
   if (!p.owned.includes(item)) return p;
   if (p.equipped.includes(item)) return { ...p, equipped: p.equipped.filter((x) => x !== item) };
@@ -141,12 +133,31 @@ export function applyPurchases(p: Pet, purchases: { item: string; tx_hash: strin
   let next = p;
   for (const buy of purchases) {
     if (next.applied.includes(buy.tx_hash)) continue;
-    const def = (PREMIUM as Record<string, { kind: string; milk?: number }>)[buy.item];
+    const def = (PREMIUM as Record<string, { kind: string; food?: Food; qty?: number }>)[buy.item];
     if (!def) continue;
     if (def.kind === 'cosmetic') next = { ...next, owned: next.owned.includes(buy.item as Cosmetic) ? next.owned : [...next.owned, buy.item as Cosmetic] };
-    if (def.kind === 'food') next = { ...next, inventory: { ...next.inventory, milk: next.inventory.milk + (def.milk ?? 0) } };
+    if (def.kind === 'food' && def.food) next = { ...next, inventory: { ...next.inventory, [def.food]: next.inventory[def.food] + (def.qty ?? 0) } };
     next = { ...next, applied: [...next.applied, buy.tx_hash] };
   }
   return next;
 }
 export const skillNeed = xpNeeded;
+
+// ── talking ─────────────────────────────────────────────────────────────────
+export const talksToday = (p: Pet, now = Date.now()) => (p.talks?.day === day(now) ? p.talks.n : 0);
+/** null = allowed; otherwise why not. The first few chats each day are free; after that each chat costs one treat. */
+export function canTalk(p: Pet, now = Date.now()): string | null {
+  const n = talksToday(p, now), t = PET.talk;
+  if (p.sleepingUntil) return 'Shh, Monshi is asleep.';
+  if (n >= t.hardCapPerDay) return 'Monshi is worn out from talking. Back tomorrow.';
+  if (n >= t.freePerDay && p.inventory[t.extraCost] <= 0) return `He wants a ${t.extraCost} before he talks more. Check the Room tab.`;
+  return null;
+}
+export function talk(p: Pet, now = Date.now()): Pet {
+  const n = talksToday(p, now), t = PET.talk;
+  const pays = n >= t.freePerDay;
+  return cared({ ...p, talks: { day: day(now), n: n + 1 },
+    inventory: pays ? { ...p.inventory, [t.extraCost]: p.inventory[t.extraCost] - 1 } : p.inventory,
+    needs: { ...p.needs, happiness: clamp(p.needs.happiness + (n < t.freePerDay ? t.happiness : 0)) },
+    points: p.points + (n < t.freePerDay ? t.points : 0) }, now);
+}

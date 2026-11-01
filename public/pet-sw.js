@@ -1,4 +1,4 @@
-// Service worker for Tamagotchi Monshi reminders. It only handles push notifications.
+// Service worker for My Monshi reminders. It only handles push notifications.
 self.addEventListener('push', (e) => {
   let d = { title: 'Monshi', body: 'Come say hi!', url: '/pet' };
   try { d = { ...d, ...e.data.json() }; } catch { /* plain push */ }
