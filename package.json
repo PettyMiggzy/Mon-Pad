@@ -35,7 +35,8 @@
     "tailwind-merge": "^3.6.0",
     "three": "^0.169.0",
     "viem": "2.21.40",
-    "wagmi": "2.12.20"
+    "wagmi": "2.12.20",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
