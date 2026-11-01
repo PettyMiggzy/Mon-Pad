@@ -5,8 +5,8 @@ export default function PetPage() {
   return (
     <>
       <Head>
-        <title>Tamagotchi Monshi | Monpad</title>
-        <meta key="description" name="description" content="Raise and train your own Monshi. Feed milk, play, train four skills and watch him grow. Free, no wallet needed." />
+        <title>My Monshi | Monpad</title>
+        <meta key="description" name="description" content="Raise, train and talk to your own Monshi. Feed him, play, train four skills and watch him grow. Buy supplies with MONSHI." />
         <link key="canonical" rel="canonical" href="https://www.monpad.net/pet" />
       </Head>
       <PetGame />
