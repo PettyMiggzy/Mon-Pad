@@ -122,6 +122,7 @@ export function Layout({ children }: { children: ReactNode }) {
           <Link href="/rewards">Rewards</Link>
           <Link href="/bounties">Bounties</Link>
           <Link href="/studio">Studio</Link>
+          <Link href="/privacy">Privacy</Link>
           <a href="https://t.me/MonshiUtilitySupport" target="_blank" rel="noopener noreferrer">
             Support
           </a>
