@@ -8,10 +8,11 @@ import { PREMIUM, type PremiumItem } from '@/lib/pet/shop';
 import { play, setSound, soundOn } from '@/lib/pet/sound';
 import { disablePush, enablePush, pushConfigured, pushEnabled, pushSupported, reschedulePush } from '@/lib/pet/reminder';
 import { studioSig, postJson } from '@/lib/launchClient';
-import anchors from '@/lib/pet/anchors.json';
+import { isAdmin } from '@/lib/constants';
 import { applyPurchases, canTalk, canTrain, claimDaily, dailyClaimed, feed, finishPlay, finishTrain, moodOf, skillNeed, sleep, SKILL_KEYS, stageOf, talk, talksToday, tick, toggleCosmetic, wake, wash, type Pet } from '@/lib/pet/game';
 import { loadPet, resetPet, savePet } from '@/lib/pet/storage';
 import Drill from './Drill';
+import PetStageView, { type Fx, type Pose } from './PetStageView';
 
 type Tab = 'home' | 'talk' | 'train' | 'room' | 'help';
 const NEEDS: { key: NeedKey; label: string; icon: string; color: string }[] = [
@@ -34,18 +35,6 @@ const SAY: Record<string, string[]> = {
   sulking: ['Hmph. Took you long enough. …Missed you.', 'I wasn’t worried. Maybe a little.', 'The room was too quiet without you.'],
 };
 const pick = (mood: string, seed: number) => { const a = SAY[mood] || SAY.ok; return a[(Math.floor(Date.now() / 60_000) + seed) % a.length]; };
-// Accessories are placed from the measured head box of the exact sprite on screen (lib/pet/anchors.json, % of the sprite box),
-// so they follow his head in every stage and pose. aspect = item height / item width.
-type Head = { cx: number; w: number; top: number; h: number; ratio: number };
-const HEADS = anchors as Record<string, Head>;
-const ITEM: Record<Cosmetic, { aspect: number; width: number }> = { beanie: { aspect: 0.94, width: 0.8 }, crown: { aspect: 0.85, width: 0.62 }, shades: { aspect: 0.36, width: 0.66 }, scarf: { aspect: 0.88, width: 0.66 }, cape: { aspect: 0.94, width: 2.0 } };
-function place(item: Cosmetic, head: Head): React.CSSProperties {
-  const { aspect, width } = ITEM[item];
-  const w = head.w * width, hPct = w * head.ratio * aspect, slot = PET.cosmetics[item].slot;
-  const top = slot === 'hat' ? head.top + 0.32 * head.h - hPct : slot === 'face' ? head.top + 0.53 * head.h - hPct / 2 : slot === 'neck' ? head.top + 1.0 * head.h - hPct * 0.15 : head.top + 0.9 * head.h;
-  return { left: `${head.cx}%`, top: `${top}%`, width: `${w}%`, transform: 'translateX(-50%)' };
-}
-const STAGE_HEIGHT: Record<StageId, number> = { kit: 58, teen: 70, adult: 82, legend: 90 }; // % of the stage area, so he visibly grows
 const erc20 = parseAbi(['function transfer(address to, uint256 amount) returns (bool)']);
 const MONSHI = '0xB744F5CDb792d8187640214C4A1c9aCE29af7777' as Address;
 const fmtM = (n: number) => (n >= 1e6 ? `${n / 1e6}M` : `${n / 1e3}K`);
@@ -56,11 +45,18 @@ export default function PetGame() {
   const [toast, setToast] = useState('');
   const [drill, setDrill] = useState<null | { play: true } | { skill: SkillKey }>(null);
   const [now, setNow] = useState(Date.now());
+  const [action, setAction] = useState<'eat' | 'wash' | null>(null);
+  const [fx, setFx] = useState<Fx>(null);
+  const [said, setSaid] = useState('');
+  const poseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const burst = useCallback((emoji: string, n = 3) => setFx({ key: Date.now() + Math.random(), emoji, n }), []);
+  const doPose = useCallback((a: 'eat' | 'wash', ms: number, emoji: string) => { setAction(a); burst(emoji, 3); if (poseTimer.current) clearTimeout(poseTimer.current); poseTimer.current = setTimeout(() => setAction(null), ms); }, [burst]);
+  const sayLine = useCallback((line: string) => { setSaid(line); setTimeout(() => setSaid(''), 4500); }, []);
 
   useEffect(() => { setPet(loadPet()); }, []);
   useEffect(() => { if (pet) savePet(pet); }, [pet]);
   const lastStage = useRef<StageId | null>(null);
-  useEffect(() => { if (!pet) return; const st = stageOf(pet); if (lastStage.current && lastStage.current !== st) { play('levelup'); setToast(`Monshi grew into a ${PET.stages.find((x) => x.id === st)!.label}!`); } lastStage.current = st; }, [pet]);
+  useEffect(() => { if (!pet) return; const st = stageOf(pet); if (lastStage.current && lastStage.current !== st) { play('levelup'); burst('✨', 6); setToast(`Monshi grew into a ${PET.stages.find((x) => x.id === st)!.label}!`); } lastStage.current = st; }, [pet]);
   useEffect(() => { if (!pet) return; const id = setTimeout(() => void reschedulePush(pet), 4000); return () => clearTimeout(id); }, [pet]);
   useEffect(() => { const id = setInterval(() => { setNow(Date.now()); setPet((p) => (p ? tick(p) : p)); }, 15_000); return () => clearInterval(id); }, []);
 
@@ -93,21 +89,13 @@ export default function PetGame() {
         <>
           <section className="relative overflow-hidden rounded-[28px] border border-purple-300/15 bg-gradient-to-b from-[#3a2260] to-[#1b1030] px-4 pb-4 pt-3">
             <div className="flex items-center justify-between text-xs"><div><div className="text-[10px] font-black uppercase tracking-[.2em] text-purple-200/70">{stageInfo.room} · {stageInfo.label}</div><div className="text-sm font-bold">Hey, boss.</div></div><div className="rounded-xl bg-white/10 px-3 py-2">🔥 {pet.streak} day streak</div></div>
-            <div className="relative mx-auto my-2 flex h-[330px] items-end justify-center pt-10">
-              <div className="relative inline-block" style={{ height: `${STAGE_HEIGHT[stage]}%` }}>
-                <img src={sprite} alt={`Monshi is ${mood}`} className="pet-bob relative z-10 block h-full w-auto max-w-none" />
-                {pet.equipped.map((c) => {
-                  const head = HEADS[`${stage}-${mood}`];
-                  return head ? <img key={c} src={`/pet/items/${c}.webp`} alt="" className={`pointer-events-none absolute ${PET.cosmetics[c].slot === 'back' ? 'z-0' : 'z-20'}`} style={place(c, head)} /> : null;
-                })}
-              </div>
-            </div>
+            <PetStageView stage={stage} mood={mood} pose={(asleep ? 'sleep' : action) as Pose} equipped={pet.equipped} fx={fx} onPoke={(line) => { sayLine(line); play('tap'); }} />
             <div className="mx-auto max-w-[340px] rounded-2xl border border-purple-200/15 bg-[#1a1026]/85 px-4 py-3 text-center">
               <div className="mb-1 text-[9px] font-black uppercase tracking-[.22em] text-purple-200/60">MONSHI SAYS</div>
-              <p className="text-sm font-bold leading-snug">“{asleep ? 'Zzz… five more minutes…' : pick(mood, avgLevel)}”</p>
+              <p className="text-sm font-bold leading-snug">“{asleep ? 'Zzz… five more minutes…' : said || pick(mood, avgLevel)}”</p>
             </div>
             {asleep && (
-              <div className="absolute inset-0 grid place-items-center rounded-[28px] bg-[#0b0614]/70 text-center"><div><div className="text-5xl">💤</div><div className="mt-2 font-black">Lights out, little legend.</div><div className="text-xs text-purple-100/70">Wakes in about {mins} min</div><button type="button" onClick={() => act((p) => wake(p), 'Good morning!', 'good')} className="mt-3 rounded-xl bg-purple-500 px-4 py-2 text-sm font-bold">Wake him up</button></div></div>
+              <div className="mt-2 flex items-center justify-between rounded-2xl bg-black/40 px-4 py-2 text-xs"><span>💤 Lights out. Wakes in about {mins} min.</span><button type="button" onClick={() => act((p) => wake(p), 'Good morning!', 'good')} className="rounded-xl bg-purple-500 px-3 py-1 font-bold">Wake him up</button></div>
             )}
           </section>
 
@@ -122,10 +110,10 @@ export default function PetGame() {
 
           <section className="mt-3 grid grid-cols-2 gap-2">
             {(Object.keys(PET.foods) as Food[]).slice(0, 2).map((f) => (
-              <button key={f} type="button" disabled={asleep || pet.inventory[f] === 0} onClick={() => act((p) => feed(p, f), f === 'milk' ? 'Milk time. His favourite!' : 'Crunch. Excellent choice.', 'feed')} className="rounded-2xl bg-purple-500/30 p-3 text-left disabled:opacity-40"><div className="text-2xl">{PET.foods[f].icon}</div><div className="font-black">Feed {PET.foods[f].label.toLowerCase()}</div><div className="text-[10px] text-purple-100/70">{pet.inventory[f]} left</div></button>
+              <button key={f} type="button" disabled={asleep || pet.inventory[f] === 0} onClick={() => { act((p) => feed(p, f), f === 'milk' ? 'Milk time. His favourite!' : 'Crunch. Excellent choice.', 'feed'); doPose('eat', 2600, PET.foods[f].icon); }} className="rounded-2xl bg-purple-500/30 p-3 text-left disabled:opacity-40"><div className="text-2xl">{PET.foods[f].icon}</div><div className="font-black">Feed {PET.foods[f].label.toLowerCase()}</div><div className="text-[10px] text-purple-100/70">{pet.inventory[f]} left</div></button>
             ))}
             <button type="button" disabled={asleep} onClick={() => setDrill({ play: true })} className="rounded-2xl bg-white/10 p-3 text-left disabled:opacity-40"><div className="text-2xl">🎾</div><div className="font-black">Play together</div><div className="text-[10px] text-purple-100/70">{PET.play.seconds}-second tap game</div></button>
-            <button type="button" disabled={asleep} onClick={() => act((p) => wash(p), 'Fresh and fluffy.', 'good')} className="rounded-2xl bg-white/10 p-3 text-left disabled:opacity-40"><div className="text-2xl">🫧</div><div className="font-black">Wash</div><div className="text-[10px] text-purple-100/70">+{PET.wash.cleanliness} clean</div></button>
+            <button type="button" disabled={asleep} onClick={() => { act((p) => wash(p), 'Fresh and fluffy.', 'good'); doPose('wash', 3000, '🫧'); }} className="rounded-2xl bg-white/10 p-3 text-left disabled:opacity-40"><div className="text-2xl">🫧</div><div className="font-black">Wash</div><div className="text-[10px] text-purple-100/70">+{PET.wash.cleanliness} clean</div></button>
           </section>
 
           <section className="mt-3 rounded-2xl border border-white/10 bg-white/5 p-4">
@@ -135,7 +123,7 @@ export default function PetGame() {
 
           <section className="mt-3 rounded-2xl border border-white/10 bg-white/5 p-4">
             <div className="flex items-center justify-between"><div><h2 className="font-black">Daily treat</h2><p className="text-xs text-purple-100/60">One free milk each day. Keep your streak going.</p></div><span className="text-3xl">🎁</span></div>
-            <button type="button" disabled={dailyClaimed(pet, now)} onClick={() => act((p) => claimDaily(p), 'Daily treat claimed!', 'coin')} className="mt-3 w-full rounded-xl bg-purple-500 py-3 font-black disabled:opacity-40">{dailyClaimed(pet, now) ? 'Come back tomorrow' : 'Claim daily treat'}</button>
+            <button type="button" disabled={dailyClaimed(pet, now)} onClick={() => { act((p) => claimDaily(p), 'Daily treat claimed!', 'coin'); burst('🎁', 4); }} className="mt-3 w-full rounded-xl bg-purple-500 py-3 font-black disabled:opacity-40">{dailyClaimed(pet, now) ? 'Come back tomorrow' : 'Claim daily treat'}</button>
           </section>
         </>
       )}
@@ -171,7 +159,7 @@ export default function PetGame() {
 
       {tab === 'help' && <HelpTab pet={pet} onReset={() => { setPet(resetPet()); setToast('Fresh start.'); }} onApply={(purchases) => act((p) => applyPurchases(p, purchases))} />}
 
-      {drill && 'play' in drill && <Drill kind="tap" seconds={PET.play.seconds} target={PET.play.targetTaps} title="Play time" hint="Tap as fast as you can!" onCancel={() => setDrill(null)} onDone={(sc) => { act((p) => finishPlay(p, sc), `Score ${sc}. Monshi had a blast.`, sc >= 40 ? 'good' : 'sad'); setDrill(null); }} />}
+      {drill && 'play' in drill && <Drill kind="tap" seconds={PET.play.seconds} target={PET.play.targetTaps} title="Play time" hint="Tap as fast as you can!" onCancel={() => setDrill(null)} onDone={(sc) => { act((p) => finishPlay(p, sc), `Score ${sc}. Monshi had a blast.`, sc >= 40 ? 'good' : 'sad'); burst(sc >= 40 ? '⭐' : '💦', 5); setDrill(null); }} />}
       {drill && 'skill' in drill && (() => { const s = SKILLS[drill.skill]; return <Drill kind={s.kind} seconds={PET.train.seconds} target={s.target} title={`${s.label} · ${s.task}`} hint={s.desc} onCancel={() => setDrill(null)} onDone={(sc) => { const before = pet.skills[drill.skill].level; act((p) => finishTrain(p, drill.skill, sc), `${s.label} training: score ${sc}.`, sc >= 40 ? 'good' : 'sad'); setTimeout(() => setPet((p) => { if (p && p.skills[drill.skill].level > before) { play('levelup'); setToast(`${s.label} reached level ${p.skills[drill.skill].level}!`); } return p; }), 50); setDrill(null); }} />; })()}
     </main>
   );
@@ -206,6 +194,17 @@ function PremiumShop({ pet, onBought }: { pet: Pet; onBought: (purchases: { item
     } catch (e: any) { setMsg(String(e?.shortMessage || e?.message || 'Something went wrong.').slice(0, 140)); } finally { setBusy(null); }
   }
 
+  async function grant(item: PremiumItem) {
+    if (!address) return;
+    setMsg(''); setBusy(item);
+    try {
+      const signature = await studioSig(address, signMessageAsync as any);
+      await postJson('/api/pet/shop', { wallet: address, signature, item, action: 'grant' });
+      const d = await (await fetch(`/api/pet/shop?wallet=${address}`)).json();
+      setInfo(d); onBought(d.purchases); setMsg('Test item unlocked (free, admin only).');
+    } catch (e: any) { setMsg(String(e?.message || 'Could not unlock.').slice(0, 140)); } finally { setBusy(null); }
+  }
+
   const have = (item: PremiumItem) => (PREMIUM[item].kind === 'cosmetic' ? pet.owned.includes(item as Cosmetic) : false);
   const stock = (item: PremiumItem) => { const d = PREMIUM[item]; return d.kind === 'food' ? ` · have ${pet.inventory[d.food]}` : ''; };
   return (
@@ -223,6 +222,8 @@ function PremiumShop({ pet, onBought }: { pet: Pet; onBought: (purchases: { item
                 {have(item) ? <div className="mt-1 text-[10px] font-bold text-green-300">Owned</div> : (
                   <button type="button" disabled={!address || !!busy} onClick={() => void buy(item)} className="mt-2 w-full rounded-lg bg-yellow-400/80 py-1 text-[11px] font-black text-black disabled:opacity-40">{busy === item ? '…' : 'Buy'}</button>
                 )}
+                {isAdmin(address) && !have(item) && <button type="button" disabled={!!busy} onClick={() => void grant(item)} className="mt-1 w-full rounded-lg bg-white/15 py-1 text-[10px] font-bold">Test: unlock free</button>}
+                {isAdmin(address) && have(item) && <div className="mt-1 text-[9px] text-purple-100/40">(admin test)</div>}
               </div>
             ))}
           </div>
@@ -240,6 +241,17 @@ function HelpTab({ pet, onReset, onApply }: { pet: Pet; onReset: () => void; onA
   const [note, setNote] = useState('');
   useEffect(() => { setSoundState(soundOn()); setPush(pushEnabled()); }, []);
   void onApply;
+  const { address } = useAccount();
+  const { signMessageAsync } = useSignMessage();
+  async function testPush() {
+    try {
+      const reg = await navigator.serviceWorker.getRegistration('/pet'); const sub = await reg?.pushManager.getSubscription();
+      if (!sub) { setNote('Turn Reminders on first.'); return; }
+      const signature = await studioSig(address!, signMessageAsync as any);
+      await postJson('/api/pet/push-test', { wallet: address, signature, subscription: sub.toJSON() });
+      setNote('Test sent. It should arrive in a few seconds.');
+    } catch (e: any) { setNote(String(e?.message || 'Could not send.').slice(0, 120)); }
+  }
   return (
     <section className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-purple-100/80">
       <h2 className="text-xl font-black text-white">How to play</h2>
@@ -253,6 +265,7 @@ function HelpTab({ pet, onReset, onApply }: { pet: Pet; onReset: () => void; onA
         <button type="button" onClick={async () => { if (push) { await disablePush(); setPush(false); setNote('Reminders are off.'); } else { const err = await enablePush(pet); setPush(!err); setNote(err ?? 'Reminders are on.'); } }} disabled={!pushSupported() || !pushConfigured()} className={`rounded-full px-4 py-1 text-xs font-bold disabled:opacity-40 ${push ? 'bg-purple-500' : 'bg-white/10'}`}>{push ? 'On' : 'Off'}</button></div>
         {!pushConfigured() && <div className="mt-2 text-[11px] text-yellow-200/80">Reminders are not switched on for this site yet.</div>}
         {pushConfigured() && !pushSupported() && <div className="mt-2 text-[11px] text-yellow-200/80">This browser can&apos;t do reminders. On iPhone, add the site to your Home Screen first.</div>}
+        {isAdmin(address) && push && <button type="button" onClick={() => void testPush()} className="mt-2 rounded-lg bg-white/15 px-3 py-1 text-[11px] font-bold">Admin: send me a test notification</button>}
         {note && <div className="mt-2 text-[11px]" role="status">{note}</div>}</div>
       <p className="text-xs text-purple-100/50">Your pet is saved on this device. Only buying supplies needs a wallet.</p>
       <button type="button" onClick={() => { if (confirm('Reset Monshi and start over?')) onReset(); }} className="rounded-xl bg-red-500/20 px-4 py-2 font-bold text-red-200">Reset pet</button>

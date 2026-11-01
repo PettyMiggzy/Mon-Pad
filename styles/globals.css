@@ -1909,3 +1909,35 @@ a.lh-card:hover { transform: translateY(-2px); border-color: rgba(190,170,255,0.
 .pet-bob { animation: pet-bob 3.2s ease-in-out infinite; filter: drop-shadow(0 14px 18px rgba(0,0,0,.45)); }
 @keyframes pet-bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
 @media (prefers-reduced-motion: reduce) { .pet-bob { animation: none; } }
+
+/* ── My Monshi: he's alive. Everything pivots on his feet so he squashes and stretches like a real toy. ── */
+.pet-breathe { animation: pet-breathe 3.2s ease-in-out infinite; }
+.pet-breathe-slow { animation: pet-breathe 5.4s ease-in-out infinite; }
+@keyframes pet-breathe { 0%,100% { transform: scale(1, 1); } 50% { transform: scale(1.012, 1.03); } }
+.pet-m-idle { animation: pet-sway 6s ease-in-out infinite; }
+@keyframes pet-sway { 0%,100% { transform: rotate(-0.8deg); } 50% { transform: rotate(0.8deg); } }
+.pet-m-walk { animation: pet-walk .46s ease-in-out infinite; }
+@keyframes pet-walk { 0%,100% { transform: translateY(0) rotate(-2.5deg) scale(1.02, .97); } 50% { transform: translateY(-9px) rotate(2.5deg) scale(.98, 1.03); } }
+.pet-m-hop { animation: pet-hop 1.2s ease-in-out; }
+@keyframes pet-hop { 0% { transform: scale(1.08, .88); } 18% { transform: translateY(-48px) scale(.94, 1.1); } 42% { transform: translateY(0) scale(1.1, .86); } 55% { transform: translateY(-20px) scale(.97, 1.05); } 75% { transform: translateY(0) scale(1.05, .93); } 100% { transform: none; } }
+.pet-m-wiggle { animation: pet-wiggle 1.2s ease-in-out; }
+@keyframes pet-wiggle { 0%,100% { transform: rotate(0); } 15% { transform: rotate(-7deg); } 35% { transform: rotate(7deg); } 55% { transform: rotate(-6deg); } 75% { transform: rotate(5deg); } }
+.pet-m-stretch { animation: pet-stretch 1.3s ease-in-out; }
+@keyframes pet-stretch { 0%,100% { transform: none; } 35% { transform: scale(.93, 1.12); } 60% { transform: scale(.93, 1.12) rotate(2deg); } }
+.pet-m-poke { animation: pet-poke .6s ease-out; }
+@keyframes pet-poke { 0% { transform: scale(1.12, .8); } 35% { transform: translateY(-34px) scale(.92, 1.14) rotate(-5deg); } 70% { transform: translateY(0) scale(1.08, .9); } 100% { transform: none; } }
+.pet-m-dizzy { animation: pet-dizzy 1.2s linear; }
+@keyframes pet-dizzy { 0% { transform: rotate(0); } 20% { transform: rotate(-12deg); } 40% { transform: rotate(10deg); } 60% { transform: rotate(-8deg); } 80% { transform: rotate(5deg); } 100% { transform: none; } }
+.pet-droop { animation: pet-droop 5s ease-in-out infinite; }
+@keyframes pet-droop { 0%,100% { transform: scale(1.01, .97) rotate(-1.2deg); } 50% { transform: scale(1, .955) rotate(1.2deg); } }
+.pet-rumble { animation: pet-rumble 3.4s ease-in-out infinite; }
+@keyframes pet-rumble { 0%,70%,100% { transform: none; } 74% { transform: translateX(-3px) rotate(-1.5deg); } 78% { transform: translateX(3px) rotate(1.5deg); } 82% { transform: translateX(-3px); } 86% { transform: translateX(3px); } 90% { transform: none; } }
+.pet-munch { animation: pet-munch .55s ease-in-out infinite; }
+@keyframes pet-munch { 0%,100% { transform: scale(1, 1); } 50% { transform: scale(1.04, .95) rotate(1.5deg); } }
+.pet-scrub { animation: pet-scrub .5s ease-in-out infinite; }
+@keyframes pet-scrub { 0%,100% { transform: translateX(-3px) rotate(-2deg); } 50% { transform: translateX(3px) rotate(2deg); } }
+.pet-thought { transform: translateX(-50%); animation: pet-thought 2.2s ease-in-out infinite; }
+@keyframes pet-thought { 0%,100% { opacity: .5; transform: translateX(-50%) translateY(0); } 50% { opacity: 1; transform: translateX(-50%) translateY(-5px); } }
+.pet-bit { animation: pet-float 1.5s ease-out forwards; }
+@keyframes pet-float { 0% { opacity: 0; transform: translate(-50%, 10px) scale(.6); } 15% { opacity: 1; } 100% { opacity: 0; transform: translate(calc(-50% + var(--dx)), -120px) scale(1.15); } }
+@media (prefers-reduced-motion: reduce) { .pet-breathe, .pet-breathe-slow, .pet-m-idle, .pet-m-walk, .pet-droop, .pet-rumble, .pet-munch, .pet-scrub, .pet-thought { animation: none !important; } }
