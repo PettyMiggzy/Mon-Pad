@@ -1,3 +1,4 @@
+import { PREMIUM } from './shop';
 import { PET, type Cosmetic, type Food, type Mood, type NeedKey, type SkillKey, type StageId } from './config';
 
 export type Pet = {
@@ -16,6 +17,7 @@ export type Pet = {
   trainReadyAt: Record<SkillKey, number>;
   sleepingUntil: number | null;
   sleepStartedAt: number | null;
+  applied: string[]; // tx hashes of MONSHI purchases already given to this pet
 };
 
 const clamp = (n: number) => Math.max(0, Math.min(100, n));
@@ -30,7 +32,7 @@ export function freshPet(now = Date.now()): Pet {
     skills: { speed: { level: 1, xp: 0 }, strength: { level: 1, xp: 0 }, brains: { level: 1, xp: 0 }, charm: { level: 1, xp: 0 } },
     coins: PET.startCoins, inventory: { ...PET.startInventory }, owned: [], equipped: [],
     points: 0, streak: 0, lastDaily: null, lastSeen: now, lastCare: now,
-    trainReadyAt: { speed: 0, strength: 0, brains: 0, charm: 0 }, sleepingUntil: null, sleepStartedAt: null,
+    trainReadyAt: { speed: 0, strength: 0, brains: 0, charm: 0 }, sleepingUntil: null, sleepStartedAt: null, applied: [],
   };
 }
 
@@ -129,6 +131,22 @@ export function buyCosmetic(p: Pet, item: Cosmetic): Pet {
 }
 export function toggleCosmetic(p: Pet, item: Cosmetic): Pet {
   if (!p.owned.includes(item)) return p;
-  return { ...p, equipped: p.equipped.includes(item) ? p.equipped.filter((x) => x !== item) : [...p.equipped, item] };
+  if (p.equipped.includes(item)) return { ...p, equipped: p.equipped.filter((x) => x !== item) };
+  const slot = PET.cosmetics[item].slot; // wearing a new hat replaces the old hat
+  return { ...p, equipped: [...p.equipped.filter((x) => PET.cosmetics[x].slot !== slot), item] };
+}
+
+/** Give the pet the premium things it bought with MONSHI. Each payment is applied once, whatever device it is restored on. */
+export function applyPurchases(p: Pet, purchases: { item: string; tx_hash: string }[]): Pet {
+  let next = p;
+  for (const buy of purchases) {
+    if (next.applied.includes(buy.tx_hash)) continue;
+    const def = (PREMIUM as Record<string, { kind: string; milk?: number }>)[buy.item];
+    if (!def) continue;
+    if (def.kind === 'cosmetic') next = { ...next, owned: next.owned.includes(buy.item as Cosmetic) ? next.owned : [...next.owned, buy.item as Cosmetic] };
+    if (def.kind === 'food') next = { ...next, inventory: { ...next.inventory, milk: next.inventory.milk + (def.milk ?? 0) } };
+    next = { ...next, applied: [...next.applied, buy.tx_hash] };
+  }
+  return next;
 }
 export const skillNeed = xpNeeded;

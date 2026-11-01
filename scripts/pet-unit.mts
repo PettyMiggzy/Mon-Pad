@@ -1,0 +1,32 @@
+// Run: npx tsx scripts/pet-unit.mts   (MONSHI payment matching, push scheduling, reminder timing)
+import { encodeEventTopics, encodeAbiParameters, parseAbi } from 'viem';
+import { findTransfer, dueSubs } from '../lib/pet/server';
+import { nextReminder } from '../lib/pet/reminder';
+import { freshPet } from '../lib/pet/game';
+const abi = parseAbi(['event Transfer(address indexed from, address indexed to, uint256 value)']);
+const W = '0x1111111111111111111111111111111111111111', T = '0x2222222222222222222222222222222222222222';
+const log = (from: string, to: string, v: bigint, token = '0xB744F5CDb792d8187640214C4A1c9aCE29af7777') => ({ address: token, topics: encodeEventTopics({ abi, eventName: 'Transfer', args: { from: from as any, to: to as any } }), data: encodeAbiParameters([{ type: 'uint256' }], [v]) });
+const ok = (n: string, c: boolean) => { console.log(c ? 'PASS' : 'FAIL', n); if (!c) process.exitCode = 1; };
+ok('exact amount accepted', findTransfer([log(W, T, 300000n * 10n ** 18n)] as any, W, T, 300000n * 10n ** 18n) !== null);
+ok('too little rejected', findTransfer([log(W, T, 1n)] as any, W, T, 300000n * 10n ** 18n) === null);
+ok('wrong recipient rejected', findTransfer([log(W, W, 10n ** 30n)] as any, W, T, 1n) === null);
+ok('someone else paying rejected', findTransfer([log(T, T, 10n ** 30n)] as any, W, T, 1n) === null);
+ok('other token rejected', findTransfer([log(W, T, 10n ** 30n, '0x3333333333333333333333333333333333333333')] as any, W, T, 1n) === null);
+const now = Date.parse('2026-11-02T12:00:00Z');
+const row = (o: any) => ({ endpoint: 'e', remind_at: null, reason: 'hungry', last_sent_at: null, ...o });
+ok('due reminder sent', dueSubs([row({ remind_at: '2026-11-02T11:00:00Z' })], now).length === 1);
+ok('future reminder waits', dueSubs([row({ remind_at: '2026-11-02T13:00:00Z' })], now).length === 0);
+ok('already sent for this reminder', dueSubs([row({ remind_at: '2026-11-02T11:00:00Z', last_sent_at: '2026-11-02T11:30:00Z' })], now).length === 0);
+ok('12h gap enforced', dueSubs([row({ remind_at: '2026-11-02T11:00:00Z', last_sent_at: '2026-11-02T08:00:00Z' })], now).length === 0);
+ok('rescheduled after gap is sent', dueSubs([row({ remind_at: '2026-11-02T11:00:00Z', last_sent_at: '2026-11-01T20:00:00Z' })], now).length === 1);
+ok('bad reason ignored', dueSubs([row({ remind_at: '2026-11-02T11:00:00Z', reason: 'spam' })], now).length === 0);
+ok('no schedule ignored', dueSubs([row({})], now).length === 0);
+
+const t0 = Date.parse('2026-11-02T12:00:00Z');
+const pet = { ...freshPet(t0), needs: { hunger: 50, happiness: 80, energy: 80, cleanliness: 80 }, lastCare: t0 };
+const r1 = nextReminder(pet, t0);
+ok('hungry reminder when food runs low first', r1.reason === 'hungry' && r1.at > t0 && r1.at < t0 + 20 * 3_600_000);
+const r2 = nextReminder({ ...pet, needs: { ...pet.needs, hunger: 100 } }, t0);
+ok('miss-you reminder when he stays fed', r2.reason === 'miss' && Math.abs(r2.at - (t0 + 20 * 3_600_000)) < 1000);
+ok('never scheduled in the past', nextReminder({ ...pet, needs: { ...pet.needs, hunger: 5 } }, t0).at > t0);
+ok('sleeping delays the hungry reminder', nextReminder({ ...pet, sleepingUntil: t0 + 3_600_000 }, t0).at > r1.at);

@@ -23,10 +23,13 @@ export const PET = {
   ],
   daily: { coins: 12, food: 'milk' as const },
   mood: { sulkAfterHours: 24, sulkBelow: 65, hungry: 22, sleepy: 22, dirty: 22, sad: 25, happyAtLeast: 70 },
+  // price = coins; premium items (price 0) are bought with MONSHI, see lib/pet/shop.ts
   cosmetics: {
-    beanie: { label: 'Beanie', icon: '🧢', price: 18, slot: 'hat' },
-    shades: { label: 'Shades', icon: '🕶️', price: 24, slot: 'face' },
-    scarf: { label: 'Scarf', icon: '🧣', price: 20, slot: 'neck' },
+    beanie: { label: 'Beanie', price: 18, slot: 'hat' },
+    shades: { label: 'Shades', price: 24, slot: 'face' },
+    scarf: { label: 'Scarf', price: 20, slot: 'neck' },
+    crown: { label: 'Golden Crown', price: 0, slot: 'hat' },
+    cape: { label: 'Royal Cape', price: 0, slot: 'back' },
   },
 } as const;
 
@@ -36,3 +39,5 @@ export type NeedKey = keyof typeof PET.decayPerHour;
 export type SkillKey = 'speed' | 'strength' | 'brains' | 'charm';
 export type StageId = (typeof PET.stages)[number]['id'];
 export type Mood = 'happy' | 'ok' | 'hungry' | 'sleepy' | 'dirty' | 'sad' | 'sulking';
+
+export const COIN_COSMETICS: Cosmetic[] = ['beanie', 'shades', 'scarf'];
