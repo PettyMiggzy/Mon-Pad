@@ -49,11 +49,32 @@ def make(name, clip):
     print('ok', name, f'trim {ss:.2f}s', os.path.getsize(out) // 1024, 'KB')
     return {'bodyFrac': round((h * k) / ch, 4), 'aspect': round(cw / ch, 4), 'margin': M}
 
+def bust(name, clip):
+    """Waist-up mode: keep full height, crop sideways to where the character moves. The player fades the bottom edge."""
+    fr = frames(clip); bxs = [b for b in (box(f) for f in fr) if b]
+    if not bxs: print('skip', name, 'no character'); return None
+    t, bt = min(b[1] for b in bxs), max(b[3] for b in bxs)
+    if (bt - t) / SH < 0.8 and all(inside(b) for b in bxs):  # whole character fits: use the full-body framing so his size matches the stills
+        res = make(name, clip)
+        if res: return res
+    l, r = min(b[0] for b in bxs), max(b[2] for b in bxs)
+    if (r - l) > SW * 0.85: print('skip', name, 'extreme close-up'); return None
+    w = r - l; cl, cr = max(0, l - w * 0.05), min(SW, r + w * 0.05)
+    k = 1920 / SW; cx, cw = int(cl * k), int((cr - cl) * k); cw -= cw % 2
+    out = os.path.join(OUT, name + '.webm')
+    vf = (f"[0:v]crop={cw}:1080:{cx}:0,scale=-2:480,chromakey=0x00ff00:0.16:0.08,despill=type=green:mix=0.6:expand=0:brightness=0,"
+          "split[a][b];[b]reverse[r];[a][r]concat=n=2:v=1[v]")
+    subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', clip, '-filter_complex', vf, '-map', '[v]', '-an', '-c:v', 'libvpx-vp9', '-pix_fmt', 'yuva420p', '-b:v', '0', '-crf', '36', '-auto-alt-ref', '0', out], check=True)
+    print('ok bust', name, os.path.getsize(out) // 1024, 'KB')
+    return {'bodyFrac': 1, 'aspect': round(cw / 1080, 4), 'margin': 0, 'bust': True}
+
 if __name__ == '__main__':
-    vids, names = sys.argv[1], sys.argv[2:]
+    mode = 'bust' if sys.argv[1] == '--bust' else 'fit'
+    argv = sys.argv[2:] if mode == 'bust' else sys.argv[1:]
+    vids, names = argv[0], argv[1:]
     os.makedirs(OUT, exist_ok=True)
     idx = json.load(open(IDX)) if os.path.exists(IDX) else {}
     for n in names:
-        res = make(n, os.path.join(vids, n + '.mp4'))
+        res = (bust if mode == 'bust' else make)(n, os.path.join(vids, n + '.mp4'))
         if res: idx[n] = res
     json.dump(idx, open(IDX, 'w'), indent=1)

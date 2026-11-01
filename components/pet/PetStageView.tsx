@@ -14,7 +14,7 @@ function place(item: Cosmetic, head: Head): React.CSSProperties {
   return { left: `${head.cx}%`, top: `${top}%`, width: `${w}%`, transform: 'translateX(-50%)' };
 }
 
-type Clip = { bodyFrac: number; aspect: number; margin: number };
+type Clip = { bodyFrac: number; aspect: number; margin: number; bust?: boolean };
 const CLIPS = clipData as Record<string, Clip>;
 // Animated clips are transparent VP9 webm. Safari and iOS cannot play those with transparency, so they keep the still pictures.
 const clipsPlayable = () => typeof navigator !== 'undefined' && !/^((?!chrome|android|crios|fxios|edg).)*safari/i.test(navigator.userAgent) && document.createElement('video').canPlayType('video/webm; codecs="vp9"') !== '';
@@ -104,7 +104,7 @@ export default function PetStageView({ stage, mood, pose, equipped, fx, onPoke }
             <div className={breath} style={{ transformOrigin: '50% 100%' }}>
               {clip ? (
                 <div className="relative" style={{ height: heightPx, width: Math.round(heightPx * clip.aspect / clip.bodyFrac), transform: `scaleX(${face})` }}>
-                  <video key={clipKey} src={`/pet/clips/${clipKey}.webm`} autoPlay loop muted playsInline preload="auto" aria-label={`Monshi is ${pose ?? mood}`} onError={() => setFailed((f) => [...f, clipKey])} className="pointer-events-none absolute left-0 block max-w-none" style={{ height: heightPx / clip.bodyFrac, width: heightPx * clip.aspect / clip.bodyFrac, bottom: -(heightPx / clip.bodyFrac) * (1 - clip.bodyFrac) / 2 }} />
+                  <video key={clipKey} src={`/pet/clips/${clipKey}.webm`} autoPlay loop muted playsInline preload="auto" aria-label={`Monshi is ${pose ?? mood}`} onError={() => setFailed((f) => [...f, clipKey])} className="pointer-events-none absolute left-0 block max-w-none" style={{ height: heightPx / clip.bodyFrac, width: heightPx * clip.aspect / clip.bodyFrac, bottom: -(heightPx / clip.bodyFrac) * (1 - clip.bodyFrac) / 2, ...(clip.bust ? { WebkitMaskImage: 'linear-gradient(to bottom, #000 78%, transparent 100%)', maskImage: 'linear-gradient(to bottom, #000 78%, transparent 100%)' } : {}) }} />
                 </div>
               ) : (
               <div className="relative inline-block" style={{ height: heightPx, transform: `scaleX(${face})` }}>
