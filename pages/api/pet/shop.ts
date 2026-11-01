@@ -3,7 +3,8 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyStudioSig } from '@/lib/studioServer';
 import { isPremium, PREMIUM } from '@/lib/pet/shop';
 import { treasury, verifyMonshiPayment } from '@/lib/pet/server';
-import { MONSHI_TOKEN } from '@/lib/constants';
+import { isAdmin, MONSHI_TOKEN } from '@/lib/constants';
+import { randomUUID } from 'node:crypto';
 
 const isWallet = (w: unknown): w is string => typeof w === 'string' && /^0x[0-9a-fA-F]{40}$/.test(w);
 
@@ -24,9 +25,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method !== 'POST') return res.status(405).json({ error: 'GET or POST' });
   if (!open || !db) return res.status(503).json({ error: 'The MONSHI shop is not open yet.' });
 
-  const { wallet, signature, txHash, item } = req.body || {};
-  if (!isWallet(wallet) || !isPremium(item) || typeof txHash !== 'string') return res.status(400).json({ error: 'Bad request.' });
+  const { wallet, signature, txHash, item, action } = req.body || {};
+  if (!isWallet(wallet) || !isPremium(item)) return res.status(400).json({ error: 'Bad request.' });
   if (!(await verifyStudioSig(wallet, String(signature || '')))) return res.status(401).json({ error: 'Sign in with your wallet first.' });
+
+  // Admin test unlock: lets the site owner try the whole shop flow without paying. Recorded with a 'test:' id and 0 MONSHI.
+  if (action === 'grant') {
+    if (!isAdmin(wallet)) return res.status(403).json({ error: 'Admins only.' });
+    const { error: gerr } = await db.from('pet_purchases').insert({ wallet: wallet.toLowerCase(), item, tx_hash: `test:${randomUUID()}`, amount_monshi: 0 });
+    return gerr ? res.status(500).json({ error: 'Could not save.' }) : res.status(200).json({ ok: true, item, test: true });
+  }
+  if (typeof txHash !== 'string') return res.status(400).json({ error: 'Bad request.' });
 
   const { data: seen } = await db.from('pet_purchases').select('wallet,item').eq('tx_hash', txHash.toLowerCase()).maybeSingle();
   if (seen) return res.status(seen.wallet.toLowerCase() === wallet.toLowerCase() && seen.item === item ? 200 : 409).json(seen.item === item ? { ok: true, already: true } : { error: 'That payment was already used.' });
